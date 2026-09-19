@@ -315,6 +315,7 @@ export default function App() {
             child. */}
         <div
           className="screen"
+          data-view={view}
           data-empty={
             view === "chat" && chat.messages.length === 0 ? "" : undefined
           }

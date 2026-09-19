@@ -2,7 +2,9 @@
 // network blip. Conversation data is NEVER cached -- /api is always network,
 // because the server is the single source of truth.
 
-const CACHE = "shell-v2";
+// v3: the icons became the flower. A new name makes `activate` drop the old
+// cache, which is what stops an installed copy showing the previous icon.
+const CACHE = "shell-v3";
 
 // Only the entry document and the unhashed assets are named here. The bundle's
 // JS and CSS carry content hashes in their filenames, so there is nothing

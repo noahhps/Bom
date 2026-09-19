@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 
 import { renderMarkdown } from "../lib/markdown";
+import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
 import { Reasoning } from "./Reasoning";
 import { SkillApproval } from "./SkillApproval";
@@ -71,6 +72,8 @@ export const Message = memo(function Message({
       <div className="margin-rule" data-soft={model ? undefined : true} />
 
       <div className="answer">
+        <AgentFlower open={Boolean(streaming)} />
+
         {reasoning ? (
           <Reasoning text={reasoning} answering={Boolean(content)} />
         ) : null}

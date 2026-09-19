@@ -27,7 +27,7 @@
   --menu-base: rgba(255, 255, 255, 0.85);
   --menu-well-base: rgba(255, 255, 255, 0.65);
   --ground-base: rgba(255, 255, 255, 0.9);
-  --rail-base: rgba(0, 0, 0, 0.04);
+  --rail-base: rgba(27, 27, 27, 0.257);
   --surface-base: rgba(255, 255, 255, 0.7);
   
   /* The names the rest of this sheet actually uses.
@@ -814,31 +814,24 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   box-shadow: 0 0 0 3px var(--menu), 0 0 0 5px var(--accent);
 }
 
-/* The mark. Not a `.navrail-circle`: the drawing is roughly one part wide to
-   three tall, and a disc either crops it or shrinks it to a smear. It keeps
-   the circles' 24px slot to sit on their centre line, and overflows it in
-   height, which is the one direction the rail has room in.
+/* The mark: the agent's flower, open, 42px across -- the app's logo, so it is
+   the largest thing in the rail's head. The button is the flower's own size
+   so the rail's clipped edge never cuts a petal, and round so the focus ring
+   follows the flower rather than boxing it.
 
-   No tint and no fill on the current page -- the artwork carries the only blue
-   the rail needs, and a coloured plate behind a brush stroke reads as a sticker
-   rather than a logo. Being on Settings is said with the ring the rest of the
-   rail already uses for focus. */
+   No plate behind it on the current page -- the petals carry the only colour
+   the rail needs, and a filled disc behind a flower reads as a sticker rather
+   than a logo. Being on Settings is said with the ring the rest of the rail
+   already uses for focus. */
 .navrail-mark {
-  width: 24px;
-  height: 24px;
+  width: 42px;
+  height: 42px;
   flex: none;
   padding: 0;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 50%;
   transition: box-shadow 0.16s ease, transform 0.16s ease;
-}
-.navrail-mark img {
-  display: block;
-  /* Taller than its slot. The rail's top row is 24px of content in a taller
-     band, so the overflow lands in padding that is already there. */
-  height: 30px;
-  width: auto;
 }
 .navrail-mark:hover { transform: scale(1.12); }
 .navrail-mark[aria-current="page"],
@@ -880,7 +873,19 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    the nowrap plus overflow already there ellipsises a long name. */
 .navrail[data-open] .navrail-wordmark { max-width: none; }
 
-.navrail-wordmark { color: var(--ink); flex: 1; min-width: 0; }
+/* The name beside the logo, set in proportion to it rather than as one more
+   machine label: 0.8 of the page-heading size (~21.5px), about half the 42px
+   flower, in sentence case -- the two scale together. Seven mono characters
+   at that size come to ~92px, which leaves the pin its room in a 252px rail. */
+.navrail-wordmark {
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  font: 500 calc(var(--t-xl) * 0.8)/1 var(--font);
+  letter-spacing: var(--track-display);
+  text-transform: none;
+  text-overflow: ellipsis;
+}
 
 /* The pin. Only reachable once the rail is open, which is the only time it
    means anything -- and it is why the rail cannot close on mouseleave while
@@ -1545,6 +1550,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   box-shadow: none;
 }
 
+/* The conversation is plain paper: no grid behind the thread, so nothing but
+   the words and the accent's wash sits under what you are reading. The other
+   pages keep the drafting grid. */
+.screen[data-view="chat"] {
+  background-image: none;
+}
+
 /* -- top bar ---------------------------------------------------------------- */
 
 .topbar {
@@ -1695,16 +1707,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   gap: 8px;
   padding-bottom: 4px;
 }
-/* Sits above the greeting at its own aspect -- height fixed, width whatever
-   that implies -- so the stroke keeps the proportions it was drawn at. The
-   negative margin pulls the heading back up under it: the artwork carries a
-   little air of its own at the foot of the stroke, and the flex gap on top of
-   that read as a gap nobody had chosen. */
+/* The flower, large, above the greeting. Its size comes from `.flower-mark`;
+   this only keeps it to the start of the column rather than stretched. */
 .starters-mark {
-  height: 68px;
-  width: auto;
   align-self: start;
-  margin-bottom: -6px;
 }
 
 .starters-head .h { font-size: var(--t-xl); }
@@ -1788,24 +1794,225 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    is one flat colour and an image would be a request for two bytes of blue.
    Only on an answer -- the user's turn is a plate on the right and needs no
    badge to say who wrote it. */
-.turn-answer { padding-left: 34px; }
+/* 56px: the gutter the answer's flower blooms in (see `.answer > .flower`). */
+.turn-answer { padding-left: 56px; }
 
 /* Anchored to the answer, not to the top of the turn. On the turn it sat above
    the provenance row and the rule as well, which put it 57px clear of the
    first line it was supposed to mark. `.answer` is the first thing actually
    read -- whether that is the reasoning row, a skill trace, or the prose. */
 .answer { position: relative; }
-.answer::before {
-  content: "";
-  position: absolute;
-  left: -34px;
-  /* Half the difference between the line box and the disc, so the two share a
-     centre line rather than a top edge. */
-  top: 2px;
+
+/* -- the agent's flower (AgentFlower.jsx) ------------------------------------
+ *
+ * Same slot the disc had: 22px, 34px left of the answer, centred on the first
+ * line. Everything is placed from the flower's centre:
+ *
+ *   face    13px across (radius 6.5)
+ *   petals  eight pointed ovals, 14px long, centred on the face's rim so
+ *           their inner half is hidden under it and only the outer half
+ *           shows, out to radius 13.5. One every 45deg with the long axis
+ *           on a radius, each 5px across at its widest -- which is at the
+ *           rim, and exactly the gap to the next petal there, so the
+ *           neighbours meet edge to edge where they come out of the face
+ *
+ * Dormant, the petals are drawn part-way in behind a 15px bud and twisted,
+ * so only their pointed edges show round it -- a closed flower, not a disc.
+ * Hovering a dormant flower sets it turning. Blooming, the bud shrinks back
+ * to a face, the petals slowly push out from behind it one after another,
+ * untwisting into place with a little overshoot, and then the eyes open.
+ * Closing runs the same way back, quicker. While the turn is live the ring
+ * keeps turning and the eyes blink.
+ *
+ * Every colour is an accent token, so it re-themes with the conversation. The
+ * global reduced-motion rule turns the movement off and leaves the two states. */
+.flower {
+  position: relative;
+  display: block;
   width: 22px;
   height: 22px;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --fold: cubic-bezier(0.55, 0, 0.75, 0.3);
+}
+
+/* Beside an answer: in the gutter, centred on the first line of the answer.
+ *
+ * Drawn at 1.75x the geometry here -- about a 34px bud and 47px open -- about
+ * its own centre, so every proportion and the animation are untouched.
+ * `scale` rather than `transform` so it composes with nothing else. The
+ * gutter (`.turn-answer` padding) is 56px to make room: the open flower spans
+ * 10px to 57px left of the text, so it never touches a word. */
+.answer > .flower {
+  position: absolute;
+  left: -45px;
+  top: 2px;
+  scale: 1.75;
+}
+
+/* As the logo: the open flower, `--mark` pixels across, in the normal flow.
+   27 is the open flower's own span at scale 1 (tip radius 13.5). It turns
+   only while hovered, however long it has been open. */
+.flower-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: calc(var(--mark) * 1px);
+  height: calc(var(--mark) * 1px);
+}
+.flower-mark > .flower {
+  scale: calc(var(--mark) / 27);
+}
+.flower-mark > .flower[data-open] .flower-petals {
+  animation-play-state: paused;
+}
+.flower-mark:hover > .flower .flower-petals {
+  animation-play-state: running;
+}
+
+/* A zero-size point at the centre that the petals hang from.
+ *
+ * The turn is always attached and only paused or played. Adding and removing
+ * the animation instead would snap the ring back to 0deg every time the
+ * pointer left, which reads as a twitch rather than a flower settling. */
+.flower-petals {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  animation: flower-turn 16s linear infinite;
+  animation-play-state: paused;
+}
+.flower:hover .flower-petals,
+.flower[data-open] .flower-petals {
+  animation-play-state: running;
+}
+
+/* The arm: pinned to the centre, rotated to its 45deg slot. Dormant it is
+   twisted back and drawn in to under three quarters, which leaves the petal
+   edges standing about 2px proud of the bud. */
+.flower-petal {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform: rotate(calc(var(--i) * 45deg - 25deg)) scale(0.72);
+  transition: transform 420ms var(--fold);
+}
+.flower[data-open] .flower-petal {
+  transform: rotate(calc(var(--i) * 45deg)) scale(1);
+  /* Slow, and all eight together, once the bud has begun to shrink -- the
+     ring eases out of the centre as one and overshoots a touch. */
+  transition: transform 1100ms var(--spring) 120ms;
+}
+
+/* The petal: a square with two opposite corners rounded fully is an oval
+   along its other diagonal -- 9.9px square, so 14px long. The tip corners
+   get a 30% radius rather than none, which softens the points into rounded
+   ends (the browser scales the overlapping radii down together, so the
+   whole petal comes out a touch fuller too). Turned 45deg to stand on the
+   arm's radius, then widened 1.2x to about 7px across -- a little past the
+   5px that 2 x 6.5 x sin(22.5deg) leaves between neighbours at the face's
+   rim, so adjacent petals overlap slightly where they leave the face.
+   Centred on the rim at 6.5px out: the inner half runs under the face to
+   the centre and is hidden, the outer half shows, tip at 13.5. */
+.flower-petal::before {
+  content: "";
+  position: absolute;
+  width: 9.9px;
+  height: 9.9px;
+  left: -4.95px;
+  top: calc(-6.5px - 4.95px);
+  border-radius: 30% 100%;
+  background: var(--send);
+  transform: scaleX(1.2) rotate(45deg);
+}
+/* Where they overlap, same-coloured petals run together into one scalloped
+   disc. Every other petal sits behind its neighbours in the softer tint, so
+   each still reads as a petal of its own. */
+.flower-petal:nth-child(odd) {
+  z-index: 0;
+}
+.flower-petal:nth-child(odd)::before {
+  background: var(--violet-soft);
+}
+.flower-petal:nth-child(even) {
+  z-index: 1;
+}
+
+/* The face, which is also the bud. */
+.flower-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
   border-radius: 50%;
   background: var(--send);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  transform: scale(1.15);
+  transition:
+    transform 420ms var(--spring) 160ms,
+    background-color 300ms ease 160ms;
+}
+.flower[data-open] .flower-face {
+  background: var(--accent-hover);
+  transform: scale(1);
+  transition:
+    transform 460ms var(--spring),
+    background-color 300ms ease;
+}
+
+/* The eyes: two small rounded rectangles, shut on a bud. The pair opens as a
+   unit; each eye blinks on its own element so the two never fight over one
+   transform. */
+.flower-eyes {
+  display: flex;
+  gap: 2px;
+  transform: scaleY(0);
+  transition: transform 120ms ease-in;
+}
+.flower[data-open] .flower-eyes {
+  transform: scaleY(1);
+  transition: transform 260ms var(--spring) 480ms;
+}
+.flower-eye {
+  width: 2.3px;
+  height: 4.6px;
+  border-radius: 1.15px;
+  background: var(--surface);
+}
+.flower[data-open] .flower-eye {
+  animation: flower-blink 4.6s ease-in-out 1.2s infinite;
+}
+
+@keyframes flower-turn {
+  to { transform: rotate(360deg); }
+}
+@keyframes flower-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.15); }
+}
+
+/* A turn mounts already live, so without this it would appear fully open.
+   Starting it from the bud makes the first bloom as visible as the close.
+   A webview without @starting-style simply skips the entrance. */
+@starting-style {
+  .flower[data-open] .flower-petal {
+    transform: rotate(calc(var(--i) * 45deg - 25deg)) scale(0.72);
+  }
+  .flower[data-open] .flower-face {
+    background: var(--send);
+    transform: scale(1.15);
+  }
+  .flower[data-open] .flower-eyes {
+    transform: scaleY(0);
+  }
 }
 
 /* An answer and what produced it. The provenance used to be a fixed 126px

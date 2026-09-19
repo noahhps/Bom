@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
+import { AgentFlower } from "./AgentFlower";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ModelMenu } from "./ModelMenu";
@@ -249,11 +250,8 @@ export function NavRail({
 
       <div className="navrail-inner">
         <div className="navrail-top">
-          {/* The mark is a tall brush stroke, so it is given its own height and
-              whatever width that implies rather than being fitted into the
-              24px disc the other rail circles use. Squeezed into one it comes
-              out a sliver: at that size the three raised fingers close up and
-              the gesture -- which is the whole drawing -- stops reading. */}
+          {/* The mark is the agent's flower, open, at 42px -- the logo, and
+              the largest thing in the rail's head. It turns while hovered. */}
           <button
             type="button"
             className="navrail-mark"
@@ -262,10 +260,10 @@ export function NavRail({
             title="This device"
             onClick={() => onView("settings")}
           >
-            <img src="/courier-mark.png" alt="" width="10" height="30" />
+            <AgentFlower open mark size={42} />
           </button>
           <span className="navrail-wordmark" aria-hidden="true">
-            Assistant
+            Courier
           </span>
           <button
             type="button"

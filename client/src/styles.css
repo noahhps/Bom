@@ -2662,6 +2662,42 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .skill-item[data-off] .skill-item-text { opacity: 0.55; }
 .skill-item .switch:disabled { opacity: 0.5; cursor: default; }
 
+/* An MCP server's skills, folded under its name (Skills.jsx McpSkillGroup).
+   One header row per server inside the same list, its tools nested and hidden
+   until the header is opened -- so a handful of servers is a handful of lines
+   rather than a wall of identically-tagged rows. */
+.mcp-group { border-bottom: 1px solid var(--line-soft); }
+.mcp-group:last-child { border-bottom: 0; }
+.mcp-group-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 15px 18px;
+  text-align: left;
+  color: var(--ink);
+}
+.mcp-group-head:hover { background: var(--rail); }
+.mcp-group-head .spacer { flex: 1; }
+.mcp-group-name { font-size: var(--t-body); }
+.mcp-group-count { flex: none; }
+.mcp-group-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-faint);
+  /* Points right when shut, down when open. */
+  transform: rotate(-90deg);
+  transition: transform var(--rail-motion);
+}
+.mcp-group[data-open] .mcp-group-chevron { transform: rotate(0deg); }
+/* The server's own tools, nested under the header: indented and set on the
+   rail tint so the group reads as one block rather than as more loose rows.
+   The per-row "From X" tag is dropped in here -- the header already says it. */
+.mcp-group-body { background: var(--rail); border-top: 1px solid var(--line-soft); }
+.mcp-group-body .skill-item { padding-left: 34px; }
+.mcp-group-body .skill-item:last-child { border-bottom: 0; }
+.mcp-group-body .mcp-tag { display: none; }
+
 /* A skill that is listed but not yet usable. */
 .skill-needs { display: flex; align-items: baseline; gap: 9px; margin-top: 6px; }
 .skill-needs .mi { color: var(--ochre); }

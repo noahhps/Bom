@@ -151,10 +151,10 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
 
       // Whatever arrived before the failure is kept; a bubble that never got a
       // single token is not worth leaving behind above the error.
-      const fail = (text) =>
+      const fail = (text, continuable = false) =>
         setMessages((prev) => [
           ...(content ? prev : prev.filter((m) => m.key !== answer.key)),
-          message("error", text),
+          message("error", text, continuable ? { continuable: true } : {}),
         ]);
 
       try {
@@ -265,9 +265,20 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
             content += data.text;
             pending.current = { key: answer.key, text: content, reasoning };
             schedule();
+          } else if (event === "done") {
+            // The model ran out of skill rounds with more it wanted to do.
+            // Mark the turn so the thread can offer a Continue that just sends
+            // another turn with a fresh allowance of rounds.
+            if (data.truncated) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.key === answer.key ? { ...m, truncated: true } : m,
+                ),
+              );
+            }
           } else if (event === "error") {
             flush();
-            fail(data.message);
+            fail(data.message, data.continuable);
           }
         }
         settle();
@@ -384,6 +395,11 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
     inFlight.current?.abort();
   }, []);
 
+  // Pick up a turn that ran out of skill rounds. Deliberately just another
+  // message -- the model sees its own partial work in the history and carries
+  // on with a fresh allowance, no special server path to keep in step.
+  const continueTurn = useCallback(() => send("continue"), [send]);
+
   // A turn outliving the component that started it has nobody to render it and
   // no way to be stopped, so unmounting ends it. Without this, navigating away
   // mid-answer leaves the model generating into a closed page.
@@ -402,5 +418,6 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
     send,
     stop,
     decide,
+    continueTurn,
   };
 }

@@ -32,6 +32,9 @@ export const Message = memo(function Message({
   attachments,
   skills,
   onDecide,
+  onContinue,
+  truncated,
+  continuable,
   model,
 }) {
   // renderMarkdown escapes the source before emitting a single tag, so no
@@ -56,7 +59,16 @@ export const Message = memo(function Message({
   }
 
   if (role === "error") {
-    return <div className="turn-error">{content}</div>;
+    return (
+      <div className="turn-error">
+        {content}
+        {continuable && onContinue ? (
+          <button type="button" className="continue-btn" onClick={onContinue}>
+            Continue
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -99,6 +111,16 @@ export const Message = memo(function Message({
         ) : (
           <div className="body">{content}</div>
         )}
+
+        {/* The model stopped because it ran out of skill rounds, not because it
+            was done. One press sends another turn so it can pick up where it
+            left off. Hidden while streaming -- there is nothing to continue
+            until this turn has actually stopped. */}
+        {truncated && !streaming && onContinue ? (
+          <button type="button" className="continue-btn" onClick={onContinue}>
+            Continue
+          </button>
+        ) : null}
       </div>
     </div>
   );

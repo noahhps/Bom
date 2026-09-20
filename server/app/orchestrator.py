@@ -65,9 +65,10 @@ IMAGE_TOKENS = 1600
 MAX_WINDOW_IMAGES = 4
 
 
-# How many times a turn may go back to the model after running skills. A local
-# model handed a shelf of them will loop on near-identical calls; this is the
-# thing that stops a bad turn from burning the whole context window.
+# The fallback round cap, when settings does not carry one (a bare test double).
+# The real limit is settings.max_tool_rounds -- a local model handed a shelf of
+# skills will loop on near-identical calls, and this is what stops a bad turn
+# from burning the whole context window.
 MAX_TOOL_ROUNDS = 12
 
 # A skill's result is trimmed here rather than in build_window, because the
@@ -349,12 +350,13 @@ class Orchestrator:
                 else None
             )
             tools = self._skill_schemas(allowed_skills)
+            max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)
 
             # One pass per round. A round ends when the model stops; if it
             # stopped to ask for skills, they run and the window goes back with
             # their answers appended. `parts` accumulates across rounds, so an
             # answer written either side of a skill call arrives as one reply.
-            for _ in range(MAX_TOOL_ROUNDS):
+            for _ in range(max_rounds):
                 final = None
                 round_text: list[str] = []
 
@@ -516,10 +518,22 @@ class Orchestrator:
         #
         # There are two ways to get here and they have different fixes, so they
         # get different sentences.
+        # The loop only breaks when the model stops asking for skills, so if the
+        # last round still carried tool calls it ran out of rounds rather than
+        # finishing -- there is more it wanted to do. The client offers a
+        # Continue in that case, which just sends another turn with fresh rounds.
+        exhausted = final is not None and bool(final.tool_calls)
+
         if not "".join(parts).strip():
             yield _sse(
                 "error",
-                {"message": _silent_turn_reason(final), "provider": provider.name},
+                {
+                    "message": _silent_turn_reason(final, max_rounds),
+                    "provider": provider.name,
+                    # Continue is worth offering only when there were rounds to
+                    # run out of; a genuinely empty answer is a different fault.
+                    "continuable": exhausted,
+                },
             )
             return
 
@@ -528,6 +542,7 @@ class Orchestrator:
             {
                 "message_id": assistant.id,
                 "tokens": final.completion_tokens if final else None,
+                "truncated": exhausted,
             },
         )
 
@@ -747,7 +762,7 @@ def _attachment_cost(attached, carried: set[str]) -> int:
     return total
 
 
-def _silent_turn_reason(final: Chunk | None) -> str:
+def _silent_turn_reason(final: Chunk | None, rounds: int = MAX_TOOL_ROUNDS) -> str:
     """Why a turn produced no visible answer, in a sentence the user reads.
 
     The message names the missing piece rather than the symptom, because the
@@ -762,9 +777,10 @@ def _silent_turn_reason(final: Chunk | None) -> str:
         # skill returns rather than anywhere near here.
         asked = ", ".join(sorted({call.name for call in final.tool_calls})) or "a skill"
         return (
-            f"The model used all {MAX_TOOL_ROUNDS} rounds of skill calls without "
-            f"writing an answer, and was still asking for {asked}. Run "
-            "`python -m tools.why_silent` to see what it was told each time."
+            f"The model used all {rounds} rounds of skill calls without "
+            f"writing an answer, and was still asking for {asked}. Press "
+            "Continue to let it keep going, or run `python -m tools.why_silent` "
+            "to see what it was told each time."
         )
     return (
         "The model finished without saying anything. That usually means it "

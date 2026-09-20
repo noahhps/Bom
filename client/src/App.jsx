@@ -384,6 +384,7 @@ export default function App() {
                 model={chat.badge?.text}
                 scrollToken={chat.scrollToken}
                 onDecide={chat.decide}
+                onContinue={chat.continueTurn}
               />
 
               <Composer

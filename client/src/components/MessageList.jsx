@@ -11,7 +11,7 @@ import { StartersHead } from "./Starters";
 // the reserve under the thread should carry the view with it.
 export const STICK_PX = 120;
 
-export function MessageList({ messages, model, scrollToken, onDecide }) {
+export function MessageList({ messages, model, scrollToken, onDecide, onContinue }) {
   const ref = useRef(null);
 
   // Opening a session or sending a message: go to the bottom, wherever the
@@ -41,6 +41,7 @@ export function MessageList({ messages, model, scrollToken, onDecide }) {
           <Message
             key={m.key}
             onDecide={onDecide}
+            onContinue={onContinue}
             role={m.role}
             content={m.content}
             streaming={m.streaming}
@@ -48,6 +49,8 @@ export function MessageList({ messages, model, scrollToken, onDecide }) {
             reasoning={m.reasoning}
             attachments={m.attachments}
             skills={m.skills}
+            truncated={m.truncated}
+            continuable={m.continuable}
             // Only the turn that is actually from the assistant carries the
             // provenance line; a user bubble and an error have no model.
             model={m.role === "assistant" ? model : null}

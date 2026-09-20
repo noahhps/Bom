@@ -239,6 +239,16 @@ class Settings:
     # Headroom reserved for the reply so a full window can't crowd it out.
     reply_tokens: int = field(default_factory=lambda: _env_int("REPLY_TOKENS", 2048))
 
+    # How many times a turn may go back to the model after running skills before
+    # it is cut off. The circuit-breaker on a local model that loops on
+    # near-identical calls, and a ceiling on how much a single turn can grow the
+    # window: each round appends a tool result, so a very high number can
+    # overflow CONTEXT_TOKENS and force the reduced-context retry, which throws
+    # away the earlier work. The Continue button in the client is the deliberate
+    # extension past this, so it does not need to cover the worst case alone --
+    # 16 is a sane default; raise CONTEXT_TOKENS alongside it if you raise this.
+    max_tool_rounds: int = field(default_factory=lambda: _env_int("MAX_TOOL_ROUNDS", 16))
+
     system_preamble: str = field(
         default_factory=lambda: _env(
             "SYSTEM_PREAMBLE",

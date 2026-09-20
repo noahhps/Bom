@@ -161,6 +161,8 @@ export function NavRail({
   onResizeStart,
   onResizeKey,
   railWidth,
+  narrow = false,
+  forceOpen = false,
   sessions,
   projects,
   agents,
@@ -189,7 +191,13 @@ export function NavRail({
   // So does a drag: the pointer leaves the rail almost immediately when it is
   // widening it, and a rail that shut halfway through its own resize would be
   // impossible to use.
-  const open = pinned || hovered || focused || menuOpen || resizing;
+  //
+  // None of that applies on the narrow layout, where the rail is a full-screen
+  // panel worked by one button: there it is open exactly when that button says
+  // so. Hover and focus would open it under a finger that was only scrolling.
+  const open = narrow
+    ? forceOpen
+    : pinned || hovered || focused || menuOpen || resizing;
 
   // Focus moving between two children fires blur then focus, which would flap
   // the panel shut and open again. Asking where focus actually landed after
@@ -229,6 +237,10 @@ export function NavRail({
       aria-label="Sections"
       ref={node}
       data-open={open ? "" : undefined}
+      data-narrow={narrow ? "" : undefined}
+      // Nothing to reach for while it is shut on the narrow layout, and an
+      // off-screen panel should not be in the tab order.
+      aria-hidden={narrow && !open ? "true" : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setFocused(true)}

@@ -410,6 +410,8 @@ svg {
   height: 100%;
   overflow: hidden;
   background: var(--shell);
+  /* The narrow layout's sidebar button is positioned against this. */
+  position: relative;
 }
 
 /* -- the sidebar, a solid surface -------------------------------------------
@@ -1125,18 +1127,58 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .prj-actions button:hover { color: var(--accent-hover); }
 
 /* Filing the open conversation, in the top bar. */
-.topbar-project { display: flex; align-items: center; gap: 7px; flex: none; }
-.topbar-project select {
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-surface);
+/* Project and Agent: one pill each, label and value inside the same outline,
+   so they read as two settings on the thread rather than as two form controls
+   dropped into the header. The native select chrome is taken off and the
+   shell's own chevron drawn in its place -- a platform dropdown arrow is the
+   one thing in this bar that would not be Courier's. */
+.topbar-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
   background: var(--surface);
-  font: 400 var(--t-sm)/1.2 var(--font);
-  color: var(--ink);
-  outline: none;
-  max-width: 150px;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
-.topbar-project select:focus { border-color: var(--accent); }
+.topbar-project:hover { border-color: var(--line-firm); }
+.topbar-project:focus-within { border-color: var(--accent); }
+.topbar-project > .mi { color: var(--text-faint); flex: none; }
+.topbar-project select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  outline: none;
+  cursor: pointer;
+  padding: 0 18px 0 0;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+  max-width: 140px;
+  text-overflow: ellipsis;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f6b7d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  background-size: 13px;
+}
+
+/* The header's round buttons, given the same outline as the pills beside them
+   so the bar reads as one set of controls. A toggle that is on wears the
+   accent rather than a grey wash -- it is reporting a state, not a hover. */
+.topbar .icon-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+.topbar .icon-btn:hover { background: var(--surface); border-color: var(--line-soft); }
+.topbar .icon-btn[data-on] {
+  background: var(--surface);
+  border-color: var(--line-firm);
+  color: var(--accent);
+}
 
 .navrail-new {
   display: block;
@@ -1415,7 +1457,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
  * split, so the media query at the foot turns it into a full overlay instead.
  */
 .canvas {
-  flex: 0 0 clamp(320px, 42%, 640px);
+  /* Dragged by the handle on its inner edge; the clamp is what it opens at
+     before anyone has chosen -- see useCanvasWidth. */
+  flex: 0 0 var(--canvas-w, clamp(320px, 42%, 640px));
+  position: relative;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1423,6 +1468,39 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-left: 1px solid var(--line-soft);
   overflow: hidden;
   z-index: 12;
+}
+
+/* The panel's inner edge, as a drag handle. The mirror of the rail's: 9px of
+   target for a 1px line, because a hairline is impossible to hit and the
+   cursor change is the only affordance a resize edge gets. */
+.canvas-resize {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -4px;
+  width: 9px;
+  z-index: 16;
+  cursor: col-resize;
+  display: flex;
+  justify-content: center;
+  /* No pointer events on the bar inside, so the hit area is the whole 9px
+     rather than the 3px that is painted. */
+  touch-action: none;
+}
+.canvas-resize i {
+  width: 3px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.2s ease;
+  pointer-events: none;
+}
+.canvas-resize:hover i,
+.canvas-resize:focus-visible i,
+.app[data-resizing] .canvas-resize i { background: var(--line-strong); }
+.canvas-resize:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 3px;
 }
 
 .canvas-head {
@@ -1434,14 +1512,23 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   padding: 0 8px 0 16px;
   border-bottom: 1px solid var(--line-soft);
 }
-.canvas-head .spacer { flex: 1; }
+/* The head has to survive a narrow panel: the title gives up its width first
+   and ellipsises, and everything that is a control keeps its size. Without
+   this the Edit/Preview toggle is pushed off the right edge at the width the
+   panel opens at. */
+.canvas-head .spacer { flex: 1 1 0; min-width: 0; }
+.canvas-kind, .canvas-modes, .canvas-head .icon-btn { flex: none; }
+.canvas-kind { white-space: nowrap; }
 
 .canvas-title-input,
 .canvas-switch {
   font: 500 var(--t-body) var(--font);
   color: var(--ink);
-  min-width: 0;
+  /* Shrinks before anything else in the head does, down to a stub. */
+  flex: 0 1 240px;
+  min-width: 40px;
   max-width: 240px;
+  text-overflow: ellipsis;
   border-radius: 8px;
 }
 .canvas-title-input {
@@ -1687,6 +1774,30 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   .agents-list { width: 100%; flex-direction: row; flex-wrap: wrap; }
   .agents-editor { max-width: none; }
 }
+
+/* The sidebar's whole handle on the narrow layout: one button, top left.
+ *
+ * Above the panel it opens (z-index over .navrail) rather than beside it, so
+ * the same press closes it again -- which is the point of it being one button
+ * rather than an open here and a close in there. Rendered only at that width;
+ * on a laptop the rail has its own edge. */
+.rail-toggle {
+  position: absolute;
+  top: 13px;
+  left: 13px;
+  z-index: 60;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.rail-toggle:hover { border-color: var(--line-firm); }
+.rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* -- top bar ---------------------------------------------------------------- */
 
@@ -3273,25 +3384,38 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
  * From 1f: below the breakpoint the margin stops being a column and becomes a
  * single line above the answer, introduced by a short rule. */
 @media (max-width: 900px) {
-  /* On a phone there is no pointer to hover with, so the rail opens on tap
-     instead -- via :focus-within, which a tap on a destination satisfies.
-     Narrower when open, so it never swallows the whole screen. */
-  :root { --rail-w: 56px; --rail-open: 172px; }
+  /* No strip at this width, and no hover target: the rail is a full-screen
+     panel worked by the one button at the top left. A 56px column of icons
+     beside a phone-width sheet costs more than it gives, and an 8px hover
+     edge leaves a finger with nothing to aim at.
 
-  /* The hidden rail is a pointer idea and does not survive the trip to a
-     phone: an off-canvas panel revealed by hovering an 8px edge leaves a
-     finger with nothing to aim at and no way back to the app. So here the
-     strip stays, the panel widens rather than slides, and the edge trigger is
-     taken out of the way entirely. */
-  .app:not([data-rail="pinned"]) .navrail-inner {
-    width: var(--rail-w);
-    transform: none;
-  }
-  .app:not([data-rail="pinned"]) .navrail[data-open] .navrail-inner {
-    width: var(--rail-open);
-    transform: none;
-  }
+     The panel slides in over everything rather than taking width, so the
+     conversation underneath never reflows -- and it is above the canvas
+     overlay, since the button that opens it sits above both. */
+  :root { --rail-w: 0px; --rail-open: 100vw; }
+
+  .navrail { width: 0; flex: none; z-index: 40; }
   .navrail-edge { display: none; }
+
+  .navrail-inner,
+  .app:not([data-rail="pinned"]) .navrail-inner {
+    inset: 0;
+    width: 100vw;
+    border-radius: 0;
+    /* Clears the toggle, which floats over this corner. */
+    padding: 62px 18px 18px;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform var(--rail-motion),
+      visibility var(--rail-motion);
+  }
+  .navrail[data-open] .navrail-inner,
+  .app:not([data-rail="pinned"]) .navrail[data-open] .navrail-inner {
+    width: 100vw;
+    transform: none;
+    visibility: visible;
+  }
 
   /* No width to split on a phone, so the canvas stops being a column beside
      the thread and becomes a full overlay instead -- the close button in its
@@ -3308,26 +3432,35 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   /* Less shell showing on a phone -- the framing is a nicety, the reading
      width is not. */
   .screen { margin: 6px; border-radius: 18px; }
-  .navrail[data-open] .navrail-inner { border-radius: 0 18px 18px 0; }
-  /* Pinning eats most of a phone screen, so the pin is hidden here and the
-     rail stays hover/tap-only. The stored preference is left alone -- it comes
-     back on the laptop. */
+  /* Pinning means nothing when the rail is a panel over the sheet, so the pin
+     is hidden here. The stored preference is left alone -- it comes back on
+     the laptop. */
   .navrail-pin { display: none; }
-  .app[data-rail="pinned"] { --rail-w: 56px; }
+  .app[data-rail="pinned"] { --rail-w: 0px; }
 
-  /* The rail is 20px narrower here, so the lozenge has to come in with it or
-     it goes back to filling the width edge to edge. */
-  .navrail-inner { padding: 18px 8px 14px; inset: 6px auto 6px 0; }
   .popover { width: 210px; }
   .popover-up { left: 8px; bottom: 48px; }
-  .navrail-dest > button,
-  .navrail-group > button { width: 28px; border-radius: 14px; }
 
   /* Same reserve as the wide layout: only the part of the composer still on
      screen once it has withdrawn. */
   .messages { padding: 20px 18px calc(var(--composer-peek) + 10px); }
   .composer { padding: 12px 18px 18px; }
-  .topbar { padding: 0 16px 0 18px; }
+  /* Both leave the top-left corner to the sidebar button. */
+  .topbar { padding: 0 14px 0 58px; }
+  .page-head { padding-left: 58px; }
+
+  /* There is not room for the full set of header controls at this width, so
+     the header gives up what is said twice elsewhere and compacts the rest
+     rather than pushing the conversation's own name off the bar:
+     - the provider dot is already reported at the foot of the rail;
+     - the pills keep their value and drop their label, which the placeholder
+       option ("None") already implies. */
+  .topbar { gap: 10px; }
+  .topbar .state { display: none; }
+  .topbar-project { padding: 0 8px; gap: 0; }
+  .topbar-project > .mi { display: none; }
+  .topbar-project select { max-width: 92px; }
+  .topbar .title { min-width: 0; flex: 0 1 auto; }
 
   .turn-answer { flex-direction: column; gap: 12px; }
   .margin {
@@ -3961,10 +4094,15 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .screen::before {
   /* Overhanging every edge, so the falloff happens off-screen. */
   inset: -30% -20% -35%;
+  /* Each blob at 0.6x the size it was drawn at. The field is meant to be
+     something you notice only when it changes colour; at full size it read as
+     weather over the conversation rather than as a tint behind it. The
+     positions and the falloff stops are unchanged -- only the radii came in,
+     so the wash still arrives from the same three corners. */
   background:
-    radial-gradient(72% 58% at 18% 104%, var(--aura-2), transparent 78%),
-    radial-gradient(66% 52% at 92% 82%, var(--aura-1), transparent 76%),
-    radial-gradient(88% 62% at 46% -12%, var(--aura-3), transparent 80%);
+    radial-gradient(43% 35% at 18% 104%, var(--aura-2), transparent 78%),
+    radial-gradient(40% 31% at 92% 82%, var(--aura-1), transparent 76%),
+    radial-gradient(53% 37% at 46% -12%, var(--aura-3), transparent 80%);
 }
 
 /* The rail gets the same field, turned down and turned around: it is a strip

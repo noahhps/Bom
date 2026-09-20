@@ -56,6 +56,10 @@ export function Canvas({
   onSave,
   onCreate,
   onDelete,
+  resizable = false,
+  width,
+  onResizeStart,
+  onResizeKey,
 }) {
   const [draft, setDraft] = useState(active?.content ?? "");
   const [titleDraft, setTitleDraft] = useState(active?.title ?? "");
@@ -160,6 +164,29 @@ export function Canvas({
 
   return (
     <aside className="canvas" aria-label="Canvas">
+      {/* The panel's inner edge, as a drag handle. It is docked right, so this
+          grows leftwards -- see useCanvasWidth. Desktop only: below 900px the
+          canvas is a full overlay and there is no width to choose. */}
+      {resizable ? (
+        <div
+          className="canvas-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Canvas width"
+          aria-valuenow={width}
+          aria-valuemin={320}
+          aria-valuemax={900}
+          tabIndex={0}
+          onPointerDown={onResizeStart}
+          onKeyDown={onResizeKey}
+          // Double-click restores the drawn width, which is otherwise only
+          // reachable by dragging back to a number nobody remembers.
+          onDoubleClick={() => onResizeKey({ key: "Reset", preventDefault() {} })}
+        >
+          <i />
+        </div>
+      ) : null}
+
       <header className="canvas-head">
         {canvases.length > 1 ? (
           <select

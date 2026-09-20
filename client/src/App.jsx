@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Agents } from "./components/Agents";
 import { Canvas } from "./components/Canvas";
+import { Icon } from "./components/Icon";
 import { Composer } from "./components/Composer";
 import { Projects } from "./components/Projects";
 import { Memory } from "./components/Memory";
@@ -17,6 +18,7 @@ import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
 import { useAgents } from "./hooks/useAgents";
 import { useCanvas } from "./hooks/useCanvas";
+import { useCanvasWidth } from "./hooks/useCanvasWidth";
 import { useChat } from "./hooks/useChat";
 import { useModels } from "./hooks/useModels";
 import { useProjects } from "./hooks/useProjects";
@@ -47,6 +49,27 @@ export default function App() {
   // Which of the rail's three destinations is on screen.
   const [view, setView] = useState("chat");
   const rail = useRailWidth();
+  const canvasSize = useCanvasWidth();
+  // Below 900px the rail stops being a strip beside the sheet and becomes a
+  // full-screen panel behind one button, so the shell has to know which layout
+  // it is in rather than leaving it all to the stylesheet.
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia("(max-width: 900px)").matches,
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const sync = () => setNarrow(mq.matches);
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  // Widening the window puts the rail back where it belongs, so a panel left
+  // open on a phone is not still covering the sheet on a laptop.
+  useEffect(() => {
+    if (!narrow) setSidebarOpen(false);
+  }, [narrow]);
   // The prompt a starter put in the composer. An object, not a string, so
   // picking the same starter twice is two distinct values.
   const [draft, setDraft] = useState(null);
@@ -227,8 +250,16 @@ export default function App() {
     setPhase(CONNECTING);
   }, []);
 
+  // Going somewhere from the rail shuts it, on the layout where it is covering
+  // what you are going to.
+  const goTo = useCallback((next) => {
+    setView(next);
+    setSidebarOpen(false);
+  }, []);
+
   const handleNewSession = useCallback(() => {
     setView("chat");
+    setSidebarOpen(false);
     startNew();
     setFocusToken((n) => n + 1);
   }, [startNew]);
@@ -267,6 +298,7 @@ export default function App() {
   const handleOpenSession = useCallback(
     (id) => {
       setView("chat");
+      setSidebarOpen(false);
       openSession(id).catch(() => {});
     },
     [openSession],
@@ -294,19 +326,44 @@ export default function App() {
         // While the drag is live the width transition has to come off, or the
         // panel arrives a couple of frames after the pointer and the handle
         // feels loose.
-        data-resizing={rail.resizing ? "" : undefined}
+        data-resizing={rail.resizing || canvasSize.resizing ? "" : undefined}
         // Splits the sheet when the canvas is open, so the thread and the
         // document sit side by side rather than one over the other.
         data-canvas={view === "chat" && canvas.open ? "" : undefined}
-        // Omitted below 900px so the stylesheet's phone sizing survives.
-        style={rail.enabled ? { "--rail-open": `${rail.width}px` } : undefined}
+        // Both omitted below 900px so the stylesheet's phone sizing survives:
+        // there the rail is a full-screen panel and the canvas a full overlay,
+        // and an inline custom property would outrank the rules that say so.
+        style={
+          rail.enabled || canvasSize.enabled
+            ? {
+                ...(rail.enabled ? { "--rail-open": `${rail.width}px` } : null),
+                ...(canvasSize.enabled ? { "--canvas-w": `${canvasSize.width}px` } : null),
+              }
+            : undefined
+        }
       >
+        {/* On the narrow layout the rail has no strip of its own, so this is
+            the whole of its handle: one button, top left, above the panel it
+            opens -- so the same press closes it again. */}
+        {narrow ? (
+          <button
+            type="button"
+            className="rail-toggle"
+            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((was) => !was)}
+          >
+            <Icon name={sidebarOpen ? "close" : "menu"} />
+          </button>
+        ) : null}
         {/* The conversation list lives inside the rail now -- it unfolds under
             Chat when the rail opens, so there is no drawer to slide over the
             thread and no second place to look for the same list. */}
         <NavRail
           view={view}
-          onView={setView}
+          onView={goTo}
+          narrow={narrow}
+          forceOpen={sidebarOpen}
           status={status}
           providers={backends}
           provider={provider}
@@ -464,6 +521,10 @@ export default function App() {
             onSave={canvas.save}
             onCreate={canvas.create}
             onDelete={canvas.remove}
+            resizable={canvasSize.enabled}
+            width={canvasSize.width}
+            onResizeStart={canvasSize.start}
+            onResizeKey={canvasSize.nudge}
           />
         ) : null}
       </div>

@@ -1,45 +1,93 @@
 import { useState } from "react";
 
+import { describeSkill } from "../lib/skillWidgets";
+import { Icon } from "./Icon";
+import { ServiceIcon } from "./ServiceIcon";
+
 /**
- * What the model reached for, while it reaches for it.
+ * What the model reached for, and what came back.
  *
- * Sits above the answer in the same column, because it happened before the
- * answer and reads as the working that produced it -- the same argument as
- * `Reasoning`, and the same collapse behaviour: open while it is the only
- * thing happening, foldable once there is a reply to read instead.
+ * One card per call, above the answer in the same column, because it happened
+ * before the answer and reads as the working that produced it -- the same
+ * argument as `Reasoning`.
  *
- * A row with no `result` yet is still running. That state is the whole point
+ * Each card says three things: which service answered, in a line what the call
+ * was for, and the head of the result. The full text is one press away rather
+ * than on screen by default -- a turn that read four pages should not bury the
+ * reply under them. See `lib/skillWidgets` for where the summary comes from;
+ * nothing here costs a model call.
+ *
+ * A card with no `result` yet is still running. That state is the whole point
  * of the component: without it a turn that calls a slow skill looks identical
  * to a turn that has hung.
  */
-function Row({ skill }) {
+function Card({ skill }) {
   const [open, setOpen] = useState(false);
   const running = skill.result === undefined;
-  const args = Object.entries(skill.arguments || {});
+  const widget = describeSkill(skill);
 
   return (
-    <div className="skill-trace-row" data-running={running ? "" : undefined}>
-      <button
-        type="button"
-        className="skill-trace-head"
-        aria-expanded={open}
-        disabled={running}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <span className="skill-trace-dot" aria-hidden="true" />
-        <span className="skill-trace-name">{skill.name}</span>
-        {args.length ? (
-          <span className="skill-trace-args">
-            {args.map(([key, value]) => `${key}: ${value}`).join(", ")}
+    <div
+      className="skill-card"
+      data-running={running ? "" : undefined}
+      data-denied={skill.denied ? "" : undefined}
+    >
+      <div className="skill-card-head">
+        {/* A built-in wears the shell's own glyph; anything from an MCP server
+            wears that service's mark, so a card is found as a brand. */}
+        {widget.icon ? (
+          <span className="skill-card-mark">
+            <Icon name={widget.icon} />
           </span>
-        ) : null}
+        ) : (
+          <ServiceIcon name={widget.server || widget.name} />
+        )}
+        <span className="skill-card-source">{widget.source}</span>
+        <span className="skill-card-tool mi">{widget.name}</span>
         <span className="spacer" />
-        <span className="mi">{running ? "running" : open ? "hide" : "show"}</span>
-      </button>
+        {running ? (
+          <span className="mi">running</span>
+        ) : skill.denied ? (
+          <span className="mi">declined</span>
+        ) : null}
+      </div>
 
-      {open && !running ? (
-        <div className="skill-trace-body">{skill.result}</div>
+      {widget.title ? <p className="skill-card-title">{widget.title}</p> : null}
+
+      {widget.rows.length ? (
+        <dl className="skill-card-rows">
+          {widget.rows.map((row) => (
+            <div key={row.label}>
+              <dt className="mi">{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
       ) : null}
+
+      {running ? (
+        <p className="skill-card-preview" data-soft="">
+          Working…
+        </p>
+      ) : (
+        <>
+          {widget.preview ? (
+            <p className="skill-card-preview">{widget.preview}</p>
+          ) : null}
+          {/* Only worth offering when there is more than the preview showed. */}
+          {skill.result && skill.result.trim().length > widget.preview.length ? (
+            <button
+              type="button"
+              className="skill-card-more mi"
+              aria-expanded={open}
+              onClick={() => setOpen((was) => !was)}
+            >
+              {open ? "Hide full result" : "Show full result"}
+            </button>
+          ) : null}
+          {open ? <div className="skill-card-full">{skill.result}</div> : null}
+        </>
+      )}
     </div>
   );
 }
@@ -61,7 +109,7 @@ export function SkillTrace({ skills }) {
           : `Used ${skills.length === 1 ? "1 skill" : `${skills.length} skills`}`}
       </div>
       {skills.map((skill, index) => (
-        <Row key={`${skill.name}-${index}`} skill={skill} />
+        <Card key={`${skill.name}-${index}`} skill={skill} />
       ))}
     </div>
   );

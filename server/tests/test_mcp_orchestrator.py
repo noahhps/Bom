@@ -157,6 +157,9 @@ async def test_mcp_skill_in_orchestrator_turn(tmp_path: Path):
     assistant_msg = next(m for m in messages if m.role == "assistant")
     assert assistant_msg.content == "Calling Gmail...You have 1 unread email from Alice."
     assert assistant_msg.to_dict()["skills"][0]["name"] == "search_emails"
+    # The trace records which MCP server answered, so the client's result card
+    # can wear that service's mark rather than a generic one.
+    assert assistant_msg.to_dict()["skills"][0]["server"] == "gmail"
     assert "Lunch meeting" in assistant_msg.to_dict()["skills"][0]["result"]
 
     await mcp_mgr.aclose()

@@ -235,6 +235,20 @@ Three things worth knowing about how it behaves:
 * **silence is refusal.** A prompt nobody answers in five minutes is treated as
   a no. Running it anyway would teach you the prompt could be ignored.
 
+### What it did, and what came back
+
+A finished call is drawn as a **card** above the answer: the service that
+answered, in one line what the call was for, and the head of the result — with
+the full text one press away, so a turn that read four pages does not bury the
+reply under them. A card still waiting says so, which is what tells a slow skill
+apart from a hung turn, and a declined one stays on the card rather than
+vanishing.
+
+The summary is derived in the client from what the turn already recorded —
+there is no second model call, because one would slow every turn that used a
+tool and the arguments already carry the intent. A tool from an MCP server wears
+that service's mark, the way the Skills page does.
+
 ## Agents
 
 One assistant with one system prompt and the whole shelf of skills is the

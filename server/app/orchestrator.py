@@ -414,6 +414,17 @@ class Orchestrator:
                     # the reader abandons still leaves evidence it was asked
                     # for. `finally` persists whatever this list holds.
                     record = {"name": call.name, "arguments": call.arguments}
+                    # Which MCP server a tool came from, when it came from one.
+                    # The client's result widget wears that service's mark, the
+                    # way the Skills page does -- a row read as a brand is found
+                    # faster than one read as a name.
+                    source = (
+                        getattr(self.registry.get(call.name), "server_name", None)
+                        if self.registry
+                        else None
+                    )
+                    if source:
+                        record["server"] = source
                     used.append(record)
 
                     # An agent is only offered its own skills, but a model can

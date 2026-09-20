@@ -3710,73 +3710,49 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .skill-trace-label { color: var(--text-faint); }
 .skill-trace[data-live] .skill-trace-label { color: var(--accent); }
 
-/* The connector. Drawn on the row rather than as one line behind the list, so
-   it stops at the last step instead of running on into the answer. */
-.skill-trace-row {
+.skill-trace-label { margin-bottom: 7px; }
+
+/* One call, as a card: which service answered, in a line what the call was
+   for, and the head of what came back. Cards rather than the one-line rows
+   this used to draw, because the result is the half that matters and a single
+   line has nowhere to put it. The full text stays one press away so a turn
+   that read four pages does not bury the reply under them. */
+.skill-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 12px 14px;
+  margin: 0 0 8px;
   display: flex;
   flex-direction: column;
-  position: relative;
-  padding-left: 22px;
+  gap: 6px;
 }
-.skill-trace-row::before {
-  content: "";
-  position: absolute;
-  left: 5px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--line);
-}
-.skill-trace-row:first-of-type::before { top: 13px; }
-.skill-trace-row:last-of-type::before { bottom: auto; height: 13px; }
+.skill-card[data-running] { border-color: var(--accent); }
+/* A declined call is still drawn -- the record that it was asked for and
+   refused is the point -- but it steps back from the ones that ran. */
+.skill-card[data-denied] { opacity: 0.7; }
 
-.skill-trace-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 4px 0;
-  /* One line, always. A long argument list ellipsises rather than wrapping the
-     step onto a second row and breaking the rhythm of the column. */
-  min-width: 0;
-}
-.skill-trace-head .spacer { flex: 1; }
-.skill-trace-head:disabled { cursor: default; }
-
-/* The node sits on the connector, so it is positioned against the row rather
-   than laid out inside the head -- otherwise the text's own metrics decide
-   where the line is punctuated. */
-.skill-trace-dot {
-  position: absolute;
-  left: 2px;
-  top: 11px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 0 0 1.5px var(--line-strong);
-  flex: none;
-}
-.skill-trace-row[data-running] .skill-trace-dot {
-  background: var(--accent);
-  box-shadow: 0 0 0 1.5px var(--accent);
-}
-.skill-trace-row[data-running] .skill-trace-dot {
-  background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.skill-trace-name {
-  font: 400 var(--t-sm)/1.4 var(--font);
-  letter-spacing: var(--track-body);
+.skill-card-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.skill-card-head .spacer { flex: 1; }
+.skill-card-head .mcp-avatar { width: 22px; height: 22px; flex: none; }
+.skill-card-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   flex: none;
   color: var(--text-dim);
+}
+.skill-card-mark svg { width: 17px; height: 17px; }
+.skill-card-source {
+  font: 500 var(--t-sm)/1.3 var(--font);
+  color: var(--ink);
   flex: none;
 }
-
-.skill-trace-args {
-  font: 400 var(--t-xs)/1.3 var(--font);
+.skill-card[data-running] .skill-card-source { color: var(--accent); }
+/* The tool's own name, kept beside the service: the service says where the
+   answer came from, this says exactly what was called. */
+.skill-card-tool {
   color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3784,32 +3760,45 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   min-width: 0;
 }
 
-.skill-trace-body {
-  margin: 4px 0 6px 15px;
-  padding-left: 11px;
-  border-left: 2px solid var(--line);
+.skill-card-title {
+  margin: 0;
+  font: 400 var(--t-md)/1.5 var(--font);
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.skill-card-rows { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.skill-card-rows > div { display: flex; gap: 10px; align-items: baseline; }
+.skill-card-rows dt { flex: none; min-width: 74px; color: var(--text-faint); }
+.skill-card-rows dd {
+  margin: 0;
+  font: 400 var(--t-sm)/1.5 var(--font);
+  color: var(--text-dim);
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.skill-card-preview {
+  margin: 0;
+  font: 400 var(--t-sm)/1.6 var(--font);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.skill-card-preview[data-soft] { color: var(--text-faint); }
+
+.skill-card-more { align-self: flex-start; color: var(--text-faint); padding: 2px 0; }
+.skill-card-more:hover { color: var(--ink); }
+
+.skill-card-full {
   font: 400 var(--t-sm)/1.65 var(--font);
   color: var(--text-dim);
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
-}
-
-/* A file a skill produced. Offered by the trace rather than by the model's
-   prose, so it is there whether or not the answer mentions it. */
-.skill-trace-save {
-  align-self: flex-start;
-  margin: 2px 0 6px 15px;
-  padding: 7px 13px;
-  font-size: var(--t-xs);
-  /* A model picks the filename, so it can be long. Capped and clipped rather
-     than allowed to stretch the trace wider than the answer beside it. */
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: block;
-  white-space: nowrap;
+  padding-left: 11px;
+  border-left: 2px solid var(--line);
 }
 
 /* Dialogs -- see components/Dialog.jsx.

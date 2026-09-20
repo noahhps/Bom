@@ -1,12 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { seedFromContext } from "../lib/autotheme";
+import { swatchOf } from "../lib/theme";
 import { useDialog } from "./Dialog";
+import { Icon } from "./Icon";
+import { ThemePicker } from "./ThemePicker";
+
+// The glyphs an agent can wear. Names the Icon component draws; the server
+// validates against the same shape, so a typo is a 422 rather than a blank.
+const AGENT_ICONS = [
+  "agents", "search", "code", "pen", "list", "chart",
+  "spark", "compass", "bolt", "document", "memory", "skills",
+];
 
 // The draft the editor edits, whether for a new agent or one being changed.
 // `all` is the skills switch: true means "every enabled skill" (stored as
 // null), false means only the names in `chosen` -- which may be none, a
 // deliberate choice the store keeps distinct from the default.
-const blankDraft = () => ({ name: "", instructions: "", all: true, chosen: new Set() });
+const blankDraft = () => ({
+  name: "",
+  instructions: "",
+  all: true,
+  chosen: new Set(),
+  icon: null,
+  theme: null,
+});
 
 function draftFrom(agent) {
   return {
@@ -14,6 +32,8 @@ function draftFrom(agent) {
     instructions: agent.instructions || "",
     all: agent.skills == null,
     chosen: new Set(agent.skills || []),
+    icon: agent.icon || null,
+    theme: agent.theme || null,
   };
 }
 
@@ -97,6 +117,8 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
       name,
       instructions: draft.instructions.trim() || null,
       skills: draft.all ? null : [...draft.chosen],
+      icon: draft.icon || null,
+      theme: draft.theme || null,
     };
     try {
       if (editing === "new") {
@@ -133,6 +155,13 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
   const skillCount = useMemo(
     () => (draft.all ? "every skill" : `${draft.chosen.size} skill${draft.chosen.size === 1 ? "" : "s"}`),
     [draft.all, draft.chosen],
+  );
+
+  // Seeds the auto-accent preview and tints the icon swatches, from the agent's
+  // own name so the colour is stable for a given agent rather than the chat.
+  const iconSeed = useMemo(
+    () => seedFromContext({ id: editing || "new", title: draft.name }),
+    [editing, draft.name],
   );
 
   return (
@@ -190,7 +219,19 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
                 data-active={editing === agent.id ? "" : undefined}
                 onClick={() => openAgent(agent)}
               >
-                <span className="agents-item-name">{agent.name}</span>
+                <span className="agents-item-head">
+                  <span
+                    className="agents-badge"
+                    style={{
+                      color: agent.theme
+                        ? swatchOf(agent.theme, seedFromContext({ id: agent.id, title: agent.name }))
+                        : undefined,
+                    }}
+                  >
+                    <Icon name={agent.icon || "agents"} />
+                  </span>
+                  <span className="agents-item-name">{agent.name}</span>
+                </span>
                 <span className="mi">
                   {agent.skills == null
                     ? "every skill"
@@ -217,6 +258,42 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
                   onChange={(e) => setDraft((p) => ({ ...p, name: e.target.value }))}
                 />
               </label>
+
+              <div className="agents-field">
+                <span className="mi">Icon</span>
+                <div className="agents-icons">
+                  {AGENT_ICONS.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className="agents-icon"
+                      data-on={draft.icon === name ? "" : undefined}
+                      aria-label={name}
+                      aria-pressed={draft.icon === name}
+                      style={{ color: draft.theme ? swatchOf(draft.theme, iconSeed) : undefined }}
+                      onClick={() =>
+                        setDraft((p) => ({ ...p, icon: p.icon === name ? null : name }))
+                      }
+                    >
+                      <Icon name={name} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="agents-field">
+                <span className="mi">Accent</span>
+                <ThemePicker
+                  value={draft.theme}
+                  onChange={(theme) => setDraft((p) => ({ ...p, theme }))}
+                  scope="agent"
+                  seed={iconSeed}
+                  inheritedLabel="Follow the project or app-wide accent"
+                />
+                <p className="agents-hint mi">
+                  Worn by every conversation run as this agent.
+                </p>
+              </div>
 
               <label className="agents-field">
                 <span className="mi">Instructions</span>

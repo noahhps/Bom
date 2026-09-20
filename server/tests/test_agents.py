@@ -184,6 +184,27 @@ def test_preset_skills_are_all_real_skill_names(client: TestClient):
             assert name in registered, f"{preset['id']} names unknown skill {name!r}"
 
 
+def test_agent_icon_and_accent_round_trip(client: TestClient):
+    created = client.post(
+        "/api/agents",
+        json={"name": "Researcher", "icon": "search", "theme": {"mode": "preset", "preset": "cobalt"}},
+    )
+    assert created.status_code == 200
+    agent = created.json()
+    assert agent["icon"] == "search"
+    # theme comes back parsed into an object, like a session's.
+    assert agent["theme"] == {"mode": "preset", "preset": "cobalt"}
+
+    # Clear the accent explicitly; keep the icon.
+    patched = client.patch(f"/api/agents/{agent['id']}", json={"theme": None})
+    assert patched.json()["theme"] is None
+    assert patched.json()["icon"] == "search"
+
+
+def test_agent_rejects_an_unknown_icon_name(client: TestClient):
+    assert client.post("/api/agents", json={"name": "X", "icon": "Not Valid!"}).status_code == 422
+
+
 def test_agent_routes_404_on_missing(client: TestClient):
     assert client.patch("/api/agents/agt_nope", json={"name": "x"}).status_code == 404
     assert client.delete("/api/agents/agt_nope").status_code == 404

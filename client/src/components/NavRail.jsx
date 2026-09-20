@@ -68,21 +68,19 @@ function Label({ label }) {
  * Null when neither has an accent, and the row draws no bead at all. A bead on
  * every conversation would be the app's own colour repeated down the whole
  * list, which says nothing about any of them. */
-function accentOf(session, projects) {
-  // Filed conversations only. The bead is how this list says which project a
-  // row belongs to, now that the folders it used to sit inside are gone -- so
-  // on a conversation that belongs to none it is a dot with nothing to report,
-  // and a column of them says less than a column without.
+function accentOf(session, projects, agents) {
+  // The agent it is run as wins, then the project it is filed under -- the same
+  // order `useTheme` resolves in, so the bead is the colour the conversation
+  // actually opens in. A chat with neither shows no bead: a column of the app's
+  // own colour repeated says nothing about any row.
+  const agent = session.agent_id && agents?.find((a) => a.id === session.agent_id);
+  if (agent?.theme) {
+    return swatchOf(agent.theme, seedFromContext({ id: agent.id, title: agent.name }));
+  }
+
   if (!session.project_id) return null;
-
   const project = projects?.find((p) => p.id === session.project_id);
-  if (!project) return null;
-
-  // Its own accent still wins where it has one, so the colour in the list is
-  // the colour the conversation actually opens in -- the same order
-  // `useTheme` resolves in.
-  if (session.theme) return swatchOf(session.theme, seedFromContext(session));
-  if (!project.theme) return null;
+  if (!project?.theme) return null;
   // A project has a name rather than a title and no messages, so an auto
   // accent seeds from what little it has.
   return swatchOf(
@@ -92,7 +90,7 @@ function accentOf(session, projects) {
 }
 
 /* One conversation, wherever it is filed. */
-function SessionRows({ sessions, projects, activeId, onOpenSession, onDelete, empty }) {
+function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDelete, empty }) {
   const { confirm } = useDialog();
   if (sessions.length === 0) {
     return (
@@ -102,7 +100,7 @@ function SessionRows({ sessions, projects, activeId, onOpenSession, onDelete, em
     );
   }
   return sessions.map((session) => {
-    const accent = accentOf(session, projects);
+    const accent = accentOf(session, projects, agents);
     return (
     <li
       key={session.id}
@@ -165,6 +163,7 @@ export function NavRail({
   railWidth,
   sessions,
   projects,
+  agents,
   onFileSession,
   activeId,
   onOpenSession,
@@ -363,6 +362,7 @@ export function NavRail({
                     <SessionRows
                       sessions={sessions}
                       projects={projects}
+                      agents={agents}
                       activeId={activeId}
                       onOpenSession={onOpenSession}
                       onDelete={onDelete}

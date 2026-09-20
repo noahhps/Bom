@@ -130,6 +130,9 @@ export default function App() {
     sessionId: chat.sessionId,
     sessions: sessions.sessions,
     projects: projects.projects,
+    // The accent is the agent's now, not the chat's -- useTheme resolves
+    // agent -> project -> app.
+    agents: agents.agents,
     title: chat.title,
     messages: chat.messages,
   });
@@ -319,6 +322,7 @@ export default function App() {
           onTogglePin={togglePin}
           sessions={sessions.sessions}
           projects={projects.projects}
+          agents={agents.agents}
           onFileSession={handleFileSession}
           activeId={chat.sessionId}
           onOpenSession={handleOpenSession}
@@ -356,15 +360,6 @@ export default function App() {
                   await onSessionsChanged();
                 }}
                 onNewSession={handleNewSession}
-                accent={theme.sessionAccent}
-                accentSource={theme.source}
-                resolvedAccent={theme.active}
-                seed={theme.seed}
-                contextSeed={theme.contextSeed}
-                onAccent={async (accent) => {
-                  await theme.setForSession(chat.sessionId, accent);
-                  await onSessionsChanged();
-                }}
                 canvasCount={canvas.count}
                 canvasOpen={canvas.open}
                 onToggleCanvas={canvas.toggle}

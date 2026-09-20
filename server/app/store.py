@@ -216,6 +216,8 @@ class StoredAgent:
     skills: str | None  # JSON array of skill names, or NULL for "all enabled"
     created_at: int
     updated_at: int
+    icon: str | None = None      # a glyph name the client draws
+    theme: str | None = None     # accent JSON, same shape as a session's
 
     def parsed_skills(self) -> list[str] | None:
         """The allowed skill names, or None for "every enabled skill".
@@ -237,6 +239,10 @@ class StoredAgent:
             "name": self.name,
             "instructions": self.instructions,
             "skills": self.parsed_skills(),
+            "icon": self.icon,
+            # Raw JSON string; the API parses it into an object with the same
+            # _read_accent a session or project row goes through.
+            "theme": self.theme,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -1365,6 +1371,8 @@ class Store:
         *,
         instructions: str | None = None,
         skills: list[str] | None = None,
+        icon: str | None = None,
+        theme: str | None = None,
     ) -> StoredAgent:
         now = _now()
         agent = StoredAgent(
@@ -1374,14 +1382,17 @@ class Store:
             skills=self._skills_json(skills),
             created_at=now,
             updated_at=now,
+            icon=icon,
+            theme=theme,
         )
         self.db.execute(
             """
-            INSERT INTO agents (id, name, instructions, skills, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO agents
+                (id, name, instructions, skills, icon, theme, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (agent.id, agent.name, agent.instructions, agent.skills,
-             agent.created_at, agent.updated_at),
+            (agent.id, agent.name, agent.instructions, agent.skills, agent.icon,
+             agent.theme, agent.created_at, agent.updated_at),
         )
         return agent
 
@@ -1410,10 +1421,14 @@ class Store:
         skills = (
             self._skills_json(changes["skills"]) if "skills" in changes else current.skills
         )
+        icon = changes["icon"] if "icon" in changes else current.icon
+        # `theme` arrives already serialised to JSON (or None), like the session
+        # and project theme setters -- the API layer does the accent shaping.
+        theme = changes["theme"] if "theme" in changes else current.theme
         self.db.execute(
-            "UPDATE agents SET name = ?, instructions = ?, skills = ?, updated_at = ? "
-            "WHERE id = ?",
-            (name, instructions, skills, _now(), agent_id),
+            "UPDATE agents SET name = ?, instructions = ?, skills = ?, icon = ?, "
+            "theme = ?, updated_at = ? WHERE id = ?",
+            (name, instructions, skills, icon, theme, _now(), agent_id),
         )
         return self.get_agent(agent_id)
 

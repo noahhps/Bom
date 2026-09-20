@@ -6,24 +6,26 @@ import { DEFAULT_ACCENT, applyPalette, palette, seedOf } from "../lib/theme";
 /**
  * The accent the app is currently wearing, and the three places it can be set.
  *
- * Three scopes, nearest wins: this conversation, then the project it is filed
- * under, then the app. A scope with nothing set is not a scope that chose
- * nothing -- it is one that has not chosen, and the decision falls through to
- * the next. That is the difference between clearing an accent and setting it
- * to "off", and it is the only subtle thing in this file.
+ * Three scopes, nearest wins: the agent the conversation is assigned to, then
+ * the project it is filed under, then the app. The accent is a property of the
+ * agent, not of the conversation -- a chat run as an agent wears that agent's
+ * colour, which is what makes a team of them legible. A scope with nothing set
+ * is not a scope that chose nothing -- it is one that has not chosen, and the
+ * decision falls through to the next. That is the difference between clearing
+ * an accent and setting it to "off", and it is the only subtle thing here.
  *
  * The resolved palette is written onto <html>. Not onto the `.app` div, which
  * would be the tidier-looking choice: the dialog and the token gate render
  * outside it, and a themed app with an unthemed modal on top of it is worse
  * than either.
  */
-export function useTheme({ api, sessionId, sessions, projects, title, messages }) {
+export function useTheme({ api, sessionId, sessions, projects, agents, title, messages }) {
   const [appAccent, setAppAccent] = useState(null);
   const [loaded, setLoaded] = useState(false);
-  // Local echo of what the server holds for a chat or a folder, so a swatch
-  // lights up on the click rather than a round trip later. The lists are
-  // re-read anyway; this only covers the gap.
-  const [sessionOverrides, setSessionOverrides] = useState({});
+  // Local echo of what the server holds for a folder, so a swatch lights up on
+  // the click rather than a round trip later. The agent's own accent is set
+  // and saved from the Agents editor, so it needs no echo here -- the list is
+  // re-read on save.
   const [projectOverrides, setProjectOverrides] = useState({});
 
   useEffect(() => {
@@ -47,22 +49,23 @@ export function useTheme({ api, sessionId, sessions, projects, title, messages }
     () => sessions.find((s) => s.id === sessionId) || null,
     [sessions, sessionId],
   );
+  const agent = useMemo(
+    () => (agents || []).find((a) => a.id === session?.agent_id) || null,
+    [agents, session],
+  );
   const project = useMemo(
     () => projects.find((p) => p.id === session?.project_id) || null,
     [projects, session],
   );
 
-  const sessionAccent =
-    (sessionId && sessionOverrides[sessionId] !== undefined
-      ? sessionOverrides[sessionId]
-      : session?.theme) || null;
+  const agentAccent = agent?.theme || null;
   const projectAccent =
     (project && projectOverrides[project.id] !== undefined
       ? projectOverrides[project.id]
       : project?.theme) || null;
 
   // Nearest scope with an opinion, and the app's own default if none has one.
-  const active = sessionAccent || projectAccent || appAccent || DEFAULT_ACCENT;
+  const active = agentAccent || projectAccent || appAccent || DEFAULT_ACCENT;
 
   /* The auto seed, remembered per conversation.
    *
@@ -120,15 +123,6 @@ export function useTheme({ api, sessionId, sessions, projects, title, messages }
     [api],
   );
 
-  const setForSession = useCallback(
-    async (id, accent) => {
-      if (!id) return;
-      setSessionOverrides((was) => ({ ...was, [id]: accent }));
-      await api.setSessionTheme(id, accent).catch(() => {});
-    },
-    [api],
-  );
-
   const setForProject = useCallback(
     async (id, accent) => {
       if (!id) return;
@@ -140,11 +134,8 @@ export function useTheme({ api, sessionId, sessions, projects, title, messages }
 
   /** The accent a row in a list is wearing, for its swatch. */
   const accentFor = useCallback(
-    (record) =>
-      (record && (sessionOverrides[record.id] ?? projectOverrides[record.id])) ??
-      record?.theme ??
-      null,
-    [sessionOverrides, projectOverrides],
+    (record) => (record && projectOverrides[record.id]) ?? record?.theme ?? null,
+    [projectOverrides],
   );
 
   /* What an auto accent resolves to for a row we have not opened.
@@ -168,12 +159,11 @@ export function useTheme({ api, sessionId, sessions, projects, title, messages }
        it would actually set rather than the one already on screen. */
     contextSeed,
     appAccent,
-    sessionAccent,
+    agentAccent,
     projectAccent,
     /** Which of the three scopes the active accent actually came from. */
-    source: sessionAccent ? "chat" : projectAccent ? "project" : "app",
+    source: agentAccent ? "agent" : projectAccent ? "project" : "app",
     setApp,
-    setForSession,
     setForProject,
     accentFor,
     seedFor,

@@ -258,6 +258,11 @@ An agent is two things:
   given no skills at all is a pure conversationalist, and that is a different,
   deliberate thing from one given all of them.
 
+Each agent carries its own **icon** and **accent**, so a team of them is legible
+at a glance — in the list, and as the bead beside each conversation in the rail.
+The accent is the agent's, not the chat's: a conversation run as an agent wears
+that agent's colour (see **Accents**).
+
 Make and edit them on the **Agents** page — from scratch, or from a **preset**:
 a handful of ready-made roles (Researcher, Coder, Writer, Planner, Analyst,
 Companion) that open prefilled in the editor so you can adjust the skills to
@@ -356,16 +361,19 @@ against your own encoder.
 ## Accents
 
 The whole client can be dressed in one colour, and so can a single project or
-a single conversation. Ten named accents, a hue slider, and an intensity — or
+a single agent. Ten named accents, a hue slider, and an intensity — or
 **From the chat**, which works the colour out from what is being talked about.
 
-Three scopes, nearest wins: a conversation's accent beats its project's, which
-beats the app-wide one. A scope that has not chosen is not a scope that chose
-nothing — the decision falls through to the next one up. That is why the
-picker distinguishes *inherit* (an open ring) from *none* (a struck-through
-blank): the first declines to decide, the second decides to wear no colour.
-Set it from the bead in the top bar for a chat, from a folder's **accent** row
-on Projects, and from **Settings → Accent** for everything else.
+Three scopes, nearest wins: the **agent** a conversation is run as beats the
+**project** it is filed under, which beats the **app-wide** one. The accent is a
+property of the agent, not of the conversation — a chat run as an agent wears
+that agent's colour, which is what makes a team of them legible. A scope that
+has not chosen is not a scope that chose nothing — the decision falls through to
+the next one up. That is why the picker distinguishes *inherit* (an open ring)
+from *none* (a struck-through blank): the first declines to decide, the second
+decides to wear no colour. Set it from the accent row in the **Agents** editor,
+from a folder's **accent** row on Projects, and from **Settings → Accent** for
+everything else.
 
 **From the chat** is arithmetic, not a model call: a keyword pass over the
 title and the recent turns, already in memory on the device, against a dozen

@@ -41,6 +41,17 @@ const PATHS = {
   agents:
     "M9 11a3 3 0 100-6 3 3 0 000 6M3.5 19a5.5 5.5 0 0111 0" +
     "M16 5.3a3 3 0 010 5.4M17 13.2a5.5 5.5 0 013.5 5.1",
+  // The glyphs an agent can wear, so a team of them reads at a glance. Stroked
+  // hairlines like the rest of the set; the picker in the Agents editor offers
+  // these by name.
+  search: "M10 4a6 6 0 100 12 6 6 0 000-12M20 20l-4.3-4.3",
+  code: "M9 8l-4 4 4 4M15 8l4 4-4 4",
+  pen: "M4 20l1-4L15 6l3 3L8 19l-4 1M13 8l3 3",
+  list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
+  chart: "M4 20V4M4 20h16M8 20v-6M13 20v-9M18 20v-4",
+  spark: "M12 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6z",
+  compass: "M12 3a9 9 0 100 18 9 9 0 000-18M15 9l-2 4-4 2 2-4z",
+  bolt: "M13 3L5 13h6l-1 8 8-11h-6z",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",

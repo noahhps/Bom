@@ -446,6 +446,19 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_sessions_agent ON sessions(agent_id);
     """,
+    # 15 -- an agent's own icon and accent.
+    #
+    # `icon` is one of a small named set the client draws (a glyph name, not
+    # artwork), so an agent is recognisable at a glance in the list, the picker
+    # and the rail. `theme` is the same accent JSON a session or a project
+    # carries -- because the accent is now a property of the agent rather than
+    # of the conversation: a chat assigned to an agent wears that agent's
+    # colour, which is what makes a team of them legible. NULL on both is the
+    # default agent look (the two-figure glyph, no colour of its own).
+    """
+    ALTER TABLE agents ADD COLUMN icon TEXT;
+    ALTER TABLE agents ADD COLUMN theme TEXT;
+    """,
 ]
 
 

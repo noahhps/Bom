@@ -249,16 +249,23 @@ class AgentIn(BaseModel):
     # The skill names this agent may call. None -- the default -- means every
     # enabled skill; an empty list is an agent deliberately given none.
     skills: list[str] | None = None
+    # A glyph name the client draws. Named, not free text, so a typo is a 422
+    # here rather than a blank icon; the client holds the same list.
+    icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
+    # The agent's accent, the same shape a session or project carries.
+    theme: Accent | None = None
 
 
 class AgentPatch(BaseModel):
     """An edit. Every field optional; `exclude_unset` on the route is what lets
-    a caller clear `instructions` or `skills` back to null by sending it
-    explicitly, distinct from leaving it alone by omitting it."""
+    a caller clear `instructions`, `skills`, `icon` or `theme` back to null by
+    sending it explicitly, distinct from leaving it alone by omitting it."""
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     instructions: str | None = Field(default=None, max_length=20_000)
     skills: list[str] | None = None
+    icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
+    theme: Accent | None = None
 
 
 class SessionAgent(BaseModel):
@@ -569,7 +576,7 @@ def build_router(
 
     @router.get("/agents")
     def list_agents() -> dict:
-        return {"agents": [a.to_dict() for a in store.list_agents()]}
+        return {"agents": [_read_accent(a.to_dict()) for a in store.list_agents()]}
 
     # Declared before `/agents/{agent_id}` so "presets" is matched as itself
     # rather than as an agent with that id -- FastAPI resolves in declaration
@@ -580,11 +587,15 @@ def build_router(
 
     @router.post("/agents")
     def create_agent(body: AgentIn) -> dict:
-        return store.create_agent(
+        theme = body.theme.model_dump(exclude_none=True) if body.theme else None
+        agent = store.create_agent(
             body.name.strip(),
             instructions=body.instructions,
             skills=body.skills,
-        ).to_dict()
+            icon=body.icon,
+            theme=json.dumps(theme) if theme else None,
+        )
+        return _read_accent(agent.to_dict())
 
     @router.patch("/agents/{agent_id}")
     def update_agent(agent_id: str, body: AgentPatch) -> dict:
@@ -596,10 +607,15 @@ def build_router(
             if not name:
                 raise HTTPException(400, "an agent needs a name")
             changes["name"] = name
+        # theme comes off the wire as accent fields; the column holds the JSON
+        # string, like the session and project theme setters.
+        if "theme" in changes:
+            accent = body.theme.model_dump(exclude_none=True) if body.theme else None
+            changes["theme"] = json.dumps(accent) if accent else None
         updated = store.update_agent(agent_id, changes)
         if updated is None:
             raise HTTPException(404, "no such agent")
-        return updated.to_dict()
+        return _read_accent(updated.to_dict())
 
     @router.delete("/agents/{agent_id}")
     def delete_agent(agent_id: str) -> dict:

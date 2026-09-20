@@ -43,6 +43,7 @@ from .mcp.settings import MCP_DEFAULTS
 from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
+from .agent_presets import PRESETS as AGENT_PRESETS
 
 # Where the app-wide accent lives in `app_settings`. Namespaced like the
 # memory switches beside it, because that table is shared.
@@ -569,6 +570,13 @@ def build_router(
     @router.get("/agents")
     def list_agents() -> dict:
         return {"agents": [a.to_dict() for a in store.list_agents()]}
+
+    # Declared before `/agents/{agent_id}` so "presets" is matched as itself
+    # rather than as an agent with that id -- FastAPI resolves in declaration
+    # order, and nothing creates an agent under that id.
+    @router.get("/agents/presets")
+    def list_agent_presets() -> dict:
+        return {"presets": AGENT_PRESETS}
 
     @router.post("/agents")
     def create_agent(body: AgentIn) -> dict:

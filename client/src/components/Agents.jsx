@@ -27,6 +27,7 @@ function draftFrom(agent) {
 export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged }) {
   const { confirm } = useDialog();
   const [catalog, setCatalog] = useState([]);
+  const [presets, setPresets] = useState([]);
   // The id being edited, or "new". Null when nothing is open yet.
   const [editing, setEditing] = useState(null);
   const [draft, setDraft] = useState(blankDraft);
@@ -43,6 +44,12 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
         if (live) setCatalog(data.skills || []);
       })
       .catch(() => {});
+    api
+      .listAgentPresets()
+      .then((data) => {
+        if (live) setPresets(data.presets || []);
+      })
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -57,6 +64,15 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
   const openAgent = useCallback((agent) => {
     setEditing(agent.id);
     setDraft(draftFrom(agent));
+    setError("");
+  }, []);
+
+  // A preset opens as a new, prefilled draft rather than saving straight away,
+  // so the skills it names can be reviewed against what this machine actually
+  // has before it becomes a real agent.
+  const fromPreset = useCallback((preset) => {
+    setEditing("new");
+    setDraft(draftFrom(preset));
     setError("");
   }, []);
 
@@ -142,8 +158,29 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
 
       <div className="page-body agents-body">
         <div className="agents-list">
+          {presets.length > 0 ? (
+            <div className="agents-presets">
+              <span className="mi">Start from a preset</span>
+              <div className="agents-preset-chips">
+                {presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className="agents-preset"
+                    title={preset.instructions}
+                    onClick={() => fromPreset(preset)}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {agents.length > 0 ? <span className="mi agents-list-head">Your agents</span> : null}
+
           {agents.length === 0 ? (
-            <p className="agents-empty mi">No agents yet.</p>
+            <p className="agents-empty mi">No agents yet — start from a preset above.</p>
           ) : (
             agents.map((agent) => (
               <button
@@ -167,7 +204,7 @@ export function Agents({ api, agents, onCreate, onUpdate, onDelete, onChanged })
         <div className="agents-editor">
           {editing == null ? (
             <p className="agents-hint mi">
-              Pick an agent to edit, or make a new one.
+              Start from a preset, pick an agent to edit, or make a new one.
             </p>
           ) : (
             <>

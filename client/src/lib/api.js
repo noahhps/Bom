@@ -228,6 +228,9 @@ export function createApi(token, onUnauthorized = () => {}) {
     // conversation can be run as. No agent -- the default -- is the one
     // assistant with the whole shelf.
     listAgents: () => json("/agents"),
+    // Ready-made agents to start from. Instantiated by posting one to
+    // createAgent, or dropped into the editor to be tweaked first.
+    listAgentPresets: () => json("/agents/presets"),
     createAgent: (agent) =>
       json("/agents", { method: "POST", body: JSON.stringify(agent) }),
     // Only the fields that changed. Sending `skills: null` resets an agent to

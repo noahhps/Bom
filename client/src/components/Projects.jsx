@@ -186,8 +186,8 @@ export function Projects({
 
   return (
     <div className="page">
-      <div className="page-head" data-tint="blue">
-        <div className="sw" style={{ left: "-90px", top: "-110px", width: "280px", height: "280px", background: "var(--violet-field)" }} />
+      <div className="page-head" data-tint="accent">
+        <div className="sw" style={{ left: "-90px", top: "-110px", width: "280px", height: "280px", background: "var(--accent-field)" }} />
         <div className="inner">
           <div>
             <h1 className="h">Projects</h1>

@@ -32,7 +32,7 @@ export function TokenGate({ error, connecting, onSubmit }) {
             in the app rather than being a bare form in front of it. */}
         <div
           className="sw"
-          style={{ right: "-70px", top: "-90px", width: "220px", height: "220px", background: "var(--violet-field)" }}
+          style={{ right: "-70px", top: "-90px", width: "220px", height: "220px", background: "var(--accent-field)" }}
         />
         <div
           className="sw"

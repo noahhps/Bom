@@ -18,7 +18,7 @@ export function PermissionAsk({ ask, onDecide }) {
 
       <div className="sur ask">
         <div className="skill-head">
-          <i style={{ background: "var(--blue)" }} />
+          <i style={{ background: "var(--accent)" }} />
           <span className="h" style={{ fontSize: "16px", flex: 1 }}>
             {ask.tool}
           </span>

@@ -49,37 +49,35 @@
   --grid-line: #f1f4f9;
   --grid-step: 22px;
 
-  /* The four tints. Each has a saturated form for marks and a field form for
-     areas -- the field is what a header or a callout is filled with. */
-  /* 1c runs on one accent and one pass colour. The four-tint system stays as
-     names so nothing downstream breaks, but violet and blue now resolve to the
-     same cobalt -- the direction is explicit that a single institutional blue
-     carries everything actionable. */
-  --violet: #1f4fd8;
-  --violet-soft: #5a7fe6;
-  --violet-field: #e2e8f8;
-  --violet-wash: #e7ecf9; /* the user's own turn */
-  --blue: #1f4fd8;
-  --blue-field: #e2e8f8;
-  /* The user's own bubble, and the send button. Blue rather than violet: in
-     this layout the only two things wearing a fill are the thing you typed and
-     the button that sends it, and they should read as the same voice. */
-  --blue-wash: #e7ecf9;
-  --send: #1f4fd8;
-  --green: #0e7c66;       /* pass */
-  --green-field: #d8ece7;
-  /* Not in 1c, which names no warning colour. Derived to sit beside cobalt and
-     pass without becoming a third accent. */
-  --ochre: #9a6b12;
-  --ochre-field: #f3e8d2;
+  /* One accent, not four tints. The sheet used to name `--violet`, `--blue` and
+     `--send` as if they were three colours; every one of them resolved to the
+     same cobalt, and `theme.js` set them from the one accent at runtime. The
+     fiction is gone: there is `--accent`, and three derivatives of it for the
+     jobs the old names split between --
 
-  /* The blue from the archived Yiqi Sheet palette, brought forward. It is the
-     one saturated colour in the system and it means "you can act on this":
-     links, destructive text, the current section. Violet stays ambient -- it
-     fills the pastel headers and washes and never asks to be clicked -- so the
-     two never compete for the same job despite sitting close in hue. */
+       --accent        the saturated cobalt: links, the send button, the
+                       current section, anything you act on
+       --accent-hover  its pressed/hover step
+       --accent-soft   a lighter accent, for a mark that should read as accent
+                       without shouting (the memory spark, a soft dot)
+       --accent-field  the flat fill behind a header or a callout
+       --accent-wash   the faintest tint: the user's own turn, a hovered row
+
+     `theme.js` derives all five from whatever hue a chat wears, so this block
+     is only the static fallback for "wear no colour". */
   --accent: #1f4fd8;      /* cobalt */
   --accent-hover: #173da8;
+  --accent-soft: #5a7fe6;
+  --accent-field: #e2e8f8;
+  --accent-wash: #e7ecf9;
+
+  /* Pass and warning. Left alone on purpose -- they carry meaning (a check, a
+     caution), so they must not follow the accent the way everything above does:
+     a warning that turns blue because the reader likes blue is a bug. */
+  --green: #0e7c66;       /* pass */
+  --green-field: #d8ece7;
+  --ochre: #9a6b12;       /* warning */
+  --ochre-field: #f3e8d2;
 
   /* Firmer than the drawing. On a white ground with no fills left to do the
      work, these lines are the only thing separating one surface from the
@@ -121,6 +119,24 @@
   --r-pill: var(--r-card);
   --r-bubble: var(--r-card);
   --r-control: 10px;
+
+  /* One elevation, and one focus glow. The stated rule is that a flat
+     structural surface (a card, a page head, `.sur`) gets a hairline and no
+     shadow, and only a surface that genuinely floats over the sheet is lifted.
+     Those floating panels -- the popover, the gate card, the dialog -- each
+     used to carry their own hand-tuned drop (22/48, 26/54, 18/44), which is
+     three answers to one question; they now share `--elevation-float`.
+
+     `--glow-accent` is the accent halo the composer wears when focused, named
+     so any floating surface that wants to say "you are here" reaches for the
+     same treatment rather than redrawing it. The composer keeps its own tight
+     contact shadow (see `.composer-box`) because it is a bar docked to the foot
+     of the screen, not a panel floating over a scrim -- a documented exception,
+     not a fourth invented value. */
+  --elevation-float: 0 20px 48px -20px rgba(20, 23, 29, 0.4);
+  --glow-accent:
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 8px 34px -10px color-mix(in srgb, var(--accent) 34%, transparent);
 
   /* The reading column. The sheet is as wide as the window allows, but the
      conversation inside it is not: measured across 1184px of sheet, a turn ran
@@ -970,7 +986,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    lights, not just its header -- the drop is accepted anywhere inside. */
 .navrail-project[data-over],
 #navrail-session-list[data-over] {
-  background: var(--blue-field);
+  background: var(--accent-field);
   border-radius: var(--r-surface);
   outline: 1px dashed var(--accent);
   outline-offset: -1px;
@@ -1042,7 +1058,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .prj-card[data-over] {
   border-color: var(--accent);
   border-style: solid;
-  background: var(--blue-field);
+  background: var(--accent-field);
 }
 
 .prj-head { display: flex; align-items: baseline; gap: 10px; }
@@ -1252,7 +1268,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 22px 48px -18px rgba(20, 23, 29, 0.45);
+  box-shadow: var(--elevation-float);
 }
 .popover-up { left: 10px; bottom: 56px; }
 
@@ -1427,7 +1443,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--violet);
+  background: var(--accent);
   display: block;
 }
 .state[data-tone="warn"] i { background: var(--ochre); }
@@ -1775,7 +1791,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   left: -0.225em;
   top: calc(-0.2955em - 0.225em);
   border-radius: 30% 100%;
-  background: var(--send);
+  background: var(--accent);
   transform: scaleX(1.2) rotate(45deg);
 }
 /* Where they overlap, same-coloured petals run together into one scalloped
@@ -1785,7 +1801,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   z-index: 0;
 }
 .flower-petal:nth-child(odd)::before {
-  background: var(--violet-soft);
+  background: var(--accent-soft);
 }
 .flower-petal:nth-child(even) {
   z-index: 1;
@@ -1800,7 +1816,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   height: 0.5909em;
   margin: -0.2955em 0 0 -0.2955em;
   border-radius: 50%;
-  background: var(--send);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1857,7 +1873,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
     transform: rotate(calc(var(--i) * 45deg - 25deg)) scale(0.72);
   }
   .flower[data-open] .flower-face {
-    background: var(--send);
+    background: var(--accent);
     transform: scale(1.15);
   }
   .flower[data-open] .flower-eyes {
@@ -2072,8 +2088,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   box-shadow: 0 0 0 1.5px var(--line-strong);
 }
 .reasoning[data-live]::after {
-  background: var(--blue);
-  box-shadow: 0 0 0 1.5px var(--blue);
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 .reasoning-toggle {
   font: 400 var(--t-sm)/1.5 var(--font);
@@ -2105,13 +2121,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   gap: 14px;
   padding: 15px 18px;
   border-radius: var(--r-bubble);
-  background: var(--violet-wash);
+  background: var(--accent-wash);
 }
 .nudge > i {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--violet);
+  background: var(--accent);
   flex: none;
   display: block;
 }
@@ -2242,11 +2258,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-radius: inherit;
   pointer-events: none;
   opacity: var(--near);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
-    0 8px 34px -10px color-mix(in srgb, var(--accent) 34%, transparent);
+  box-shadow: var(--glow-accent);
   transition: opacity var(--composer-motion);
-  
 }
 
 .composer-box:focus-within {
@@ -2300,7 +2313,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--send);
+  background: var(--accent);
   color: #fff;
   display: grid;
   place-items: center;
@@ -2385,7 +2398,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: rgba(20, 23, 29, 0.55);
 }
 .effort button[aria-pressed="true"] {
-  background: var(--blue-wash);
+  background: var(--accent-wash);
   color: var(--ink);
 }
 .effort button:disabled { opacity: 0.45; cursor: default; }
@@ -2406,9 +2419,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   padding: 34px 36px 24px;
   flex: none;
 }
-.page-head[data-tint="violet"] { background: var(--violet-field); }
+/* Two tints a page head can wear: the accent, or the pass green. "violet" and
+   "blue" used to be separate values that painted the same fill -- they are now
+   one `accent`. */
+.page-head[data-tint="accent"] { background: var(--accent-field); }
 .page-head[data-tint="green"] { background: #e6f0e8; }
-.page-head[data-tint="blue"] { background: var(--blue-field); }
 
 .page-head .inner {
   position: relative;
@@ -2534,7 +2549,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 .callout[data-tint="green"] { background: var(--green-field); }
 .callout[data-tint="ochre"] { background: var(--ochre-field); }
-.callout[data-tint="violet"] { background: var(--violet-wash); }
+.callout[data-tint="accent"] { background: var(--accent-wash); }
 .callout p { margin: 0; flex: 1; }
 .callout b { font-weight: 500; }
 
@@ -2554,7 +2569,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: flex;
   flex: none;
 }
-.switch[aria-pressed="true"] { background: var(--violet); justify-content: flex-end; }
+.switch[aria-pressed="true"] { background: var(--accent); justify-content: flex-end; }
 .switch i {
   width: 14px;
   height: 14px;
@@ -2721,14 +2736,14 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   flex: 1;
   padding: 20px;
   border-radius: var(--r-surface);
-  background: var(--violet-wash);
+  background: var(--accent-wash);
 }
 .skill-head { display: flex; align-items: center; gap: 11px; }
 .skill-head > i {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--violet);
+  background: var(--accent);
   flex: none;
   display: block;
 }
@@ -2764,8 +2779,8 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   height: 34px;
   margin-top: 16px;
 }
-.spark i { flex: 1; border-radius: 2px; display: block; background: var(--violet-soft); }
-.spark i[data-hot] { background: var(--violet); }
+.spark i { flex: 1; border-radius: 2px; display: block; background: var(--accent-soft); }
+.spark i[data-hot] { background: var(--accent); }
 .spark[data-tint="quiet"] i { background: rgba(20, 23, 29, 0.09); }
 .spark[data-tint="green"] i { background: #c9d3cc; }
 .spark[data-tint="green"] i[data-cold] { background: rgba(20, 23, 29, 0.1); }
@@ -2784,8 +2799,8 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   gap: 5px;
   padding: 2px 7px 2px 5px;
   border-radius: var(--r-pill);
-  background: var(--violet-field);
-  color: var(--violet);
+  background: var(--accent-field);
+  color: var(--accent);
   font: 500 var(--t-micro)/1 var(--font-mono);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
@@ -2802,8 +2817,8 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   width: 26px;
   height: 26px;
   border-radius: var(--r-surface);
-  background: var(--violet-field);
-  color: var(--violet);
+  background: var(--accent-field);
+  color: var(--accent);
 }
 .mcp-avatar .icon-mask { width: 15px; height: 15px; }
 .mcp-avatar[data-off] { background: var(--rail); color: var(--text-faint); }
@@ -2862,7 +2877,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--violet-field);
+  background: var(--accent-field);
 }
 .gate-card {
   position: relative;
@@ -2872,7 +2887,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   background: var(--ground);
   border-radius: var(--r-card);
   border: 1px solid rgba(20, 23, 29, 0.1);
-  box-shadow: 0 26px 54px -30px rgba(20, 23, 29, 0.34);
+  box-shadow: var(--elevation-float);
   padding: 34px 32px 30px;
   display: flex;
   flex-direction: column;
@@ -2902,7 +2917,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--ink);
   outline: none;
 }
-.gate-card input:focus { border-color: var(--violet); }
+.gate-card input:focus { border-color: var(--accent); }
 .gate-card button {
   padding: 13px 16px;
   border-radius: var(--r-pill);
@@ -3147,7 +3162,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
    composer is what lights up, because that is where it lands. */
 .composer[data-dropping] .composer-box {
   border-color: var(--accent);
-  background: var(--violet-wash);
+  background: var(--accent-wash);
 }
 
 /* The paperclip is a plus: it adds something, and the row it sits in is chips
@@ -3231,7 +3246,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .skill-always:hover { border-color: var(--accent); color: var(--accent); }
 .skill-always[aria-pressed="true"] {
   border-color: transparent;
-  background: var(--violet-field);
+  background: var(--accent-field);
   color: var(--accent);
 }
 
@@ -3412,11 +3427,11 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   flex: none;
 }
 .skill-trace-row[data-running] .skill-trace-dot {
-  background: var(--blue);
-  box-shadow: 0 0 0 1.5px var(--blue);
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 .skill-trace-row[data-running] .skill-trace-dot {
-  background: var(--blue);
+  background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -3493,8 +3508,8 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-surface);
-  /* The floating card, which is the one place a shadow is allowed. */
-  box-shadow: 0 18px 44px -18px color-mix(in srgb, var(--ink) 45%, transparent);
+  /* A panel floating over the scrim: the shared float, not a bespoke drop. */
+  box-shadow: var(--elevation-float);
 }
 
 .dlg-title {

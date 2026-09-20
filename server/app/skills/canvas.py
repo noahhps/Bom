@@ -21,8 +21,36 @@ the exception, and only because revising something means seeing it first.
 
 from __future__ import annotations
 
+import re
+
 from ..store import Store
 from .skill import Skill
+
+# A full HTML document, or a fragment that opens with a structural tag. Used to
+# rescue content the model wrote as HTML but forgot to label -- stored as
+# markdown it would be shown escaped, as source, which is the opposite of what
+# a page is for.
+_HTML_DOC = re.compile(r"<!doctype\s+html|<html[\s>]", re.IGNORECASE)
+_HTML_TAG = re.compile(
+    r"<(?:body|head|section|article|main|div|table|ul|ol|form|style|script|h[1-6]|p)[\s>]",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_html(text: str) -> bool:
+    """Whether content is really HTML wearing the wrong label.
+
+    Deliberately conservative: a full document (`<!doctype html>`/`<html>`) is
+    unambiguous, and otherwise the content must actually begin with a tag and
+    carry both a structural element and a closing tag. Prose with the odd inline
+    `<img>` stays markdown -- only something that is plainly a page is rescued.
+    """
+    t = (text or "").strip()
+    if not t:
+        return False
+    if _HTML_DOC.search(t):
+        return True
+    return t.startswith("<") and bool(_HTML_TAG.search(t)) and "</" in t
 
 # What `kind` may be. Anything else is coerced to the closest sensible default
 # rather than stored as-is -- the panel only knows how to render these three,
@@ -111,6 +139,11 @@ class WriteCanvas(Skill):
         body = content or ""
         lang = (language or "").strip() or None
         resolved_kind = _normalize_kind(kind, lang)
+        # Rescue a page the model wrote but labelled prose: stored as markdown
+        # it would render escaped, as source. Only upgrades markdown -- an
+        # explicit `code` kind means the user wants to see the HTML as text.
+        if resolved_kind == "markdown" and _looks_like_html(body):
+            resolved_kind = "html"
 
         existing = self.store.find_canvas_by_title(session, name)
         if existing is None:

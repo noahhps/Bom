@@ -36,7 +36,14 @@ export function Canvas({
 }) {
   const [draft, setDraft] = useState(active?.content ?? "");
   const [titleDraft, setTitleDraft] = useState(active?.title ?? "");
-  const [mode, setMode] = useState("edit");
+  // Open on the rendered view for a page or a written document that already
+  // has content -- you want to see it, not read its source. A blank or code
+  // canvas opens in the editor, since there is nothing to render.
+  const [mode, setMode] = useState(() =>
+    active && PREVIEWABLE.has(active.kind) && (active.content || "").trim()
+      ? "preview"
+      : "edit",
+  );
   const [copied, setCopied] = useState(false);
   const timer = useRef(0);
 
@@ -50,10 +57,16 @@ export function Canvas({
   useEffect(() => {
     setDraft(active?.content ?? "");
     setTitleDraft(active?.title ?? "");
-    // A code canvas has no preview, so never leave the toggle stuck on one it
-    // cannot show after switching to it.
-    if (active && !PREVIEWABLE.has(active.kind)) setMode("edit");
   }, [activeId, stamp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When a *different* canvas is opened, default to its rendered view if it has
+  // one and something to show. Keyed on identity only, not the timestamp, so an
+  // autosave while the reader is editing does not yank them back to preview
+  // every keystroke -- only opening or switching canvases sets the view.
+  useEffect(() => {
+    const previewable = active && PREVIEWABLE.has(active.kind);
+    setMode(previewable && (active.content || "").trim() ? "preview" : "edit");
+  }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => clearTimeout(timer.current), []);
 

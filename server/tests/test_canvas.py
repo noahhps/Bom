@@ -108,6 +108,28 @@ async def test_write_canvas_infers_code_kind_from_language(store: Store):
 
 
 @pytest.mark.asyncio
+async def test_write_canvas_detects_html_written_as_prose(store: Store):
+    sid = store.create_session()["id"]
+    skill = WriteCanvas(store)
+    # The model writes a page but forgets kind="html". Stored as markdown it
+    # would render escaped, as source, so it is rescued to html.
+    await skill.use(
+        session=sid,
+        title="Page",
+        content="<!doctype html><html><body><h1>Hi</h1></body></html>",
+    )
+    assert store.find_canvas_by_title(sid, "Page").kind == "html"
+
+    # Prose stays markdown even with the odd inline tag.
+    await skill.use(session=sid, title="Notes", content="# Title\n\nText with <img src=x>.")
+    assert store.find_canvas_by_title(sid, "Notes").kind == "markdown"
+
+    # An explicit code kind is respected -- the user wants the HTML as text.
+    await skill.use(session=sid, title="Snippet", content="<div>x</div>", kind="code")
+    assert store.find_canvas_by_title(sid, "Snippet").kind == "code"
+
+
+@pytest.mark.asyncio
 async def test_write_canvas_needs_a_title(store: Store):
     sid = store.create_session()["id"]
     skill = WriteCanvas(store)

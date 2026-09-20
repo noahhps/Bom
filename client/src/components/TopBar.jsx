@@ -29,6 +29,12 @@ export function TopBar({
   contextSeed,
   resolvedAccent,
   accentSource,
+  canvasCount = 0,
+  canvasOpen = false,
+  onToggleCanvas,
+  agents = [],
+  agentId = null,
+  onAgent,
 }) {
   const [accentsOpen, setAccentsOpen] = useState(false);
   const accentNode = useRef(null);
@@ -91,6 +97,28 @@ export function TopBar({
         </label>
       ) : null}
 
+      {/* Which agent answers in this conversation. Beside filing, and hidden
+          for the same reasons: it is a property of the thread, so an unsent
+          chat has no id to write it against, and it only appears once there is
+          at least one agent to choose. */}
+      {canFile && agents.length > 0 ? (
+        <label className="topbar-project">
+          <span className="mi">Agent</span>
+          <select
+            value={agentId || ""}
+            aria-label="Run this conversation as an agent"
+            onChange={(event) => onAgent(event.target.value || null)}
+          >
+            <option value="">Default</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
       {/* The accent, for this conversation only. Beside filing because both
           are properties of the thread rather than of the app, and hidden for
           the same reason: an unsent chat has no id to write one against. */}
@@ -137,6 +165,23 @@ export function TopBar({
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {/* The canvas toggle. Shown only once a conversation has a canvas to
+          open -- an empty conversation has nothing to look at, and the model
+          opens the panel itself the moment it writes one. */}
+      {canvasCount > 0 ? (
+        <button
+          type="button"
+          className="icon-btn"
+          data-on={canvasOpen ? "" : undefined}
+          aria-label={canvasOpen ? "Hide canvas" : "Show canvas"}
+          aria-pressed={canvasOpen}
+          title="Canvas"
+          onClick={onToggleCanvas}
+        >
+          <Icon name="document" />
+        </button>
       ) : null}
 
       <button className="icon-btn" aria-label="New conversation" onClick={onNewSession}>

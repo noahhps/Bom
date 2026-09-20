@@ -144,6 +144,43 @@ about the wrong one.
 > confidently wrong, check `ollama show <model>` for a projector before
 > suspecting anything else.
 
+## Canvas
+
+Some answers are not a message. A draft you will keep editing, a script you are
+building up over several turns, a page you want to see rendered — a fenced code
+block in the thread is the wrong home for any of them, because the next edit
+means the model reprinting the whole thing and you scrolling back to find it.
+
+The **canvas** is a document that lives beside the conversation instead of
+inside it, in a panel that splits the sheet on a laptop and takes the whole
+screen on a phone. It opens itself the moment the model writes one, and the
+button in the top bar shows and hides it after that.
+
+Two skills reach it, and they are named for the choice the model is making:
+
+| | |
+|---|---|
+| `write_canvas` | Create a canvas, or replace one by the same title |
+| `read_canvas` | Read one back before revising, or list what a conversation has |
+
+Named by title, not by id — like the calendar, and for the same reason: every
+listing the model sees is prose, so an id is something it would have to be
+handed and then copy back exactly. Writing to a title that already exists
+replaces that canvas whole; a new title makes a new one. A conversation rarely
+has more than a handful, and telling them apart by name is what a person does
+too.
+
+A canvas is **yours to edit as well**. Type into the panel and it saves itself a
+beat after you stop; a markdown or HTML canvas flips between the editor and a
+preview. Nothing here is retrieval-augmented magic — the model only sees a
+canvas when it calls `read_canvas`, so it reads the version you left, edits and
+all.
+
+Canvases belong to the conversation the way messages and attachments do:
+deleting the chat takes them with it, and they never leak into another one. The
+bytes are columns in the same SQLite file as everything else, so `VACUUM INTO`
+still copies the lot in one shot.
+
 ## Asking before a skill runs
 
 A skill that is switched on can read your folders, search the web and call
@@ -185,6 +222,81 @@ Three things worth knowing about how it behaves:
   inventing one. The turn finishes normally;
 * **silence is refusal.** A prompt nobody answers in five minutes is treated as
   a no. Running it anyway would teach you the prompt could be ignored.
+
+## Agents
+
+One assistant with one system prompt and the whole shelf of skills is the
+default, and for most conversations it is the right one. An **agent** is a way
+to keep several — a researcher who cites, a coder who writes tests first, a
+planner who only talks — each with its own standing instructions and its own
+subset of the skills, and to say which one a conversation is talking to. It is
+the local, single-machine shape of the multi-agent idea GrokBot builds a team
+of cloud bots around.
+
+An agent is two things:
+
+* **instructions** — persona, appended to the base system prompt for that
+  agent's conversations. Additive, never a replacement: the preamble still
+  carries what every answer needs, and the agent specialises on top of it. It
+  sits in the stable, cacheable part of the prompt, so assigning one does not
+  cost a fresh prefix every turn.
+* **skills** — which tools it may call. The default is every enabled skill;
+  narrow it and the model is only *offered* that subset, and a call to anything
+  outside it is refused before it runs rather than quietly allowed. An agent
+  given no skills at all is a pure conversationalist, and that is a different,
+  deliberate thing from one given all of them.
+
+Make and edit them on the **Agents** page; assign one to the conversation you
+are in from the picker in the top bar, beside where you file it into a project.
+A conversation with no agent is the default assistant, and that is the common
+case. Deleting an agent files its conversations back under the default rather
+than taking them with it — the same way deleting a project does.
+
+Per-agent *model* is the obvious next piece and is deliberately not here yet:
+the provider holds one model at a time and a turn already streaming keeps the
+one it started with, so choosing a model per agent is the same change as the
+per-conversation model override in **Not built yet**, and lands with it.
+
+## The sandbox
+
+The most powerful thing Courier can be given, and the most dangerous: a local
+computer. With it on, two skills appear —
+
+| | |
+|---|---|
+| `run_shell` | Run a shell command and read its output |
+| `run_python` | Run a Python snippet and read what it printed |
+
+— so the model can do real work the answer depends on: calculate without
+getting it wrong in its head, parse a file, run a build, drive a CLI. It is the
+local, single-machine answer to the cloud "computer" a GrokBot or Manus agent
+drives, and it makes the same trade — real capability for the cost of trusting
+what you approve.
+
+Three things are true of it by construction:
+
+* **Off unless you turn it on.** `SANDBOX_ENABLED=1` and not otherwise. An
+  unconfigured capability that could run code is a footgun, so an unset machine
+  never offers it — the skill is listed on the Skills page as needing the flag,
+  and never sent to the model until it has it.
+* **Approved per run.** It goes through the same gate as every other skill, and
+  the exact command is shown before it runs. "Run a shell command" is never the
+  decision; `rm -rf ~` is. Keep **Ask before running a skill** on.
+* **A scratch directory, not a jail.** Work lands in `SANDBOX_DIR`
+  (`data/sandbox` by default) and relative paths resolve there — but be honest
+  about the boundary: a command runs as the same user as the server, with that
+  user's files and network, and `cd /` walks out like anywhere else. The
+  confinement that matters is the switch being a deliberate choice and the
+  approval prompt in front of each run. Enable it on a machine where you would
+  run the command yourself.
+
+The app's own secrets (`ANTHROPIC_API_KEY`, the bearer token, and the rest) are
+stripped from the environment a command sees, so a snippet cannot print them
+back out of `os.environ`. That is hygiene, not a boundary — a command that can
+read the filesystem can read the key file too. A run that overruns
+`SANDBOX_TIMEOUT` seconds is killed, and its output is capped before it reaches
+the window. Give an agent only `run_python` and `run_shell` (see **Agents**)
+and you have a coding assistant that cannot touch the web, or the reverse.
 
 ## Memory
 
@@ -335,6 +447,10 @@ All environment variables, all optional.
 | `OLLAMA_THINK` | `medium` | Default gpt-oss reasoning effort: `low`, `medium`, or `high`. |
 | `CONTEXT_TOKENS` | `32768` | |
 | `REPLY_TOKENS` | `2048` | Headroom reserved for the answer. |
+| `SANDBOX_ENABLED` | unset | `1` turns on `run_shell`/`run_python`. Off runs code nowhere. Read **The sandbox** first. |
+| `SANDBOX_DIR` | `data/sandbox` | Scratch working directory for the sandbox. A workspace, not a jail. |
+| `SANDBOX_TIMEOUT` | `30` | Seconds before a command is killed. |
+| `SANDBOX_OUTPUT_CHARS` | `6000` | Cap on what one run puts back into the window. |
 | `SYSTEM_PREAMBLE` | see `config.py` | Kept static — it is the cacheable prefix. |
 | `EMBED_MODEL` | `nomic-embed-text` | Pull it separately. Changing it orphans existing vectors. |
 | `MEMORY_MIN_SIMILARITY` | `0.35` | How close a passage must be to count as a match at all. |

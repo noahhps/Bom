@@ -217,6 +217,55 @@ class SessionProject(BaseModel):
     project_id: str | None = None
 
 
+# One text field for the kind rather than an enum: the store coerces anything
+# it does not know to a sensible default, so a client that learns a new kind
+# before the server does degrades quietly rather than 422-ing.
+class CanvasIn(BaseModel):
+    """A canvas the reader made by hand, from the side panel."""
+
+    title: str = Field(default="Untitled", min_length=1, max_length=200)
+    content: str = Field(default="", max_length=1_000_000)
+    kind: str = Field(default="markdown", max_length=40)
+    language: str | None = Field(default=None, max_length=40)
+
+
+class CanvasPatch(BaseModel):
+    """A reader's edit from the panel. Every field optional and merged, so the
+    editor can save the body without restating the title, and vice versa."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content: str | None = Field(default=None, max_length=1_000_000)
+    kind: str | None = Field(default=None, max_length=40)
+    language: str | None = Field(default=None, max_length=40)
+
+
+class AgentIn(BaseModel):
+    """A new agent: a named persona with an optional subset of the skills."""
+
+    name: str = Field(min_length=1, max_length=120)
+    # Persona, appended to the preamble for this agent's conversations.
+    instructions: str | None = Field(default=None, max_length=20_000)
+    # The skill names this agent may call. None -- the default -- means every
+    # enabled skill; an empty list is an agent deliberately given none.
+    skills: list[str] | None = None
+
+
+class AgentPatch(BaseModel):
+    """An edit. Every field optional; `exclude_unset` on the route is what lets
+    a caller clear `instructions` or `skills` back to null by sending it
+    explicitly, distinct from leaving it alone by omitting it."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    instructions: str | None = Field(default=None, max_length=20_000)
+    skills: list[str] | None = None
+
+
+class SessionAgent(BaseModel):
+    # None runs the conversation as the default assistant. Explicitly nullable,
+    # like SessionProject, so "unassign" is something the client can say.
+    agent_id: str | None = None
+
+
 class Accent(BaseModel):
     """The colour a scope is dressed in -- what was chosen, not what it looks
     like.
@@ -463,6 +512,103 @@ def build_router(
             raise HTTPException(404, "no such project")
         store.set_session_project(session_id, body.project_id)
         return {"ok": True, "project_id": body.project_id}
+
+    # -- canvases ---------------------------------------------------------
+    #
+    # A canvas is the document shown in the side panel. The model writes it
+    # through the write_canvas skill, which streams the change down the /chat
+    # connection as a `canvas` frame; these routes are the other half -- what
+    # the client loads when it opens a conversation, and what a reader editing
+    # the panel by hand saves back to.
+
+    @router.get("/sessions/{session_id}/canvases")
+    def list_canvases(session_id: str) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        return {"canvases": [c.to_dict() for c in store.session_canvases(session_id)]}
+
+    @router.post("/sessions/{session_id}/canvases")
+    def create_canvas(session_id: str, body: CanvasIn) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        canvas = store.create_canvas(
+            session_id,
+            body.title.strip(),
+            content=body.content,
+            kind=body.kind,
+            language=body.language,
+        )
+        return canvas.to_dict()
+
+    @router.patch("/canvases/{canvas_id}")
+    def update_canvas(canvas_id: str, body: CanvasPatch) -> dict:
+        updated = store.update_canvas(
+            canvas_id,
+            title=body.title.strip() if body.title is not None else None,
+            content=body.content,
+            kind=body.kind,
+            language=body.language,
+        )
+        if updated is None:
+            raise HTTPException(404, "no such canvas")
+        return updated.to_dict()
+
+    @router.delete("/canvases/{canvas_id}")
+    def delete_canvas(canvas_id: str) -> dict:
+        if not store.delete_canvas(canvas_id):
+            raise HTTPException(404, "no such canvas")
+        return {"ok": True}
+
+    # -- agents -----------------------------------------------------------
+    #
+    # A named persona with its own subset of the skills, that a conversation
+    # can be assigned to. The default -- no agent -- is the one assistant with
+    # the whole shelf, so these routes are only touched by someone building a
+    # team of them.
+
+    @router.get("/agents")
+    def list_agents() -> dict:
+        return {"agents": [a.to_dict() for a in store.list_agents()]}
+
+    @router.post("/agents")
+    def create_agent(body: AgentIn) -> dict:
+        return store.create_agent(
+            body.name.strip(),
+            instructions=body.instructions,
+            skills=body.skills,
+        ).to_dict()
+
+    @router.patch("/agents/{agent_id}")
+    def update_agent(agent_id: str, body: AgentPatch) -> dict:
+        # Only what the caller actually sent, so an omitted field is left alone
+        # while an explicit null clears it -- see AgentPatch.
+        changes = body.model_dump(exclude_unset=True)
+        if "name" in changes:
+            name = (changes["name"] or "").strip()
+            if not name:
+                raise HTTPException(400, "an agent needs a name")
+            changes["name"] = name
+        updated = store.update_agent(agent_id, changes)
+        if updated is None:
+            raise HTTPException(404, "no such agent")
+        return updated.to_dict()
+
+    @router.delete("/agents/{agent_id}")
+    def delete_agent(agent_id: str) -> dict:
+        if not store.delete_agent(agent_id):
+            raise HTTPException(404, "no such agent")
+        # Said out loud, like deleting a project: the conversations are not
+        # taken with it, they fall back to the default assistant.
+        return {"ok": True, "conversations": "kept, now unassigned"}
+
+    @router.put("/sessions/{session_id}/agent")
+    def set_session_agent(session_id: str, body: SessionAgent) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        if body.agent_id and not store.get_agent(body.agent_id):
+            raise HTTPException(404, "no such agent")
+        store.set_session_agent(session_id, body.agent_id)
+        return {"ok": True, "agent_id": body.agent_id}
 
     # -- accents ----------------------------------------------------------
     #

@@ -32,6 +32,15 @@ const PATHS = {
     "M10.5 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8" +
     "M15 13.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8",
   check: "M5 12.5l5 5 9-11",
+  // A page with a turned corner and two lines of text: the canvas, the
+  // document that lives beside the conversation. Stroked like its neighbours.
+  document: "M7 3h8l4 4v14H7zM15 3v4h4M10 13h6M10 17h6",
+  // Two figures, one behind the other: a team of agents rather than the single
+  // person the `memory` file glyph draws. One full person, one half-seen past
+  // its shoulder, so it reads as "more than one" at rail size.
+  agents:
+    "M9 11a3 3 0 100-6 3 3 0 000 6M3.5 19a5.5 5.5 0 0111 0" +
+    "M16 5.3a3 3 0 010 5.4M17 13.2a5.5 5.5 0 013.5 5.1",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",

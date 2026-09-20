@@ -35,6 +35,7 @@ const DESTINATIONS = [
   { id: "projects", label: "Projects", icon: "folder" },
   { id: "memory", label: "Memory", icon: "memory" },
   { id: "skills", label: "Skills", icon: "skills" },
+  { id: "agents", label: "Agents", icon: "agents" },
   // Named for the page it opens. It was "tools", but `view === "tools"` has
   // never had a branch of its own -- it fell through to the Settings page,
   // which is also where the mark at the head of the rail goes. The label was

@@ -1406,6 +1406,241 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background-image: none;
 }
 
+/* -- canvas ----------------------------------------------------------------
+ *
+ * The document that lives beside the conversation, shown in the side panel. A
+ * flex sibling of the sheet rather than something laid over it, so opening it
+ * splits the width and the thread reflows to sit next to it -- the same move
+ * the pinned rail makes on the other side. On a phone there is no width to
+ * split, so the media query at the foot turns it into a full overlay instead.
+ */
+.canvas {
+  flex: 0 0 clamp(320px, 42%, 640px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line-soft);
+  overflow: hidden;
+  z-index: 12;
+}
+
+.canvas-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.canvas-head .spacer { flex: 1; }
+
+.canvas-title-input,
+.canvas-switch {
+  font: 500 var(--t-body) var(--font);
+  color: var(--ink);
+  min-width: 0;
+  max-width: 240px;
+  border-radius: 8px;
+}
+.canvas-title-input {
+  background: none;
+  border: 1px solid transparent;
+  padding: 5px 7px;
+}
+.canvas-title-input:hover { border-color: var(--line-soft); }
+.canvas-title-input:focus { outline: none; border-color: var(--line-firm); }
+.canvas-title-input[data-empty] { color: var(--text-faint); }
+.canvas-switch {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+}
+
+.canvas-kind {
+  padding: 3px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--text-faint);
+}
+
+.canvas-modes {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.canvas-mode {
+  font: 500 var(--t-micro) var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  padding: 5px 12px;
+  color: var(--text-faint);
+}
+.canvas-mode[data-on] { background: var(--ink); color: var(--ground); }
+
+/* The top-bar toggle when its panel is open, and any icon button that reports
+   an on/off it owns. Matches the icon button's own hover so the two states sit
+   at the same weight. */
+.icon-btn[data-on] { background: rgba(20, 23, 29, 0.08); }
+
+.canvas-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.canvas-editor {
+  flex: 1;
+  width: 100%;
+  resize: none;
+  border: none;
+  background: none;
+  padding: 18px 20px;
+  color: var(--ink);
+  font: 400 var(--t-body)/1.7 var(--font);
+}
+.canvas-editor:focus { outline: none; }
+.canvas-editor[data-mono] {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.canvas-preview {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 22px;
+}
+.canvas-preview-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #ffffff;
+}
+
+.canvas-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.canvas-foot .spacer { flex: 1; }
+.canvas-foot-btn {
+  font: 500 var(--t-micro) var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--line-firm);
+  color: var(--ink);
+}
+.canvas-foot-btn:hover { border-color: var(--line-strong); }
+.canvas-foot-btn[data-danger] { color: #a2452f; border-color: transparent; }
+.canvas-foot-btn[data-danger]:hover { border-color: #a2452f; }
+
+.canvas-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+/* -- agents page -----------------------------------------------------------
+ * The list of agents on the left, one editor on the right that "New" and a
+ * picked agent share. Built on the same .page shell as Skills and Memory. */
+.agents-body { gap: 22px; }
+.agents-list {
+  width: 240px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.agents-empty { padding: 6px 8px; }
+.agents-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.agents-item:hover { background: rgba(20, 23, 29, 0.05); }
+.agents-item[data-active] {
+  background: var(--surface);
+  border-color: var(--line);
+}
+.agents-item-name { font: 500 var(--t-body) var(--font); }
+
+.agents-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 640px;
+}
+.agents-hint { padding: 6px 2px; }
+.agents-field { display: flex; flex-direction: column; gap: 7px; }
+.agents-field input[type="text"],
+.agents-instructions {
+  font: 400 var(--t-body)/1.6 var(--font);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.agents-field input[type="text"]:focus,
+.agents-instructions:focus {
+  outline: none;
+  border-color: var(--line-strong);
+}
+.agents-instructions { min-height: 120px; resize: vertical; }
+
+.agents-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 2px;
+  font: 400 var(--t-body) var(--font);
+  color: var(--ink);
+  cursor: pointer;
+}
+.agents-check input { width: 15px; height: 15px; flex: none; }
+.agents-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+}
+
+.agents-actions { display: flex; gap: 9px; margin-top: 4px; }
+.agents-error { color: #a2452f; font: 400 var(--t-body) var(--font); margin: 0; }
+.btn[data-danger] { color: #a2452f; }
+.btn[data-danger]:hover { border-color: #a2452f; }
+
+@media (max-width: 900px) {
+  .agents-body { flex-direction: column; }
+  .agents-list { width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .agents-editor { max-width: none; }
+}
+
 /* -- top bar ---------------------------------------------------------------- */
 
 .topbar {
@@ -2972,6 +3207,18 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
     transform: none;
   }
   .navrail-edge { display: none; }
+
+  /* No width to split on a phone, so the canvas stops being a column beside
+     the thread and becomes a full overlay instead -- the close button in its
+     own header is the way back. Above the rail so a tapped-open rail does not
+     surface through it. */
+  .canvas {
+    position: absolute;
+    inset: 0;
+    flex: none;
+    border-left: none;
+    z-index: 30;
+  }
 
   /* Less shell showing on a phone -- the framing is a nicety, the reading
      width is not. */

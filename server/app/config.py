@@ -202,6 +202,37 @@ class Settings:
     # harder, and the skill says how much it left behind.
     device_read_chars: int = field(default_factory=lambda: _env_int("DEVICE_READ_CHARS", 12_000))
 
+    # --- the sandbox -----------------------------------------------------
+    # A local "computer": the model can run a shell command or a Python snippet
+    # in a scratch directory. This is the single most powerful thing Courier can
+    # be given, and the most dangerous, so it is OFF unless SANDBOX_ENABLED is
+    # set -- an unset default that could execute code would be a footgun waiting
+    # for a hallucinated `rm`.
+    #
+    # Be honest about what the confinement is: `sandbox_dir` is the working
+    # directory, not a jail. Commands run as the same user as the server, with
+    # its filesystem and its network -- `cd /` and a shell command reaches
+    # whatever that user can. The real gate is the approval prompt (the exact
+    # command is shown before it runs) plus this switch being a deliberate
+    # choice, not the directory. Enable it on a machine where you would run the
+    # command yourself, and leave "Ask before running a skill" on.
+    sandbox_enabled: bool = field(
+        default_factory=lambda: _env("SANDBOX_ENABLED", "").lower() in ("1", "true", "yes", "on")
+    )
+    sandbox_dir: Path = field(
+        default_factory=lambda: Path(
+            _env("SANDBOX_DIR", str(REPO_ROOT / "data" / "sandbox"))
+        )
+    )
+    # How long one command may run before it is killed, in seconds. A local
+    # model that writes `while True` should cost a wait, not the whole session.
+    sandbox_timeout: int = field(default_factory=lambda: _env_int("SANDBOX_TIMEOUT", 30))
+    # A cap on what one run puts back into the window, trimmed further by the
+    # turn loop. Output past this is cut with a note.
+    sandbox_output_chars: int = field(
+        default_factory=lambda: _env_int("SANDBOX_OUTPUT_CHARS", 6_000)
+    )
+
     # Rough working-context budget in tokens. The window builder trims to fit;
     # real compaction (summarise the middle, keep head and tail) is phase 5.
     context_tokens: int = field(default_factory=lambda: _env_int("CONTEXT_TOKENS", 32768))

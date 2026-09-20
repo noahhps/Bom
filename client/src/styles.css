@@ -1569,6 +1569,26 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   min-width: 0;
 }
 .agents-empty { padding: 6px 8px; }
+.agents-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.agents-preset-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.agents-preset {
+  font: 500 var(--t-micro) var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-firm);
+  color: var(--ink);
+}
+.agents-preset:hover { border-color: var(--line-strong); background: rgba(20, 23, 29, 0.04); }
+.agents-list-head { padding: 2px 2px 4px; display: block; }
 .agents-item {
   display: flex;
   flex-direction: column;

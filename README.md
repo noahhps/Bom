@@ -246,8 +246,15 @@ An agent is two things:
   given no skills at all is a pure conversationalist, and that is a different,
   deliberate thing from one given all of them.
 
-Make and edit them on the **Agents** page; assign one to the conversation you
-are in from the picker in the top bar, beside where you file it into a project.
+Make and edit them on the **Agents** page — from scratch, or from a **preset**:
+a handful of ready-made roles (Researcher, Coder, Writer, Planner, Analyst,
+Companion) that open prefilled in the editor so you can adjust the skills to
+what this machine actually has before saving. A preset names its ideal skill
+set whether or not you have all of it; a skill that is not registered (web
+search with no key, the sandbox left off) is simply never offered, so a preset
+degrades quietly rather than promising a tool that cannot run. Assign an agent
+to the conversation you are in from the picker in the top bar, beside where you
+file it into a project.
 A conversation with no agent is the default assistant, and that is the common
 case. Deleting an agent files its conversations back under the default rather
 than taking them with it — the same way deleting a project does.

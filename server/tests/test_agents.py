@@ -154,6 +154,36 @@ def test_agent_rest_lifecycle(client: TestClient):
     assert client.get(f"/api/sessions/{sid}").json()["session"]["agent_id"] is None
 
 
+def test_presets_are_listed_and_instantiable(client: TestClient):
+    presets = client.get("/api/agents/presets").json()["presets"]
+    assert presets, "expected built-in presets"
+    names = {p["name"] for p in presets}
+    assert {"Researcher", "Coder", "Companion"} <= names
+
+    # A preset drops straight into create_agent unchanged.
+    researcher = next(p for p in presets if p["id"] == "researcher")
+    created = client.post(
+        "/api/agents",
+        json={
+            "name": researcher["name"],
+            "instructions": researcher["instructions"],
+            "skills": researcher["skills"],
+        },
+    )
+    assert created.status_code == 200
+    assert created.json()["skills"] == researcher["skills"]
+
+
+def test_preset_skills_are_all_real_skill_names(client: TestClient):
+    # A preset that names a skill the server does not register would silently
+    # give an agent a tool it can never use -- almost always a typo. Guard it.
+    registered = {s["name"] for s in client.get("/api/skills").json()["skills"]}
+    presets = client.get("/api/agents/presets").json()["presets"]
+    for preset in presets:
+        for name in preset["skills"]:
+            assert name in registered, f"{preset['id']} names unknown skill {name!r}"
+
+
 def test_agent_routes_404_on_missing(client: TestClient):
     assert client.patch("/api/agents/agt_nope", json={"name": "x"}).status_code == 404
     assert client.delete("/api/agents/agt_nope").status_code == 404

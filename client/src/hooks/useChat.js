@@ -17,7 +17,7 @@ const message = (role, content = "", extra = {}) => ({
  * The conversation: which session is open, what is in it, and the turn in
  * flight. Everything durable lives on the server -- this is a view of it.
  */
-export function useChat(api, { onSessionsChanged, provider = null }) {
+export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
   // Mirror of the above, readable from a callback that outlived its render --
@@ -255,6 +255,12 @@ export function useChat(api, { onSessionsChanged, provider = null }) {
             setMessages((prev) =>
               prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
             );
+          } else if (event === "canvas") {
+            // write_canvas rewrote the document in the side panel. Handed
+            // straight up rather than kept here: the canvas is a property of
+            // the conversation, not of this one answer, so it lives outside
+            // the message list -- see useCanvas.
+            onCanvas?.(data.canvases, active);
           } else if (event === "delta") {
             content += data.text;
             pending.current = { key: answer.key, text: content, reasoning };
@@ -310,6 +316,7 @@ export function useChat(api, { onSessionsChanged, provider = null }) {
       api,
       flush,
       jumpToEnd,
+      onCanvas,
       onSessionsChanged,
       provider,
       schedule,

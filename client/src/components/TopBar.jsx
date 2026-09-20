@@ -29,6 +29,9 @@ export function TopBar({
   contextSeed,
   resolvedAccent,
   accentSource,
+  canvasCount = 0,
+  canvasOpen = false,
+  onToggleCanvas,
 }) {
   const [accentsOpen, setAccentsOpen] = useState(false);
   const accentNode = useRef(null);
@@ -137,6 +140,23 @@ export function TopBar({
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {/* The canvas toggle. Shown only once a conversation has a canvas to
+          open -- an empty conversation has nothing to look at, and the model
+          opens the panel itself the moment it writes one. */}
+      {canvasCount > 0 ? (
+        <button
+          type="button"
+          className="icon-btn"
+          data-on={canvasOpen ? "" : undefined}
+          aria-label={canvasOpen ? "Hide canvas" : "Show canvas"}
+          aria-pressed={canvasOpen}
+          title="Canvas"
+          onClick={onToggleCanvas}
+        >
+          <Icon name="document" />
+        </button>
       ) : null}
 
       <button className="icon-btn" aria-label="New conversation" onClick={onNewSession}>

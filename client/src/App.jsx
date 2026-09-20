@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { Canvas } from "./components/Canvas";
 import { Composer } from "./components/Composer";
 import { Projects } from "./components/Projects";
 import { Memory } from "./components/Memory";
@@ -13,6 +14,7 @@ import { Skills } from "./components/Skills";
 import { Starters } from "./components/Starters";
 import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
+import { useCanvas } from "./hooks/useCanvas";
 import { useChat } from "./hooks/useChat";
 import { useModels } from "./hooks/useModels";
 import { useProjects } from "./hooks/useProjects";
@@ -101,8 +103,20 @@ export default function App() {
   // at instead. Fetched once at mount and again whenever something changes it.
   const models = useModels(api);
 
-  const chat = useChat(api, { onSessionsChanged, provider });
+  // The canvas panel forwards the model's mid-turn rewrites through a ref, so
+  // `onCanvas` stays a stable identity and the two hooks can be defined either
+  // side of each other without a chicken-and-egg on the callback.
+  const canvasApplyRef = useRef(() => {});
+  const onCanvas = useCallback(
+    (list, sid) => canvasApplyRef.current(list, sid),
+    [],
+  );
+
+  const chat = useChat(api, { onSessionsChanged, onCanvas, provider });
   const { setBadge, openSession, startNew } = chat;
+
+  const canvas = useCanvas(api, chat.sessionId);
+  canvasApplyRef.current = canvas.applyEvent;
 
   // The accent in force, and the three scopes it can be set from. Given the
   // open conversation as well as the lists, because an accent set to `auto`
@@ -275,6 +289,9 @@ export default function App() {
         // panel arrives a couple of frames after the pointer and the handle
         // feels loose.
         data-resizing={rail.resizing ? "" : undefined}
+        // Splits the sheet when the canvas is open, so the thread and the
+        // document sit side by side rather than one over the other.
+        data-canvas={view === "chat" && canvas.open ? "" : undefined}
         // Omitted below 900px so the stylesheet's phone sizing survives.
         style={rail.enabled ? { "--rail-open": `${rail.width}px` } : undefined}
       >
@@ -345,6 +362,9 @@ export default function App() {
                   await theme.setForSession(chat.sessionId, accent);
                   await onSessionsChanged();
                 }}
+                canvasCount={canvas.count}
+                canvasOpen={canvas.open}
+                onToggleCanvas={canvas.toggle}
               />
 
               <MessageList
@@ -410,6 +430,22 @@ export default function App() {
             />
           )}
         </div>
+
+        {/* The document beside the conversation. A sibling of the sheet rather
+            than a child of it, so it splits the width with the thread instead
+            of scrolling inside it -- and only in chat, where a conversation is
+            what a canvas belongs to. */}
+        {view === "chat" && canvas.open ? (
+          <Canvas
+            canvases={canvas.canvases}
+            active={canvas.active}
+            onSelect={canvas.select}
+            onClose={canvas.closePanel}
+            onSave={canvas.save}
+            onCreate={canvas.create}
+            onDelete={canvas.remove}
+          />
+        ) : null}
       </div>
     </ApiContext.Provider>
   );

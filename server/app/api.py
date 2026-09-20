@@ -217,6 +217,28 @@ class SessionProject(BaseModel):
     project_id: str | None = None
 
 
+# One text field for the kind rather than an enum: the store coerces anything
+# it does not know to a sensible default, so a client that learns a new kind
+# before the server does degrades quietly rather than 422-ing.
+class CanvasIn(BaseModel):
+    """A canvas the reader made by hand, from the side panel."""
+
+    title: str = Field(default="Untitled", min_length=1, max_length=200)
+    content: str = Field(default="", max_length=1_000_000)
+    kind: str = Field(default="markdown", max_length=40)
+    language: str | None = Field(default=None, max_length=40)
+
+
+class CanvasPatch(BaseModel):
+    """A reader's edit from the panel. Every field optional and merged, so the
+    editor can save the body without restating the title, and vice versa."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content: str | None = Field(default=None, max_length=1_000_000)
+    kind: str | None = Field(default=None, max_length=40)
+    language: str | None = Field(default=None, max_length=40)
+
+
 class Accent(BaseModel):
     """The colour a scope is dressed in -- what was chosen, not what it looks
     like.
@@ -463,6 +485,52 @@ def build_router(
             raise HTTPException(404, "no such project")
         store.set_session_project(session_id, body.project_id)
         return {"ok": True, "project_id": body.project_id}
+
+    # -- canvases ---------------------------------------------------------
+    #
+    # A canvas is the document shown in the side panel. The model writes it
+    # through the write_canvas skill, which streams the change down the /chat
+    # connection as a `canvas` frame; these routes are the other half -- what
+    # the client loads when it opens a conversation, and what a reader editing
+    # the panel by hand saves back to.
+
+    @router.get("/sessions/{session_id}/canvases")
+    def list_canvases(session_id: str) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        return {"canvases": [c.to_dict() for c in store.session_canvases(session_id)]}
+
+    @router.post("/sessions/{session_id}/canvases")
+    def create_canvas(session_id: str, body: CanvasIn) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        canvas = store.create_canvas(
+            session_id,
+            body.title.strip(),
+            content=body.content,
+            kind=body.kind,
+            language=body.language,
+        )
+        return canvas.to_dict()
+
+    @router.patch("/canvases/{canvas_id}")
+    def update_canvas(canvas_id: str, body: CanvasPatch) -> dict:
+        updated = store.update_canvas(
+            canvas_id,
+            title=body.title.strip() if body.title is not None else None,
+            content=body.content,
+            kind=body.kind,
+            language=body.language,
+        )
+        if updated is None:
+            raise HTTPException(404, "no such canvas")
+        return updated.to_dict()
+
+    @router.delete("/canvases/{canvas_id}")
+    def delete_canvas(canvas_id: str) -> dict:
+        if not store.delete_canvas(canvas_id):
+            raise HTTPException(404, "no such canvas")
+        return {"ok": True}
 
     # -- accents ----------------------------------------------------------
     #

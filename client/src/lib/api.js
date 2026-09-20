@@ -242,6 +242,28 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
     getSession: (id) => json("/sessions/" + id),
     deleteSession: (id) => request("/sessions/" + id, { method: "DELETE" }),
+
+    // -- canvases --------------------------------------------------------
+    // The document shown in the side panel. The model writes it through the
+    // write_canvas skill, which streams the change down the /chat connection;
+    // these are the other half -- what the client loads when it opens a
+    // conversation, and what a reader editing the panel by hand saves back to.
+    listCanvases: (sessionId) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/canvases"),
+    createCanvas: (sessionId, body) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/canvases", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    // Only the fields that changed -- the server merges the rest, so a save
+    // from the editor sends `content` alone and a rename sends `title` alone.
+    updateCanvas: (id, patch) =>
+      json("/canvases/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    deleteCanvas: (id) =>
+      request("/canvases/" + encodeURIComponent(id), { method: "DELETE" }),
     deleteSessions: (ids) =>
       json("/sessions/delete", {
         method: "POST",

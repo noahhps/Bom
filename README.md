@@ -144,6 +144,43 @@ about the wrong one.
 > confidently wrong, check `ollama show <model>` for a projector before
 > suspecting anything else.
 
+## Canvas
+
+Some answers are not a message. A draft you will keep editing, a script you are
+building up over several turns, a page you want to see rendered — a fenced code
+block in the thread is the wrong home for any of them, because the next edit
+means the model reprinting the whole thing and you scrolling back to find it.
+
+The **canvas** is a document that lives beside the conversation instead of
+inside it, in a panel that splits the sheet on a laptop and takes the whole
+screen on a phone. It opens itself the moment the model writes one, and the
+button in the top bar shows and hides it after that.
+
+Two skills reach it, and they are named for the choice the model is making:
+
+| | |
+|---|---|
+| `write_canvas` | Create a canvas, or replace one by the same title |
+| `read_canvas` | Read one back before revising, or list what a conversation has |
+
+Named by title, not by id — like the calendar, and for the same reason: every
+listing the model sees is prose, so an id is something it would have to be
+handed and then copy back exactly. Writing to a title that already exists
+replaces that canvas whole; a new title makes a new one. A conversation rarely
+has more than a handful, and telling them apart by name is what a person does
+too.
+
+A canvas is **yours to edit as well**. Type into the panel and it saves itself a
+beat after you stop; a markdown or HTML canvas flips between the editor and a
+preview. Nothing here is retrieval-augmented magic — the model only sees a
+canvas when it calls `read_canvas`, so it reads the version you left, edits and
+all.
+
+Canvases belong to the conversation the way messages and attachments do:
+deleting the chat takes them with it, and they never leak into another one. The
+bytes are columns in the same SQLite file as everything else, so `VACUUM INTO`
+still copies the lot in one shot.
+
 ## Asking before a skill runs
 
 A skill that is switched on can read your folders, search the web and call

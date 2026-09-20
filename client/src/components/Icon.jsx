@@ -32,6 +32,9 @@ const PATHS = {
     "M10.5 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8" +
     "M15 13.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8",
   check: "M5 12.5l5 5 9-11",
+  // A page with a turned corner and two lines of text: the canvas, the
+  // document that lives beside the conversation. Stroked like its neighbours.
+  document: "M7 3h8l4 4v14H7zM15 3v4h4M10 13h6M10 17h6",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",

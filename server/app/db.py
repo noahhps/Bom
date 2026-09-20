@@ -376,6 +376,38 @@ MIGRATIONS: list[str] = [
     ALTER TABLE sessions ADD COLUMN theme TEXT;
     ALTER TABLE projects ADD COLUMN theme TEXT;
     """,
+    # 13 -- canvases: an editable artifact that lives beside a conversation.
+    #
+    # A canvas is a document the model writes and rewrites across turns and the
+    # reader can edit by hand -- a piece of code, a draft, a page -- shown in a
+    # side panel rather than pasted into the thread. Grok's Studio and Manus's
+    # deliverables are the same idea; this is the local, single-file version.
+    #
+    # ON DELETE CASCADE, unlike the calendar and unlike facts: a canvas *is*
+    # part of the conversation the way a message or an attachment is, not a
+    # standing record that outlives it. Deleting the chat takes its canvases
+    # with it, which is what a reader clearing a conversation expects.
+    #
+    # `kind` picks how the panel renders it -- 'markdown' and 'html' preview,
+    # 'code' shows a monospace editor -- and `language` labels a code canvas so
+    # the editor and any later highlighter know what they are looking at. Both
+    # are advisory: an unknown kind falls back to plain text rather than failing.
+    """
+    CREATE TABLE canvases (
+      id          TEXT PRIMARY KEY,
+      session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      title       TEXT NOT NULL,
+      kind        TEXT NOT NULL DEFAULT 'markdown',   -- markdown | code | html
+      language    TEXT,                               -- for a code canvas
+      content     TEXT NOT NULL DEFAULT '',
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
+    -- Every read is "the canvases for this conversation, most recent first",
+    -- which is also the order the panel opens them in.
+    CREATE INDEX idx_canvases_session ON canvases(session_id, updated_at DESC);
+    """,
 ]
 
 

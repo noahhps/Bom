@@ -22,6 +22,22 @@ class Skill(ABC):
     #: between them.
     wants_context: bool = False
 
+    #: Set by skills that act on the conversation they were called from -- the
+    #: turn loop then passes the asking session's id as a `session` keyword.
+    #: Assigned after the model's own arguments are copied, so a model that
+    #: invents a `session` argument cannot talk over the real one.
+    #:
+    #: Per call, not stored, for the same reason as `wants_context`: one
+    #: registry instance serves every conversation, and two devices can be mid
+    #: turn at once.
+    wants_session: bool = False
+
+    #: What running this skill changes on screen beyond its text result, so the
+    #: turn loop can push the fresh state to the client. `"canvas"` means the
+    #: loop should re-read and stream this session's canvases after the call.
+    #: None -- the default -- means the skill's text answer is all there is.
+    surfaces: str | None = None
+
     def __init__(
         self,
         *,

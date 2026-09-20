@@ -411,6 +411,26 @@ class Orchestrator:
                             "denied": record.get("denied", False),
                         },
                     )
+                    # A skill can change something on screen beyond its text --
+                    # write_canvas rewrites the document in the side panel. Only
+                    # a call that actually ran, so a declined one leaves the
+                    # panel showing what it already had rather than nothing.
+                    skill = self.registry.get(call.name) if self.registry else None
+                    if (
+                        not record.get("denied")
+                        and skill is not None
+                        and skill.surfaces == "canvas"
+                        and session_id
+                    ):
+                        yield _sse(
+                            "canvas",
+                            {
+                                "canvases": [
+                                    c.to_dict()
+                                    for c in self.store.session_canvases(session_id)
+                                ]
+                            },
+                        )
                     window.append(
                         Message(
                             role="tool",
@@ -531,6 +551,11 @@ class Orchestrator:
             # Assigned after the copy, so a model that hallucinates a `context`
             # argument cannot talk over the real one.
             arguments["context"] = self.store.session_situation(session_id)
+        if skill.wants_session and session_id:
+            # Same guard as `context`: overwritten after the copy so a
+            # hallucinated `session` argument cannot point the skill at another
+            # conversation.
+            arguments["session"] = session_id
         try:
             result = await skill.use(**arguments)
         except TypeError as exc:

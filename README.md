@@ -257,6 +257,47 @@ the provider holds one model at a time and a turn already streaming keeps the
 one it started with, so choosing a model per agent is the same change as the
 per-conversation model override in **Not built yet**, and lands with it.
 
+## The sandbox
+
+The most powerful thing Courier can be given, and the most dangerous: a local
+computer. With it on, two skills appear —
+
+| | |
+|---|---|
+| `run_shell` | Run a shell command and read its output |
+| `run_python` | Run a Python snippet and read what it printed |
+
+— so the model can do real work the answer depends on: calculate without
+getting it wrong in its head, parse a file, run a build, drive a CLI. It is the
+local, single-machine answer to the cloud "computer" a GrokBot or Manus agent
+drives, and it makes the same trade — real capability for the cost of trusting
+what you approve.
+
+Three things are true of it by construction:
+
+* **Off unless you turn it on.** `SANDBOX_ENABLED=1` and not otherwise. An
+  unconfigured capability that could run code is a footgun, so an unset machine
+  never offers it — the skill is listed on the Skills page as needing the flag,
+  and never sent to the model until it has it.
+* **Approved per run.** It goes through the same gate as every other skill, and
+  the exact command is shown before it runs. "Run a shell command" is never the
+  decision; `rm -rf ~` is. Keep **Ask before running a skill** on.
+* **A scratch directory, not a jail.** Work lands in `SANDBOX_DIR`
+  (`data/sandbox` by default) and relative paths resolve there — but be honest
+  about the boundary: a command runs as the same user as the server, with that
+  user's files and network, and `cd /` walks out like anywhere else. The
+  confinement that matters is the switch being a deliberate choice and the
+  approval prompt in front of each run. Enable it on a machine where you would
+  run the command yourself.
+
+The app's own secrets (`ANTHROPIC_API_KEY`, the bearer token, and the rest) are
+stripped from the environment a command sees, so a snippet cannot print them
+back out of `os.environ`. That is hygiene, not a boundary — a command that can
+read the filesystem can read the key file too. A run that overruns
+`SANDBOX_TIMEOUT` seconds is killed, and its output is capped before it reaches
+the window. Give an agent only `run_python` and `run_shell` (see **Agents**)
+and you have a coding assistant that cannot touch the web, or the reverse.
+
 ## Memory
 
 Three kinds, and they fail differently.
@@ -406,6 +447,10 @@ All environment variables, all optional.
 | `OLLAMA_THINK` | `medium` | Default gpt-oss reasoning effort: `low`, `medium`, or `high`. |
 | `CONTEXT_TOKENS` | `32768` | |
 | `REPLY_TOKENS` | `2048` | Headroom reserved for the answer. |
+| `SANDBOX_ENABLED` | unset | `1` turns on `run_shell`/`run_python`. Off runs code nowhere. Read **The sandbox** first. |
+| `SANDBOX_DIR` | `data/sandbox` | Scratch working directory for the sandbox. A workspace, not a jail. |
+| `SANDBOX_TIMEOUT` | `30` | Seconds before a command is killed. |
+| `SANDBOX_OUTPUT_CHARS` | `6000` | Cap on what one run puts back into the window. |
 | `SYSTEM_PREAMBLE` | see `config.py` | Kept static — it is the cacheable prefix. |
 | `EMBED_MODEL` | `nomic-embed-text` | Pull it separately. Changing it orphans existing vectors. |
 | `MEMORY_MIN_SIMILARITY` | `0.35` | How close a passage must be to count as a match at all. |

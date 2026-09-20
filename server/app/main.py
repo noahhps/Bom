@@ -29,6 +29,7 @@ from .device.mac_photos import available as device_photos_available
 from .skills.device_calendar import AddDeviceEvent, FindDeviceEvents, ListDeviceEvents
 from .skills.device_photos import AddToAlbum, CreateAlbum, ListAlbums, ListPhotos
 from .skills.files import ListDirectory, ReadFile, SearchFiles
+from .skills.sandbox import RunPython, RunShell
 from .skills.clock import Clock
 from .skills.recall import Recall
 from .skills.registry import Registry
@@ -166,6 +167,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # revision see what it is revising.
     registry.register(WriteCanvas(store))
     registry.register(ReadCanvas(store))
+    # The local computer. Registered always so the Skills page can show it and
+    # say what it needs, but `available` is False -- and so it is never offered
+    # to the model -- unless SANDBOX_ENABLED is set. It runs code as this user,
+    # gated by the approval prompt; see skills/sandbox.py.
+    registry.register(RunShell(settings))
+    registry.register(RunPython(settings))
     # Registered only when configured. An unconfigured search that announced
     # itself and then refused would be the same failure as a system prompt
     # promising a tool the request never declares: the model spends the turn

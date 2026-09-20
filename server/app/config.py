@@ -249,6 +249,17 @@ class Settings:
     # 16 is a sane default; raise CONTEXT_TOKENS alongside it if you raise this.
     max_tool_rounds: int = field(default_factory=lambda: _env_int("MAX_TOOL_ROUNDS", 16))
 
+    # Carry a compact recap of each past turn's working -- the tools it called
+    # with a trimmed line of each result, and the tail of its reasoning -- into
+    # later turns. The turn loop feeds tool results and thinking to the model
+    # live, but only the final answer is stored as the message body, so without
+    # this the model sees its own conclusions on the next turn (or after a
+    # Continue) with no memory of what it read to reach them. Off (CARRY_WORKING
+    # unset to 0) falls back to replaying the answer text alone.
+    carry_working: bool = field(
+        default_factory=lambda: _env("CARRY_WORKING", "1").lower() not in ("0", "false", "no", "off")
+    )
+
     system_preamble: str = field(
         default_factory=lambda: _env(
             "SYSTEM_PREAMBLE",

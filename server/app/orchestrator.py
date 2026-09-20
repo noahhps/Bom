@@ -71,6 +71,13 @@ MAX_WINDOW_IMAGES = 4
 # from burning the whole context window.
 MAX_TOOL_ROUNDS = 12
 
+# How much of a past turn's working to carry into later turns, so the model
+# keeps the thread's context -- what it looked up and what it concluded --
+# rather than seeing only its own final wording. Prepended to every later turn,
+# so kept short: it competes with the live conversation for the same budget.
+CARRIED_RESULT_CHARS = 240      # per tool result, summarised to one line
+CARRIED_REASONING_CHARS = 400   # the tail of the deliberation
+
 # A skill's result is trimmed here rather than in build_window, because the
 # window trims from the *head* -- so an unbounded result would push out the
 # user's actual question rather than itself.
@@ -257,11 +264,18 @@ class Orchestrator:
                 if item.kind == "image" and len(carried) < MAX_WINDOW_IMAGES:
                     carried.add(item.id)
 
+        carry_working = getattr(self.settings, "carry_working", True)
+
         selected: list[StoredMessage] = []
         used = 0
         for message in reversed(history):
             cost = message.tokens or estimate_tokens(message.content)
             cost += _attachment_cost(attached.get(message.id, ()), carried)
+            # The carried recap is synthesised here, not part of the stored
+            # tokens, so it has to be charged or a run of tool-heavy turns
+            # overflows the window it was counted out of.
+            if carry_working:
+                cost += estimate_tokens(_carried_trace(message))
             if used + cost > budget and selected:
                 break
             selected.append(message)
@@ -269,7 +283,9 @@ class Orchestrator:
         selected.reverse()
 
         window = [Message(role="system", content=system)]
-        window.extend(_to_message(m, attached.get(m.id, ()), carried) for m in selected)
+        window.extend(
+            _to_message(m, attached.get(m.id, ()), carried, carry_working) for m in selected
+        )
         return window
 
     # -- the turn ---------------------------------------------------------
@@ -707,13 +723,60 @@ class Orchestrator:
         return title
 
 
-def _to_message(stored: StoredMessage, attached, carried: set[str]) -> Message:
+def _carried_trace(stored: StoredMessage) -> str:
+    """A compact recap of an assistant turn's working, for later turns.
+
+    The turn loop feeds tool results and thinking to the model live, but only
+    the final answer is stored as the message body -- so on the next turn, or
+    after a Continue, the model would otherwise see its conclusion with no
+    memory of what it read to reach it. This rebuilds a short note: the tools it
+    called with a trimmed line of each result, then the tail of its reasoning.
+    Empty for anything but an assistant turn that actually did some working, so
+    a plain chat exchange carries nothing extra.
+    """
+    if stored.role != "assistant":
+        return ""
+
+    lines: list[str] = []
+    if stored.skills:
+        try:
+            calls = json.loads(stored.skills)
+        except (ValueError, TypeError):
+            calls = []
+        for call in calls if isinstance(calls, list) else ():
+            name = call.get("name", "a tool") if isinstance(call, dict) else "a tool"
+            result = " ".join(str(call.get("result") or "").split()) if isinstance(call, dict) else ""
+            if len(result) > CARRIED_RESULT_CHARS:
+                result = result[:CARRIED_RESULT_CHARS] + "…"
+            lines.append(f"- {name}: {result}" if result else f"- {name}")
+
+    trace: list[str] = []
+    if lines:
+        trace.append("Tools you used and what they returned:\n" + "\n".join(lines))
+    if stored.reasoning and stored.reasoning.strip():
+        tail = " ".join(stored.reasoning.split())
+        if len(tail) > CARRIED_REASONING_CHARS:
+            tail = "…" + tail[-CARRIED_REASONING_CHARS:]
+        trace.append("Your reasoning then: " + tail)
+
+    if not trace:
+        return ""
+    return "[Earlier this conversation —\n" + "\n\n".join(trace) + "]"
+
+
+def _to_message(
+    stored: StoredMessage, attached, carried: set[str], carry_working: bool = False
+) -> Message:
     """One stored turn as the providers see it.
 
     Text files are pasted in ahead of what the user typed, so their question
     lands last and reads as being about the files above it. Images travel
     beside the text rather than in it -- see providers/base.py -- except for
     the older ones, which are left as a line of text saying they were here.
+
+    When `carry_working` is on, an assistant turn also carries a compact recap
+    of the tools it ran and the tail of its reasoning, so a later turn keeps the
+    context the live loop had -- see `_carried_trace`.
     """
     text: list[str] = []
     images: list[Image] = []
@@ -735,6 +798,10 @@ def _to_message(stored: StoredMessage, attached, carried: set[str]) -> Message:
 
     if stored.content:
         text.append(stored.content)
+    if carry_working:
+        trace = _carried_trace(stored)
+        if trace:
+            text.append(trace)
 
     return Message(role=stored.role, content="\n\n".join(text), images=tuple(images))
 

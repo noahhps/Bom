@@ -467,6 +467,7 @@ All environment variables, all optional.
 | `CONTEXT_TOKENS` | `32768` | |
 | `REPLY_TOKENS` | `2048` | Headroom reserved for the answer. |
 | `MAX_TOOL_ROUNDS` | `16` | Skill rounds before a turn is cut off. The **Continue** button extends past it; raise `CONTEXT_TOKENS` too if you raise this. |
+| `CARRY_WORKING` | `1` | Carry a compact recap of each turn's tool results + reasoning into later turns, so the model keeps context across turns and Continue. `0` replays the answer text alone. |
 | `SANDBOX_ENABLED` | unset | `1` turns on `run_shell`/`run_python`. Off runs code nowhere. Read **The sandbox** first. |
 | `SANDBOX_DIR` | `data/sandbox` | Scratch working directory for the sandbox. A workspace, not a jail. |
 | `SANDBOX_TIMEOUT` | `30` | Seconds before a command is killed. |

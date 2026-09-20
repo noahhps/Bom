@@ -32,6 +32,9 @@ const PATHS = {
     "M10.5 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8" +
     "M15 13.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8",
   check: "M5 12.5l5 5 9-11",
+  // A down chevron for a disclosure. Rotated in CSS to point right when its
+  // section is folded shut.
+  chevron: "M6 9l6 6 6-6",
   // A drawing pin, seen side on: head, shaft, point. `pinned` is the same
   // object driven home -- shorter shaft, so the state reads at 15px.
   pin: "M9 4h6M12 4v7M8.5 11h7l1.5 4H7l1.5-4M12 15v5",

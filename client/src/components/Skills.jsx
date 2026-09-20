@@ -119,6 +119,59 @@ function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
   );
 }
 
+/* One MCP server's skills, folded under its name.
+ *
+ * An MCP server can register a dozen tools, and a handful of servers turns the
+ * flat list into a wall of rows that all say the same "From X" tag. Grouping
+ * them under the server -- a header with the server's glyph, how many of its
+ * skills are on, and a chevron -- puts one line per server on screen and hides
+ * the individual tools behind a disclosure until they are wanted.
+ *
+ * Forced open while a filter is active, so a search still reaches a tool inside
+ * a collapsed server rather than appearing to find nothing. */
+function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, askFirst, onApproval }) {
+  const [open, setOpen] = useState(false);
+  const expanded = forceOpen || open;
+  const on = skills.filter((s) => s.enabled).length;
+
+  return (
+    <div className="mcp-group" data-open={expanded ? "" : undefined}>
+      <button
+        type="button"
+        className="mcp-group-head"
+        aria-expanded={expanded}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <Icon name={iconForServer(server)} />
+        <span className="mcp-group-name h">{server}</span>
+        <span className="mi mcp-group-count">
+          {on} of {skills.length} on
+        </span>
+        <span className="spacer" />
+        <span className="mcp-group-chevron" aria-hidden="true">
+          <Icon name="chevron" />
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="mcp-group-body">
+          {skills.map((skill) => (
+            <SkillRow
+              key={skill.name}
+              skill={skill}
+              busy={busyOf(skill.name)}
+              onToggle={onToggle}
+              onKey={onKey}
+              askFirst={askFirst}
+              onApproval={onApproval}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState({});
@@ -620,6 +673,26 @@ export function Skills({ api }) {
     );
   }, [skills, query]);
 
+  // Built-in skills stay as their own rows; anything an MCP server registered
+  // is folded under that server. Grouped from `shown`, so a filter narrows both
+  // the loose rows and what is inside each server.
+  const { builtin, groups } = useMemo(() => {
+    const builtin = [];
+    const byServer = new Map();
+    for (const skill of shown) {
+      if (skill.server) {
+        if (!byServer.has(skill.server)) byServer.set(skill.server, []);
+        byServer.get(skill.server).push(skill);
+      } else {
+        builtin.push(skill);
+      }
+    }
+    const groups = [...byServer.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([server, list]) => ({ server, list }));
+    return { builtin, groups };
+  }, [shown]);
+
   const on = skills.filter((s) => s.enabled).length;
   const installedServerNames = new Set(mcpServers.map((s) => s.name));
 
@@ -761,11 +834,27 @@ export function Skills({ api }) {
                 </p>
               ) : (
                 <div className="skill-list">
-                  {shown.map((skill) => (
+                  {builtin.map((skill) => (
                     <SkillRow
                       key={skill.name}
                       skill={skill}
                       busy={pending.includes(skill.name)}
+                      onToggle={setEnabled}
+                      onKey={setKey}
+                      askFirst={askFirst}
+                      onApproval={setApproval}
+                    />
+                  ))}
+
+                  {groups.map(({ server, list }) => (
+                    <McpSkillGroup
+                      key={server}
+                      server={server}
+                      skills={list}
+                      // Open every server while filtering, so a match inside a
+                      // collapsed one is not hidden.
+                      forceOpen={Boolean(query.trim())}
+                      busyOf={(name) => pending.includes(name)}
                       onToggle={setEnabled}
                       onKey={setKey}
                       askFirst={askFirst}

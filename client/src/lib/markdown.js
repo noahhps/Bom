@@ -178,12 +178,16 @@ function renderTable(rows) {
           .join("") +
         "</tr>",
     );
+  // Wrapped in a scroll container: the table itself sizes to its content, and
+  // the wrapper scrolls when that is wider than the column. Without the wrap a
+  // wide table is squeezed into the reading width and narrow cells wrap one
+  // character per line -- "Hours" stacked as H/o/u/r/s.
   return (
-    "<table><thead><tr>" +
+    '<div class="table-wrap"><table><thead><tr>' +
     head.join("") +
     "</tr></thead><tbody>" +
     body.join("") +
-    "</tbody></table>"
+    "</tbody></table></div>"
   );
 }
 

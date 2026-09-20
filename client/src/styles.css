@@ -2263,7 +2263,20 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-left: 2px solid var(--line-firm);
   color: var(--text-dim);
 }
-.answer .body table { border-collapse: collapse; margin: 0 0 14px; display: block; overflow-x: auto; }
+/* The scroll container. The table sizes to its content and this scrolls when
+   the content is wider than the reading column, instead of the table being
+   squeezed to fit and its cells wrapping character by character. */
+.answer .body .table-wrap {
+  overflow-x: auto;
+  margin: 0 0 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.answer .body table {
+  border-collapse: collapse;
+  /* Content width, not the container's -- the wrapper handles overflow. */
+  width: auto;
+  margin: 0;
+}
 .answer .body th,
 .answer .body td {
   /* Rows only. Vertical rules turn a table into a grid of cells; horizontal
@@ -2273,6 +2286,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   padding: 9px 14px 9px 0;
   font-size: var(--t-md);
   text-align: left;
+  vertical-align: top;
+  /* Cells wrap at word boundaries, never mid-word, and a long cell is bounded
+     rather than stretching the whole table. A short cell like a time or a
+     number then keeps its own line instead of being broken up. */
+  max-width: 340px;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .answer .body th { font-weight: 600; }
 .answer .body hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }

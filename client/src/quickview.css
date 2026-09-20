@@ -21,7 +21,11 @@
   --qv-pill: rgba(255, 255, 255, 0.14);
   --qv-edge: rgba(255, 255, 255, 0.18);
   --qv-accent: #4d7dfa;
-  --qv-radius: 18px;
+  /* 10px, matching `--r-control` in styles.css. QuickView is a separate entry
+     point with its own stylesheet, so the value is repeated rather than shared,
+     but it is the same rounded-control radius the composer and gate input use --
+     it used to round itself to 18px doing the same job. Change both together. */
+  --qv-radius: 10px;
   /* Duplicated verbatim as `--font-mono` in styles.css -- the two entry points
      do not share a stylesheet. Change both together. */
   --qv-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;

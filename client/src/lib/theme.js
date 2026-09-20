@@ -135,22 +135,17 @@ export function palette(accent, fallbackSeed = null) {
     "--ink": tone("ink"),
     "--grid-line": tone("grid-line"),
 
-    // The four-tint system keeps its names -- every component in the app reads
-    // one of them -- but violet and blue have resolved to the same colour
-    // since the cobalt redesign, and both now follow the accent. Green and
-    // ochre are left alone on purpose: they mean pass and warning, and a
-    // warning that turns blue because the reader likes blue is a bug.
-    "--violet": accentColour,
-    "--violet-soft": tone("accent-soft"),
-    "--violet-field": tone("field"),
-    "--violet-wash": tone("wash"),
-    "--blue": accentColour,
-    "--blue-field": tone("field"),
-    "--blue-wash": tone("wash"),
-    "--send": accentColour,
-
+    // One accent and three derivatives of it. The stylesheet's old --violet /
+    // --blue / --send were all this same cobalt and have been removed; what a
+    // header, callout, spark or user turn used to reach for by those names now
+    // reads --accent-field / --accent-wash / --accent-soft. Green and ochre are
+    // deliberately not derived here: they mean pass and warning, and a warning
+    // that turns blue because the reader likes blue is a bug.
     "--accent": accentColour,
     "--accent-hover": accentHover,
+    "--accent-soft": tone("accent-soft"),
+    "--accent-field": tone("field"),
+    "--accent-wash": tone("wash"),
 
     "--line": tone("line"),
     "--line-soft": tone("line-soft"),

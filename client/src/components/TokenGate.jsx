@@ -32,14 +32,14 @@ export function TokenGate({ error, connecting, onSubmit }) {
             in the app rather than being a bare form in front of it. */}
         <div
           className="sw"
-          style={{ right: "-70px", top: "-90px", width: "220px", height: "220px", background: "var(--violet-field)" }}
+          style={{ right: "-70px", top: "-90px", width: "220px", height: "220px", background: "var(--accent-field)" }}
         />
         <div
           className="sw"
           style={{ right: "90px", top: "-50px", width: "110px", height: "110px", background: "var(--green-field)" }}
         />
 
-        <h1>Assistant</h1>
+        <h1>Courier</h1>
         <p>
           {desktop
             ? "Where the server is, and the token it printed on startup."

@@ -27,9 +27,9 @@ export function Settings({
 }) {
   return (
     <div className="page">
-      <div className="page-head" data-tint="blue">
-        <div className="sw" style={{ right: "-80px", top: "-120px", width: "290px", height: "290px", background: "var(--violet-field)" }} />
-        <div className="sw" style={{ right: "130px", top: "-60px", width: "140px", height: "140px", background: "var(--blue-wash)" }} />
+      <div className="page-head" data-tint="accent">
+        <div className="sw" style={{ right: "-80px", top: "-120px", width: "290px", height: "290px", background: "var(--accent-field)" }} />
+        <div className="sw" style={{ right: "130px", top: "-60px", width: "140px", height: "140px", background: "var(--accent-wash)" }} />
         <div className="inner">
           <div>
             <h1 className="h">This device</h1>

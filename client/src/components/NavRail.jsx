@@ -262,7 +262,7 @@ export function NavRail({
             title="This device"
             onClick={() => onView("settings")}
           >
-            <img src="/courier-mark.png" alt="" width="10" height="30" />
+            <img src="/courier-mark.svg" alt="" width="10" height="30" />
           </button>
           <span className="navrail-wordmark" aria-hidden="true">
             Assistant

@@ -40,7 +40,7 @@ export function StartersHead() {
           24px identity dot; here there is vertical room for the stroke to
           read as the drawn gesture it is. Decorative, so it is hidden from
           screen readers -- the heading under it already says where you are. */}
-      <img className="starters-mark" src="/courier-mark.png" alt="" aria-hidden="true" />
+      <img className="starters-mark" src="/courier-mark.svg" alt="" aria-hidden="true" />
       <h2 className="h">What are we working on?</h2>
       <p className="p">
         Everything here runs on your own hardware. Nothing leaves the machine

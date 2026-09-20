@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Courier mark: a bird-of-paradise flower drawn as a spray of pointed
+  petal-blades over a segmented, S-curved stem. A crisp vector replacement for
+  the old courier-mark.png, a 161x512 raster that blurred whenever it was
+  scaled (the rail draws it at 30px tall, the openers far larger).
+
+  Animated in one place: the whole plant sways gently from its base, as if in a
+  draught. The animation lives in CSS inside this file, so it plays even when
+  the mark is loaded through an img element. Motion is dropped under
+  prefers-reduced-motion.
+
+  One colour, the app's cobalt accent (#1f4fd8), baked in: an SVG loaded as an
+  image cannot read the page's CSS custom properties, and the mark is meant to
+  carry the app's single blue rather than be tinted per surface.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 372" width="120" height="372"
+     role="img" aria-label="Courier">
+  <style>
+    .mark { fill: #1f4fd8; }
+    /* Sway the whole plant from the foot of the stem. `fill-box` makes the
+       origin relative to the group's own geometry, so it pivots at its base
+       rather than at the SVG's corner. */
+    .sway {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: courier-sway 5.2s ease-in-out infinite;
+    }
+    /* The bloom breathes a touch more than the stem, so the top of the plant
+       leads the motion the way a real flower head does. */
+    .bloom {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: courier-breathe 5.2s ease-in-out infinite;
+    }
+    @keyframes courier-sway {
+      0%, 100% { transform: rotate(-1.8deg); }
+      50%      { transform: rotate(1.8deg); }
+    }
+    @keyframes courier-breathe {
+      0%, 100% { transform: rotate(-1.1deg) scale(0.992); }
+      50%      { transform: rotate(1.1deg) scale(1.008); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .sway, .bloom { animation: none; }
+    }
+  </style>
+
+  <g class="mark sway">
+    <!-- The bloom: three upward petal-blades of falling height, plus the small
+         crossing stroke that sits over the two left blades in the drawing. -->
+    <g class="bloom">
+      <!-- Tall, broad right petal: the signature leaf-blade of the bloom. -->
+      <path d="M80 182 C 75 128 73 70 76 16 C 93 64 102 126 101 181 C 94 184 86 184 80 182 Z"/>
+      <!-- Middle blade. -->
+      <path d="M78 181 C 70 141 62 101 54 60 C 66 105 75 143 85 179 C 82 181 80 182 78 181 Z"/>
+      <!-- Left blade, the sharpest. -->
+      <path d="M75 180 C 63 139 49 97 32 55 C 46 101 61 141 83 178 C 80 180 77 181 75 180 Z"/>
+      <!-- The crossing stroke. -->
+      <path d="M39 77 L 47 73 L 61 110 L 53 114 Z"/>
+    </g>
+
+    <!-- The stem, in two segments with a gap between them, as in the drawing. -->
+    <g class="stem">
+      <path d="M75 199 C 79 222 83 240 88 259 L 81 261 C 77 241 72 221 69 200 Z"/>
+      <path d="M86 277 C 90 300 80 312 62 326 C 47 337 48 351 69 359 C 55 355 57 340 73 329 C 90 317 94 297 92 277 Z"/>
+    </g>
+  </g>
+</svg>

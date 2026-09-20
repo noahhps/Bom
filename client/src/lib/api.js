@@ -223,6 +223,28 @@ export function createApi(token, onUnauthorized = () => {}) {
         body: JSON.stringify({ project_id: projectId }),
       }),
 
+    // -- agents ----------------------------------------------------------
+    // A named persona with an optional subset of the skills, that a
+    // conversation can be run as. No agent -- the default -- is the one
+    // assistant with the whole shelf.
+    listAgents: () => json("/agents"),
+    createAgent: (agent) =>
+      json("/agents", { method: "POST", body: JSON.stringify(agent) }),
+    // Only the fields that changed. Sending `skills: null` resets an agent to
+    // every skill; omitting it leaves the subset alone -- see AgentPatch.
+    updateAgent: (id, patch) =>
+      json("/agents/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    deleteAgent: (id) =>
+      request("/agents/" + encodeURIComponent(id), { method: "DELETE" }),
+    setSessionAgent: (sessionId, agentId) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/agent", {
+        method: "PUT",
+        body: JSON.stringify({ agent_id: agentId }),
+      }),
+
     // -- accents ---------------------------------------------------------
     // Three scopes, one body. `theme: null` clears a scope rather than
     // turning colour off -- a cleared chat takes its project's accent, where

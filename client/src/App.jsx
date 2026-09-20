@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { Agents } from "./components/Agents";
 import { Canvas } from "./components/Canvas";
 import { Composer } from "./components/Composer";
 import { Projects } from "./components/Projects";
@@ -14,6 +15,7 @@ import { Skills } from "./components/Skills";
 import { Starters } from "./components/Starters";
 import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
+import { useAgents } from "./hooks/useAgents";
 import { useCanvas } from "./hooks/useCanvas";
 import { useChat } from "./hooks/useChat";
 import { useModels } from "./hooks/useModels";
@@ -94,6 +96,7 @@ export default function App() {
   // After `api`, not before it: hooks run in source order, and reading `api`
   // above its own `const` is a temporal dead zone error that blanks the page.
   const projects = useProjects(api);
+  const agents = useAgents(api);
   const { refresh } = sessions;
   const onSessionsChanged = useCallback(() => {
     refresh().catch(() => {});
@@ -365,6 +368,15 @@ export default function App() {
                 canvasCount={canvas.count}
                 canvasOpen={canvas.open}
                 onToggleCanvas={canvas.toggle}
+                agents={agents.agents}
+                agentId={
+                  sessions.sessions.find((s) => s.id === chat.sessionId)?.agent_id ||
+                  null
+                }
+                onAgent={async (agentId) => {
+                  await api.setSessionAgent(chat.sessionId, agentId);
+                  await onSessionsChanged();
+                }}
               />
 
               <MessageList
@@ -414,6 +426,18 @@ export default function App() {
             <Memory api={api} />
           ) : view === "skills" ? (
             <Skills api={api} />
+          ) : view === "agents" ? (
+            <Agents
+              api={api}
+              agents={agents.agents}
+              onCreate={agents.create}
+              onUpdate={agents.update}
+              onDelete={agents.remove}
+              // A deleted or reassigned agent changes sessions' agent_id, so the
+              // conversation list has to be refetched for the top-bar picker to
+              // show the truth.
+              onChanged={onSessionsChanged}
+            />
           ) : (
             <Settings
               status={status}

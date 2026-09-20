@@ -32,6 +32,9 @@ export function TopBar({
   canvasCount = 0,
   canvasOpen = false,
   onToggleCanvas,
+  agents = [],
+  agentId = null,
+  onAgent,
 }) {
   const [accentsOpen, setAccentsOpen] = useState(false);
   const accentNode = useRef(null);
@@ -88,6 +91,28 @@ export function TopBar({
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      {/* Which agent answers in this conversation. Beside filing, and hidden
+          for the same reasons: it is a property of the thread, so an unsent
+          chat has no id to write it against, and it only appears once there is
+          at least one agent to choose. */}
+      {canFile && agents.length > 0 ? (
+        <label className="topbar-project">
+          <span className="mi">Agent</span>
+          <select
+            value={agentId || ""}
+            aria-label="Run this conversation as an agent"
+            onChange={(event) => onAgent(event.target.value || null)}
+          >
+            <option value="">Default</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
               </option>
             ))}
           </select>

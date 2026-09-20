@@ -94,17 +94,27 @@ class Orchestrator:
         self.approvals = Approvals()
         self._session_grants: dict[str, set[str]] = {}
 
-    def _skill_schemas(self) -> list[dict] | None:
+    def _skill_schemas(self, allowed: set[str] | None = None) -> list[dict] | None:
         """What the model is told it can call, or None when it can call nothing.
 
         `enabled()` rather than `all()`: a skill switched off is still listed on
         the Skills page but must not be offered here. None rather than an empty
         list, because an empty `tools` array still trips the chat template's
         tool branch and tells the model it has a shelf with nothing on it.
+
+        `allowed` narrows that to an agent's subset: None means "every enabled
+        skill" (no agent, or an agent that named none to restrict), and a set --
+        even an empty one -- means only those. An empty set therefore collapses
+        to None below, which is correct: an agent given no skills is offered no
+        tools at all.
         """
         if self.registry is None:
             return None
-        schemas = [skill.schema() for _, skill in self.registry.enabled()]
+        schemas = [
+            skill.schema()
+            for name, skill in self.registry.enabled()
+            if allowed is None or name in allowed
+        ]
         return schemas or None
 
     # -- prompt assembly --------------------------------------------------
@@ -141,6 +151,16 @@ class Orchestrator:
         is a prompt builder you cannot call twice.
         """
         prompt = self.settings.system_preamble
+
+        # An agent's persona, when the conversation is assigned to one. After
+        # the static preamble and before the situation, which keeps it in the
+        # stable-prefix region of the prompt: an agent rarely changes mid
+        # conversation, so this does not churn the cache the way a fact does.
+        # Additive, never a replacement -- the preamble carries what every
+        # answer needs, and the agent specialises on top of it.
+        agent = self.store.session_agent(session_id) if session_id else None
+        if agent and agent.instructions and agent.instructions.strip():
+            prompt = f"{prompt}\n\n{agent.instructions.strip()}"
 
         situation = self._situation_block(session_id)
         if situation:
@@ -318,7 +338,17 @@ class Orchestrator:
         saved = False
         try:
             thinking_level = think or self.settings.ollama_think
-            tools = self._skill_schemas()
+            # The agent's skill subset, if the conversation is assigned to one.
+            # `parsed_skills()` is None for "every enabled skill" and a list --
+            # possibly empty -- for a restriction; the set is passed on to both
+            # what the model is offered and what it is allowed to actually run.
+            agent = self.store.session_agent(session_id)
+            allowed_skills = (
+                set(agent.parsed_skills())
+                if agent and agent.parsed_skills() is not None
+                else None
+            )
+            tools = self._skill_schemas(allowed_skills)
 
             # One pass per round. A round ends when the model stops; if it
             # stopped to ask for skills, they run and the window goes back with
@@ -367,6 +397,32 @@ class Orchestrator:
                     # for. `finally` persists whatever this list holds.
                     record = {"name": call.name, "arguments": call.arguments}
                     used.append(record)
+
+                    # An agent is only offered its own skills, but a model can
+                    # still name one it was not given -- from habit, or because
+                    # it is always-registered like recall. Refuse it before the
+                    # approval prompt so a restricted agent cannot reach past its
+                    # set, and tell the model plainly rather than silently.
+                    if allowed_skills is not None and call.name not in allowed_skills:
+                        result = (
+                            f"{call.name} is not one of this agent's skills, so it "
+                            "did not run. Answer without it."
+                        )
+                        record["result"] = result
+                        record["denied"] = True
+                        yield _sse(
+                            "tool_result",
+                            {"name": call.name, "text": result, "denied": True},
+                        )
+                        window.append(
+                            Message(
+                                role="tool",
+                                content=result,
+                                tool_call_id=call.id,
+                                tool_name=call.name,
+                            )
+                        )
+                        continue
 
                     # Ask, unless something already standing says not to. The
                     # prompt is one more frame on the stream this answer is

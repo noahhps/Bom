@@ -408,6 +408,44 @@ MIGRATIONS: list[str] = [
     -- which is also the order the panel opens them in.
     CREATE INDEX idx_canvases_session ON canvases(session_id, updated_at DESC);
     """,
+    # 14 -- agents: a named configuration a conversation can be run as.
+    #
+    # One assistant with one preamble and the whole shelf of skills is the
+    # default; an agent is a way to keep several -- a researcher, a coder, a
+    # planner -- each with its own standing instructions and its own subset of
+    # the skills, and to say which one a conversation is talking to. It is the
+    # local, single-machine shape of GrokBot's team of bots.
+    #
+    # `instructions` is persona: appended to the static preamble for a
+    # conversation assigned to this agent, so the model reads it every turn. It
+    # is deliberately additive rather than a replacement -- the preamble carries
+    # the things every answer needs (how to admit it does not know the date, and
+    # the rest), and an agent should specialise on top of that, not throw it
+    # away.
+    #
+    # `skills` is a JSON array of the skill names this agent may call. NULL means
+    # "every enabled skill", which is the unconfigured default and is not the
+    # same as `[]` -- an empty array is an agent deliberately given no skills at
+    # all, a pure conversationalist.
+    #
+    # `agent_id` on a session is ON DELETE SET NULL, like `project_id`: deleting
+    # an agent files its conversations back under the default assistant rather
+    # than destroying them.
+    """
+    CREATE TABLE agents (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      instructions  TEXT,
+      skills        TEXT,                -- JSON array of skill names; NULL = all
+      created_at    INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL
+    );
+
+    ALTER TABLE sessions ADD COLUMN agent_id TEXT
+      REFERENCES agents(id) ON DELETE SET NULL;
+
+    CREATE INDEX idx_sessions_agent ON sessions(agent_id);
+    """,
 ]
 
 

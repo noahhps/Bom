@@ -209,6 +209,40 @@ class StoredCanvas:
 
 
 @dataclass
+class StoredAgent:
+    id: str
+    name: str
+    instructions: str | None
+    skills: str | None  # JSON array of skill names, or NULL for "all enabled"
+    created_at: int
+    updated_at: int
+
+    def parsed_skills(self) -> list[str] | None:
+        """The allowed skill names, or None for "every enabled skill".
+
+        None and `[]` are different answers and both are kept: None is the
+        unconfigured default, `[]` is an agent deliberately given no skills.
+        """
+        if self.skills is None:
+            return None
+        try:
+            val = json.loads(self.skills)
+            return [str(x) for x in val] if isinstance(val, list) else None
+        except Exception:
+            return None
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "instructions": self.instructions,
+            "skills": self.parsed_skills(),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass
 class StoredMCPServer:
     id: str
     name: str
@@ -359,7 +393,8 @@ class Store:
     def list_sessions(self, limit: int = 200) -> list[dict]:
         rows = self.db.query(
             """
-            SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id, s.theme,
+            SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id,
+                   s.agent_id, s.theme,
                    (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
             FROM sessions s
             ORDER BY s.updated_at DESC
@@ -1311,6 +1346,101 @@ class Store:
         existed = self.get_canvas(canvas_id) is not None
         self.db.execute("DELETE FROM canvases WHERE id = ?", (canvas_id,))
         return existed
+
+    # -- agents -----------------------------------------------------------
+
+    @staticmethod
+    def _skills_json(skills: list[str] | None) -> str | None:
+        """A skill list as it is stored: JSON, or NULL for "all enabled".
+
+        None stays NULL; a list -- even an empty one -- is written, because an
+        empty array is a real choice (no skills) and must not read back as the
+        default.
+        """
+        return None if skills is None else json.dumps([str(s) for s in skills])
+
+    def create_agent(
+        self,
+        name: str,
+        *,
+        instructions: str | None = None,
+        skills: list[str] | None = None,
+    ) -> StoredAgent:
+        now = _now()
+        agent = StoredAgent(
+            id=_new_id("agt"),
+            name=name,
+            instructions=instructions,
+            skills=self._skills_json(skills),
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.execute(
+            """
+            INSERT INTO agents (id, name, instructions, skills, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (agent.id, agent.name, agent.instructions, agent.skills,
+             agent.created_at, agent.updated_at),
+        )
+        return agent
+
+    def list_agents(self) -> list[StoredAgent]:
+        rows = self.db.query("SELECT * FROM agents ORDER BY name COLLATE NOCASE")
+        return [StoredAgent(**dict(row)) for row in rows]
+
+    def get_agent(self, agent_id: str) -> StoredAgent | None:
+        row = self.db.query_one("SELECT * FROM agents WHERE id = ?", (agent_id,))
+        return StoredAgent(**dict(row)) if row else None
+
+    def update_agent(self, agent_id: str, changes: dict) -> StoredAgent | None:
+        """Merge named fields into an agent. None if there is no such agent.
+
+        `changes` carries only what the caller means to set -- a key present
+        with value None clears that field, a key absent leaves it. `skills` is a
+        list or None coming in, and is serialised on the way to the column.
+        """
+        current = self.get_agent(agent_id)
+        if current is None:
+            return None
+        name = changes["name"] if "name" in changes else current.name
+        instructions = (
+            changes["instructions"] if "instructions" in changes else current.instructions
+        )
+        skills = (
+            self._skills_json(changes["skills"]) if "skills" in changes else current.skills
+        )
+        self.db.execute(
+            "UPDATE agents SET name = ?, instructions = ?, skills = ?, updated_at = ? "
+            "WHERE id = ?",
+            (name, instructions, skills, _now(), agent_id),
+        )
+        return self.get_agent(agent_id)
+
+    def delete_agent(self, agent_id: str) -> bool:
+        # ON DELETE SET NULL: the agent's conversations survive as unassigned,
+        # back under the default assistant.
+        existed = self.get_agent(agent_id) is not None
+        self.db.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        return existed
+
+    def set_session_agent(self, session_id: str, agent_id: str | None) -> None:
+        """Run a conversation as an agent, or None for the default assistant."""
+        self.db.execute(
+            "UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, session_id)
+        )
+
+    def session_agent(self, session_id: str) -> StoredAgent | None:
+        """The agent a conversation is assigned to, if any."""
+        row = self.db.query_one(
+            """
+            SELECT a.* FROM agents a
+            JOIN sessions s ON s.agent_id = a.id
+            WHERE s.id = ?
+            """,
+            (session_id,),
+        )
+        return StoredAgent(**dict(row)) if row else None
 
     # -- accents ----------------------------------------------------------
     #

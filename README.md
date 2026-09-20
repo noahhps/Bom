@@ -223,6 +223,40 @@ Three things worth knowing about how it behaves:
 * **silence is refusal.** A prompt nobody answers in five minutes is treated as
   a no. Running it anyway would teach you the prompt could be ignored.
 
+## Agents
+
+One assistant with one system prompt and the whole shelf of skills is the
+default, and for most conversations it is the right one. An **agent** is a way
+to keep several — a researcher who cites, a coder who writes tests first, a
+planner who only talks — each with its own standing instructions and its own
+subset of the skills, and to say which one a conversation is talking to. It is
+the local, single-machine shape of the multi-agent idea GrokBot builds a team
+of cloud bots around.
+
+An agent is two things:
+
+* **instructions** — persona, appended to the base system prompt for that
+  agent's conversations. Additive, never a replacement: the preamble still
+  carries what every answer needs, and the agent specialises on top of it. It
+  sits in the stable, cacheable part of the prompt, so assigning one does not
+  cost a fresh prefix every turn.
+* **skills** — which tools it may call. The default is every enabled skill;
+  narrow it and the model is only *offered* that subset, and a call to anything
+  outside it is refused before it runs rather than quietly allowed. An agent
+  given no skills at all is a pure conversationalist, and that is a different,
+  deliberate thing from one given all of them.
+
+Make and edit them on the **Agents** page; assign one to the conversation you
+are in from the picker in the top bar, beside where you file it into a project.
+A conversation with no agent is the default assistant, and that is the common
+case. Deleting an agent files its conversations back under the default rather
+than taking them with it — the same way deleting a project does.
+
+Per-agent *model* is the obvious next piece and is deliberately not here yet:
+the provider holds one model at a time and a turn already streaming keeps the
+one it started with, so choosing a model per agent is the same change as the
+per-conversation model override in **Not built yet**, and lands with it.
+
 ## Memory
 
 Three kinds, and they fail differently.

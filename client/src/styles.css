@@ -16,50 +16,21 @@
  * fonts.googleapis.com. Drop an inter-var.woff2 into public/fonts and add an
  * @font-face here to get the drawing exactly. */
 :root {
-  /* Liquid Glass Palette: surfaces are semi-translucent, highly blurred glass.
-     We replace solid flat fills with layered translucency and light-catching edges. */
-  --shell-base: linear-gradient(135deg, #e0f2fe 0%, #fef9c3 30%, #fae8d4 60%, #e0f2fe 100%);
-  
-  --glass-surface: rgba(255, 255, 255, 0.75);
-  --glass-highlight: rgba(255, 255, 255, 0.95); /* top/left edge light catch */
-  --glass-shadow: rgba(0, 0, 0, 0.12);          /* bottom/right floating depth */
-  
-  --menu-base: rgba(255, 255, 255, 0.85);
-  --menu-well-base: rgba(255, 255, 255, 0.65);
-  --ground-base: rgba(255, 255, 255, 0.9);
-  --rail-base: rgba(27, 27, 27, 0.257);
-  --surface-base: rgba(255, 255, 255, 0.7);
-  
-  /* The names the rest of this sheet actually uses.
+  /* The five surfaces, named once, plus the accent-washed rail.
    *
-   * The Liquid Glass palette above renamed the five surface tokens with a
-   * `-base` suffix, but the ~3,000 lines below it still ask for the old names.
-   * An unresolved `var()` is invalid at computed-value time and falls back to
-   * transparent, so every one of those surfaces stopped painting -- the sheet,
-   * the top bar, the composer -- and was left standing only on the webview's
-   * opaque backdrop. Measured before this: `body`, `.screen`, `.topbar` and
-   * `.composer-box` all computed to rgba(0,0,0,0).
-   *
-   * Aliases rather than a find-and-replace across the file: the glass palette
-   * is the thing being designed, and it should stay the one place those values
-   * are chosen. `theme.js` overwrites these same names at runtime per accent,
-   * which keeps working -- an inline style beats :root either way. */
-  /* ---- THE SIDEBAR GLASS ------------------------------------------------
-   *
-   * The rail paints no fill at all -- see `.navrail-inner` below. Its colour
-   * is the accent wash, a radial gradient whose strength is the theme's own
-   * `--aura-opacity`, multiplied for the rail in one place further down.
-   *
-   * Nothing to tune here any more: a flat tint over the material was what
-   * kept it looking opaque, however low the alpha went.
-   */
-
-  --shell: var(--shell-base);
-  --menu: var(--menu-base);
-  --menu-well: var(--menu-well-base);
-  --ground: var(--ground-base);
-  --rail: var(--rail-base);
-  --surface: var(--surface-base);
+   * An earlier "Liquid Glass" restyle split these into a `-base` layer aliased
+   * to the names the rest of the sheet uses, and left three `--glass-*` tokens
+   * that nothing references. Both are gone: each surface is defined once, here,
+   * and `theme.js` overwrites these same names at runtime per accent (an inline
+   * style beats :root either way). The rail paints no fill of its own -- its
+   * colour is the accent wash in `.navrail-inner` -- but keeps a token so any
+   * state that does want a ground has one to reach for. */
+  --shell: linear-gradient(135deg, #e0f2fe 0%, #fef9c3 30%, #fae8d4 60%, #e0f2fe 100%);
+  --menu: rgba(255, 255, 255, 0.85);
+  --menu-well: rgba(255, 255, 255, 0.65);
+  --ground: rgba(255, 255, 255, 0.9);
+  --rail: rgba(27, 27, 27, 0.257);
+  --surface: rgba(255, 255, 255, 0.7);
 
   /* The sidebar's ground. A solid, opaque light grey -- the rail is a flat
      surface divided from the white sheet by one hairline, not a pane of glass
@@ -134,13 +105,22 @@
      both grounds; #5F6B7D is the lightest value that does. */
   --text-faint: #5f6b7d;
 
-  /* 1c is drawn at 2-3px everywhere -- the swatches, the cards, the console,
-     the applied UI. Rounding is not part of its vocabulary, so the four radii
-     collapse and all of them are nearly square. */
-  --r-pill: 3px;
-  --r-bubble: 3px;
-  --r-surface: 3px;
+  /* Two radii, not four-plus. 1c is drawn at 2-3px everywhere -- the swatches,
+     the cards, the console -- so every structural surface is near-square.
+     `--r-card` is that one structural radius; the older `--r-pill`,
+     `--r-bubble` and `--r-surface` names survive only as aliases to it, so the
+     value is chosen in one place and the rules that already reference them do
+     not have to change.
+
+     The one exception the design allows itself is a rounded control: the
+     composer, the gate input and QuickView each rounded themselves by a
+     different amount (16 / 14 / 18px) doing the same job, so they now share
+     `--r-control`. Nothing rounds a third way. */
   --r-card: 3px;
+  --r-surface: var(--r-card);
+  --r-pill: var(--r-card);
+  --r-bubble: var(--r-card);
+  --r-control: 10px;
 
   /* The reading column. The sheet is as wide as the window allows, but the
      conversation inside it is not: measured across 1184px of sheet, a turn ran
@@ -1590,7 +1570,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   text-align: left;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  /* The rounded-control radius, not a fourth hand-picked value. The starters
+     sit directly under the composer on the empty screen and read as the same
+     family of things you act on, so they round by the same amount. */
+  border-radius: var(--r-control);
   background: var(--surface);
   transition: border-color 0.14s ease, background 0.14s ease;
 }
@@ -2212,7 +2195,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   margin: 0 auto;
   border: 1px solid rgba(20, 23, 29, 0.14);
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: var(--r-control);
   padding: 17px 20px 14px;
   box-shadow:
     0 1px 2px rgba(20, 23, 29, 0.04),
@@ -2898,7 +2881,10 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .gate-card > * { position: relative; }
 .gate-card h1 {
   margin: 0;
-  font-weight: 400;
+  /* 700, matching `.h` and the empty-chat opener. The gate is a display
+     heading, not an in-context title (the top bar and thread stay 400), and a
+     light heading here read as a different product than the one behind it. */
+  font-weight: 700;
   font-size: var(--t-xl);
   letter-spacing: var(--track-display);
 }
@@ -2909,7 +2895,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 }
 .gate-card input {
   border: 1px solid var(--line-firm);
-  border-radius: 14px;
+  border-radius: var(--r-control);
   background: var(--surface);
   padding: 13px 15px;
   font: 400 var(--t-body)/1 var(--font);

@@ -1514,6 +1514,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .canvas-preview-frame {
   flex: 1;
   width: 100%;
+  /* Explicit height as well as flex: an iframe is a replaced element and can
+     collapse to its default 150px (or to nothing) inside a flex row, which
+     reads as "the preview renders nothing". */
+  height: 100%;
+  min-height: 0;
   border: none;
   background: #ffffff;
 }

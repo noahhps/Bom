@@ -12,6 +12,29 @@ const SAVE_DEBOUNCE = 700;
 // editor -- there is nothing to render it into -- so it never shows the toggle.
 const PREVIEWABLE = new Set(["markdown", "html"]);
 
+// Strip a single wrapping code fence, which a model often puts around canvas
+// content (```html … ```) even when asked not to. The editor keeps the raw
+// text; only the preview renders the inside.
+function stripFence(text) {
+  const match = String(text || "").trim().match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
+  return match ? match[1] : String(text ?? "");
+}
+
+// Whether content is really HTML, however it was stored. Mirrors the server's
+// rescue so a page renders even against an older server, one that saved it as
+// markdown, or a fenced block. Conservative: a full document, or a fragment
+// that opens with a structural tag and closes one.
+function looksLikeHtml(text) {
+  const t = stripFence(text).trim();
+  if (!t) return false;
+  if (/<!doctype\s+html|<html[\s>]/i.test(t)) return true;
+  return (
+    t.startsWith("<") &&
+    /<(?:body|head|section|article|main|div|table|ul|ol|form|style|script|h[1-6]|p)[\s>]/i.test(t) &&
+    t.includes("</")
+  );
+}
+
 /**
  * The side panel: the document the model is building with the reader.
  *
@@ -109,16 +132,25 @@ export function Canvas({
     );
   }, [draft]);
 
+  // HTML regardless of how it was labelled: an explicit html canvas, or a
+  // markdown one whose content is plainly a page (the common case when the
+  // model forgets kind or wraps it in a fence). Code stays code -- an explicit
+  // code kind means the user wants to read the source.
+  const isHtml =
+    active && (active.kind === "html" || (active.kind === "markdown" && looksLikeHtml(draft)));
+
+  // Markdown preview only when it is not really HTML -- otherwise the renderer
+  // would escape the tags and show the source, which is the bug this fixes.
   const previewHtml = useMemo(
     () =>
-      active?.kind === "markdown" && mode === "preview"
+      active && mode === "preview" && !isHtml && active.kind === "markdown"
         ? { __html: renderMarkdown(draft) }
         : null,
-    [active?.kind, mode, draft],
+    [active, isHtml, mode, draft],
   );
 
-  const canPreview = active && PREVIEWABLE.has(active.kind);
-  const mono = active && (active.kind === "code" || active.kind === "html");
+  const canPreview = active && (PREVIEWABLE.has(active.kind) || isHtml);
+  const mono = active && (active.kind === "code" || isHtml);
 
   return (
     <aside className="canvas" aria-label="Canvas">
@@ -206,14 +238,15 @@ export function Canvas({
           <div className="canvas-body">
             {previewHtml ? (
               <div className="body canvas-preview" dangerouslySetInnerHTML={previewHtml} />
-            ) : active.kind === "html" && mode === "preview" ? (
+            ) : isHtml && mode === "preview" ? (
               // Locked down: no scripts, no same-origin, no forms. A preview is
-              // for looking at the page's shape, not for running it.
+              // for looking at the page's shape, not for running it. The fence
+              // is stripped so a model-wrapped ```html block still renders.
               <iframe
                 className="canvas-preview-frame"
                 sandbox=""
                 title="HTML preview"
-                srcDoc={draft}
+                srcDoc={stripFence(draft)}
               />
             ) : (
               <textarea

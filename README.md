@@ -172,9 +172,21 @@ too.
 
 A canvas is **yours to edit as well**. Type into the panel and it saves itself a
 beat after you stop; a markdown or HTML canvas flips between the editor and a
-preview. Nothing here is retrieval-augmented magic — the model only sees a
+preview, opening on the rendered view so a page reads as a page rather than as
+its source. Nothing here is retrieval-augmented magic — the model only sees a
 canvas when it calls `read_canvas`, so it reads the version you left, edits and
 all.
+
+An **HTML canvas runs**. The preview is a sandboxed iframe with an opaque origin
+— `allow-scripts`, never `allow-same-origin` — so a page's JavaScript executes
+and an interactive layout or a script-driven slideshow renders, while the frame
+stays walled off from Courier: it cannot read the app's DOM, cookies,
+`localStorage` or bearer token, and any request it makes goes out cross-origin
+without the app's credentials. The worst a hallucinated script can do is send
+what is already on its own page somewhere; the two combined settings that would
+let it drop the wall are never set together. A **Scripts** toggle turns
+execution off for a locked, static look at a page you have not read yet, and the
+content is stored as text either way — nothing runs until you are previewing it.
 
 Canvases belong to the conversation the way messages and attachments do:
 deleting the chat takes them with it, and they never leak into another one. The

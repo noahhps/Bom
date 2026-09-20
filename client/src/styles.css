@@ -1479,6 +1479,9 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--text-faint);
 }
 .canvas-mode[data-on] { background: var(--ink); color: var(--ground); }
+/* The scripts toggle sits on its own, not inside the Edit/Preview group, so it
+   carries its own pill outline. */
+.canvas-scripts { border: 1px solid var(--line); border-radius: 999px; }
 
 /* The top-bar toggle when its panel is open, and any icon button that reports
    an on/off it owns. Matches the icon button's own hover so the two states sit

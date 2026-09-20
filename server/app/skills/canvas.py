@@ -85,9 +85,14 @@ class WriteCanvas(Skill):
             name="write_canvas",
             description=(
                 "Create or replace a canvas -- a document shown to the user in a "
-                "side panel, for a draft, a page, or a block of code you are "
-                "building together. Use this instead of a long fenced code block "
-                "when the user will keep editing the result. Writing to a title "
+                "side panel, for a draft, a report, a block of code, or a web "
+                "page you are building together. Use this instead of a long "
+                "fenced block in the chat when the user will keep the result or "
+                "edit it. For a document or prose, use kind 'markdown'; for a "
+                "page, an interactive layout, or a slideshow, write a complete "
+                "HTML document with kind 'html' -- its scripts and styles run in "
+                "the preview, so self-contained pages work best. Pass the raw "
+                "content itself, not wrapped in a code fence. Writing to a title "
                 "that already exists replaces that canvas whole, so read_canvas "
                 "first if you mean to revise rather than start over. Keep your "
                 "chat reply short when you do this; the work is in the panel."

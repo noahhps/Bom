@@ -68,6 +68,12 @@ export function Canvas({
       : "edit",
   );
   const [copied, setCopied] = useState(false);
+  // Whether the HTML preview runs JavaScript. On by default so an interactive
+  // page or a JS slideshow just works; the iframe is sandboxed to an opaque
+  // origin (allow-scripts, never allow-same-origin), so scripts can render but
+  // cannot reach Courier's page, storage, cookies or token. Toggle off for a
+  // locked, static view of a page you have not read.
+  const [runScripts, setRunScripts] = useState(true);
   const timer = useRef(0);
 
   const activeId = active?.id || null;
@@ -213,6 +219,26 @@ export function Canvas({
           </div>
         ) : null}
 
+        {/* Scripts on/off, only while previewing an HTML page. Its own control
+            because running the page's JavaScript is a choice the reader should
+            see -- isolated though it is. */}
+        {isHtml && mode === "preview" ? (
+          <button
+            type="button"
+            className="canvas-mode canvas-scripts"
+            data-on={runScripts ? "" : undefined}
+            aria-pressed={runScripts}
+            title={
+              runScripts
+                ? "Scripts run (isolated from Courier). Click for a static view."
+                : "Scripts off. Click to run the page's JavaScript."
+            }
+            onClick={() => setRunScripts((was) => !was)}
+          >
+            Scripts
+          </button>
+        ) : null}
+
         <button
           type="button"
           className="icon-btn"
@@ -239,12 +265,18 @@ export function Canvas({
             {previewHtml ? (
               <div className="body canvas-preview" dangerouslySetInnerHTML={previewHtml} />
             ) : isHtml && mode === "preview" ? (
-              // Locked down: no scripts, no same-origin, no forms. A preview is
-              // for looking at the page's shape, not for running it. The fence
-              // is stripped so a model-wrapped ```html block still renders.
+              // Sandboxed to an opaque origin: with `allow-scripts` the page's
+              // JavaScript runs, but WITHOUT `allow-same-origin` it cannot reach
+              // Courier -- no access to the parent DOM, cookies, localStorage or
+              // the bearer token, and any fetch goes out cross-origin without
+              // the app's credentials. Never add allow-same-origin here; the two
+              // together let framed content drop its own sandbox. `key` remounts
+              // the frame when scripts are toggled so they actually re-run. The
+              // fence is stripped so a model-wrapped ```html block renders.
               <iframe
+                key={runScripts ? "js" : "static"}
                 className="canvas-preview-frame"
-                sandbox=""
+                sandbox={runScripts ? "allow-scripts" : ""}
                 title="HTML preview"
                 srcDoc={stripFence(draft)}
               />

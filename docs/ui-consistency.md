@@ -187,14 +187,23 @@ says it "runs on one accent", so the reduction is the honest option.
   `×2.6` strength to the normal subtle wash. See the "the sidebar, a solid
   surface" block in `client/src/styles.css`.
 
-- **The Courier mark is a crisp animated SVG.** The flower was a 161×512 PNG
-  (`courier-mark.png`) scaled up, hence blurry at every size it is drawn. It is
-  now `client/public/courier-mark.svg`: a vector rendition of the same
-  bird-of-paradise bloom and segmented stem, sharp at any size, that sways
-  gently from its base (motion defined in CSS inside the file so it plays even
-  when loaded through an `<img>`, and dropped under `prefers-reduced-motion`).
-  The dead PNG was removed. This resolves finding-adjacent blur but is *not* the
-  naming fix in (6) — the wordmark beside it still says "Assistant".
+- **The mark is now "the agent's flower", drawn crisp.** The old brush-stroke
+  `courier-mark.png` (a 161×512 raster that blurred when scaled) has been
+  replaced across the app by `components/AgentFlower.jsx`: an eight-petal flower
+  with a face, built from the accent tokens so it re-themes with the
+  conversation, animated as a bud that blooms while a turn is streaming and
+  folds back up after. Its static open form, `client/public/courier-flower.svg`,
+  is the source for the app and platform icons. This is a real win against
+  findings 1 and 9 — the mark is now vector and token-driven rather than a
+  fixed raster.
+
+  The flower was rendering **blurry** because `AgentFlower` was drawn at a 22px
+  base and enlarged with `transform: scale()` (1.75× beside answers, up to 2.5×
+  for the greeting logo); its perpetually-rotating petal ring is a composited
+  layer, so the small raster was being stretched. It is now sized natively —
+  the geometry is in `em` and the logo and per-answer instances raise
+  `font-size` instead of scaling the box — so it is sharp at every size. This is
+  *not* the naming fix in (6): the wordmark beside it still says "Assistant".
 
 ---
 

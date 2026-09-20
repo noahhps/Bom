@@ -1,3 +1,5 @@
+import { AgentFlower } from "./AgentFlower";
+
 /* The empty conversation.
  *
  * Four openers rather than a blank box. They are written as the sentence that
@@ -36,11 +38,10 @@ const STARTERS = [
 export function StartersHead() {
   return (
     <div className="starters-head">
-      {/* The one place the mark gets to be itself. Everywhere else it is a
-          24px identity dot; here there is vertical room for the stroke to
-          read as the drawn gesture it is. Decorative, so it is hidden from
-          screen readers -- the heading under it already says where you are. */}
-      <img className="starters-mark" src="/courier-mark.svg" alt="" aria-hidden="true" />
+      {/* The one place the mark gets to be large: the flower, open, with
+          room to be seen. Decorative, so it is hidden from screen readers --
+          the heading under it already says where you are. */}
+      <AgentFlower open mark size={68} className="starters-mark" />
       <h2 className="h">What are we working on?</h2>
       <p className="p">
         Everything here runs on your own hardware. Nothing leaves the machine

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-16 -16 32 32" width="512" height="512">
+  <!-- The agent's flower, open, as the app icon. The source for icon-*.png
+       and the Tauri bundle icons. Same character as AgentFlower.jsx in the
+       no-accent cobalt: eight rounded, wide petals, 45deg apart, their inner halves
+       under a 13px face with two rounded-rectangle eyes. -->
+  <defs>
+    <path id="petal" d="M0 1 C4.6 0 5 -7 3.2 -10.6 C2.3 -12.6 1.4 -13.5 0 -13.5 C-1.4 -13.5 -2.3 -12.6 -3.2 -10.6 C-5 -7 -4.6 0 0 1 Z" />
+  </defs>
+  <g fill="#5a7fe6">
+    <use href="#petal" transform="rotate(45)" />
+    <use href="#petal" transform="rotate(135)" />
+    <use href="#petal" transform="rotate(225)" />
+    <use href="#petal" transform="rotate(315)" />
+  </g>
+  <g fill="#1f4fd8">
+    <use href="#petal" />
+    <use href="#petal" transform="rotate(90)" />
+    <use href="#petal" transform="rotate(180)" />
+    <use href="#petal" transform="rotate(270)" />
+  </g>
+  <circle r="6.5" fill="#173da8" />
+  <rect x="-3.3" y="-2.3" width="2.3" height="4.6" rx="1.15" fill="#ffffff" />
+  <rect x="1" y="-2.3" width="2.3" height="4.6" rx="1.15" fill="#ffffff" />
+</svg>

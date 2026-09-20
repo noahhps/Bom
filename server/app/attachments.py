@@ -24,10 +24,11 @@ from pathlib import Path
 from .extract import ExtractionError, document_suffix, extract
 
 # One user, one server, so these exist to catch mistakes -- a video dragged in
-# by accident -- not to ration a shared resource.
+# by accident -- not to ration a shared resource. Sized for scanned PDFs and
+# large Office files; the whole request is base64 in memory, so not unbounded.
 MAX_FILES = 10
-MAX_BYTES_EACH = 12 * 1024 * 1024
-MAX_BYTES_TOTAL = 24 * 1024 * 1024
+MAX_BYTES_EACH = 100 * 1024 * 1024
+MAX_BYTES_TOTAL = 200 * 1024 * 1024
 
 # A text file is pasted into the prompt, so its size is measured in context
 # rather than megabytes. Past this it is truncated with a visible marker: a

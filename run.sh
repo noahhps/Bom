@@ -36,16 +36,41 @@ say()  { printf '\033[1m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[33m !! \033[0m%s\n' "$1" >&2; }
 
 # --- python ------------------------------------------------------------------
+# The server needs 3.11+ (pyproject.toml). Exits non-zero for anything older.
+new_enough() { "$1" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; }
+
 # Windows venvs put the interpreter in Scripts/, POSIX ones in bin/.
-if   [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe
-elif [ -x .venv/bin/python ];        then PY=.venv/bin/python
-else
+venv_python() {
+  if   [ -x .venv/Scripts/python.exe ]; then echo .venv/Scripts/python.exe
+  elif [ -x .venv/bin/python ];        then echo .venv/bin/python
+  fi
+}
+
+PY=$(venv_python)
+# A venv built from a too-old interpreter never recovers on its own: every run
+# would reuse it and fail the same pip install. Rebuild it instead.
+if [ -n "$PY" ] && ! new_enough "$PY"; then
+  warn ".venv is $("$PY" -V 2>&1) -- the server needs 3.11+, recreating it"
+  rm -rf .venv
+  PY=
+fi
+
+if [ -z "$PY" ]; then
   say "creating .venv"
-  # macOS: try python3.13 first (from Homebrew), fall back to python3
-  PYTHON_CMD="python3"
-  if command -v python3.13 >/dev/null 2>&1; then PYTHON_CMD="python3.13"; fi
-  $PYTHON_CMD -m venv .venv
-  if [ -x .venv/Scripts/python.exe ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+  # macOS's /usr/bin/python3 is 3.9 and usually sits ahead of Homebrew on PATH,
+  # so plain python3 is the last resort, not the first choice.
+  PYTHON_CMD=
+  for candidate in python3.14 python3.13 python3.12 python3.11 python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && new_enough "$candidate"; then
+      PYTHON_CMD="$candidate"; break
+    fi
+  done
+  if [ -z "$PYTHON_CMD" ]; then
+    warn "no Python 3.11+ found -- install one (e.g. brew install python) and rerun"
+    exit 1
+  fi
+  "$PYTHON_CMD" -m venv .venv
+  PY=$(venv_python)
 fi
 
 # Cheapest honest check that the server's dependencies are actually installed.

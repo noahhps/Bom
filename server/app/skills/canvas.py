@@ -52,6 +52,53 @@ def _looks_like_html(text: str) -> bool:
         return True
     return t.startswith("<") and bool(_HTML_TAG.search(t)) and "</" in t
 
+# An asset a page pulls in by address: an <img>, an SVG <image>, or a CSS
+# url(). Only the reference is captured; whether it is remote is decided below.
+_ASSET = re.compile(
+    r"""(?:
+          <img\b[^>]*?\bsrc\s*=\s*["']?(?P<img>[^"'\s>]+)
+        | <image\b[^>]*?\bhref\s*=\s*["']?(?P<svg>[^"'\s>]+)
+        | \burl\(\s*["']?(?P<css>[^"')]+)
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+#: How many hosts to name back before it stops being useful information.
+_NAMED_HOSTS = 3
+
+
+def _remote_assets(text: str) -> list[str]:
+    """Every image in `text` that has to be fetched from somewhere else.
+
+    This is the check behind the note in write_canvas's result. A model given
+    no guidance reaches for the placeholder services it learned -- and they are
+    the least reliable addresses on the web: the free ones get retired
+    (source.unsplash.com), fall over for weeks at a time (via.placeholder.com),
+    or want a photo id it invented rather than looked up. The page then renders
+    as a finished layout with holes in it, which looks like Courier losing the
+    pictures rather than the model naming ones that were never there.
+
+    Protocol-relative `//host/...` counts: inside a srcdoc frame on an opaque
+    origin it resolves to https all the same.
+
+    `data:` URIs and relative paths are not remote and never flagged -- those
+    are the shapes we are steering towards.
+    """
+    found: list[str] = []
+    for hit in _ASSET.finditer(text or ""):
+        url = (hit.group("img") or hit.group("svg") or hit.group("css") or "").strip()
+        low = url.lower()
+        if low.startswith(("http://", "https://")) or low.startswith("//"):
+            found.append(url)
+    return found
+
+
+def _host_of(url: str) -> str:
+    """The host part, for naming in the note. Best-effort and never raises."""
+    rest = url.split("//", 1)[-1]
+    return rest.split("/", 1)[0].split("?", 1)[0] or url
+
+
 # What `kind` may be. Anything else is coerced to the closest sensible default
 # rather than stored as-is -- the panel only knows how to render these three,
 # and a canvas it cannot render is worse than one labelled plainly.
@@ -91,7 +138,19 @@ class WriteCanvas(Skill):
                 "edit it. For a document or prose, use kind 'markdown'; for a "
                 "page, an interactive layout, or a slideshow, write a complete "
                 "HTML document with kind 'html' -- its scripts and styles run in "
-                "the preview, so self-contained pages work best. Pass the raw "
+                "the preview, so self-contained pages work best. "
+                "IMAGES: draw them, do not link them. Inline SVG, a CSS "
+                "gradient, or a data: URI renders every time; a remote URL "
+                "usually does not, because the placeholder services are dead or "
+                "retired, a photo id you did not look up does not exist, and "
+                "this machine may have no internet at all. It also sends the "
+                "user's address to a stranger, which is the one thing Courier "
+                "is for avoiding. Never emit via.placeholder.com, "
+                "source.unsplash.com, images.unsplash.com, picsum.photos or "
+                "similar -- an inline SVG with a shape and a caption is a better "
+                "placeholder than a broken one, and says what the picture is "
+                "for. Link a remote image only when the user gave you that exact "
+                "URL. Pass the raw "
                 "content itself, not wrapped in a code fence. Writing to a title "
                 "that already exists replaces that canvas whole, so read_canvas "
                 "first if you mean to revise rather than start over. Keep your "
@@ -166,11 +225,40 @@ class WriteCanvas(Skill):
             verb = "Updated"
 
         lines = body.count("\n") + 1 if body else 0
+        note = ""
+        # Said in the result as well as the description, because the
+        # description is read once before the model has written anything and
+        # this arrives holding the actual page. It is a report, not a refusal:
+        # the canvas is already saved, and a URL the user supplied is a good
+        # reason to keep it. What it buys is the model finding out now, while
+        # it can still fix it, rather than the reader finding out from a gap
+        # where the picture should be.
+        remote = _remote_assets(body)
+        if remote:
+            hosts: list[str] = []
+            for url in remote:
+                host = _host_of(url)
+                if host not in hosts:
+                    hosts.append(host)
+            named = ", ".join(hosts[:_NAMED_HOSTS])
+            if len(hosts) > _NAMED_HOSTS:
+                named += f" and {len(hosts) - _NAMED_HOSTS} more"
+            note = (
+                f" WARNING: {len(remote)} "
+                f"{'image' if len(remote) == 1 else 'images'} in this canvas "
+                f"{'loads' if len(remote) == 1 else 'load'} from the internet "
+                f"({named}), so the user is most likely seeing "
+                "blank gaps where they should be. Unless they gave you those "
+                "exact URLs, rewrite the canvas now with the pictures drawn "
+                "inline -- an SVG, a CSS gradient, or a data: URI -- so the "
+                "page stands on its own."
+            )
+
         return (
             f"{verb} the canvas {canvas.title!r} ({lines} line"
             f"{'' if lines == 1 else 's'}). It is open in the side panel for the "
             "user to read and edit. Update it by calling write_canvas with the "
-            "same title, or read it back first with read_canvas."
+            f"same title, or read it back first with read_canvas.{note}"
         )
 
 

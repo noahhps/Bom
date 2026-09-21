@@ -193,6 +193,24 @@ deleting the chat takes them with it, and they never leak into another one. The
 bytes are columns in the same SQLite file as everything else, so `VACUUM INTO`
 still copies the lot in one shot.
 
+### Pictures in a canvas
+
+Images in a canvas are **drawn, not linked**: inline SVG, a CSS gradient, or a
+`data:` URI. A model left to itself reaches for the placeholder services it
+learned — `via.placeholder.com`, `source.unsplash.com`, a `picsum.photos` size,
+an `images.unsplash.com` photo id it invented — and those are the least
+dependable addresses on the web. Retired, down for weeks, or never real. The
+page then renders as a finished layout with holes in it, which reads as Courier
+losing the pictures rather than the model naming ones that were never there.
+They also send your address to a stranger every time the panel opens, which is
+the one thing this app exists to avoid.
+
+So `write_canvas` says that in its description, and checks the page it was
+handed: a canvas written with remote images comes back with a warning naming
+the hosts, while the model is still in the turn and can redraw them. It is a
+report and never a refusal — the canvas is saved either way, and a URL you
+supplied yourself is a good reason to keep it.
+
 ## Asking before a skill runs
 
 A skill that is switched on can read your folders, search the web and call

@@ -13,7 +13,7 @@ from app.main import create_app
 from app.orchestrator import Orchestrator
 from app.providers.base import Chunk, ToolCall
 from app.providers.router import ProviderRouter
-from app.skills.canvas import ReadCanvas, WriteCanvas
+from app.skills.canvas import ReadCanvas, WriteCanvas, _remote_assets
 from app.skills.registry import Registry
 from app.store import Store
 
@@ -269,3 +269,118 @@ async def test_write_canvas_emits_a_canvas_frame(store: Store):
 
 async def _route(provider):
     return type("Route", (), {"provider": provider, "reason": "local"})()
+
+
+# -- images that are not there ------------------------------------------------
+#
+# A model given no steer reaches for the placeholder services it learned, and
+# those are the least dependable addresses on the web -- retired, down for
+# weeks, or wanting a photo id it invented. The page then renders as a finished
+# layout with holes in it, which reads as Courier losing the pictures rather
+# than the model naming ones that never existed.
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        '<img src="https://via.placeholder.com/600x400">',
+        "<img src='http://example.com/a.png'>",
+        # Protocol-relative: inside the srcdoc frame this still goes out.
+        '<img src="//images.unsplash.com/photo-1">',
+        '<div style="background:url(https://picsum.photos/8/6)"></div>',
+        "<div style=\"background-image: url('https://a.test/b.jpg')\"></div>",
+        '<image href="https://a.test/b.svg"/>',
+        # Case is not a defence.
+        '<IMG SRC="HTTPS://A.TEST/B.PNG">',
+    ],
+)
+def test_a_remote_image_is_spotted(markup):
+    assert len(_remote_assets(markup)) == 1
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        # The shapes we are steering towards: they always render.
+        '<img src="data:image/svg+xml;base64,PHN2Zy8+">',
+        '<img src="./photo.png">',
+        '<img src="/static/photo.png">',
+        '<svg><rect width="10" height="10" fill="#333"/></svg>',
+        '<div style="background:linear-gradient(#111,#999)"></div>',
+        # A url() pointing at a gradient defined in the same document.
+        '<div style="fill:url(#grad)"></div>',
+        "",
+    ],
+)
+def test_a_self_contained_image_is_not_flagged(markup):
+    assert _remote_assets(markup) == []
+
+
+@pytest.mark.asyncio
+async def test_writing_remote_images_warns_the_model_while_it_can_still_fix_it(
+    store: Store,
+):
+    session = store.create_session()["id"]
+    skill = WriteCanvas(store)
+
+    result = await skill.use(
+        session=session,
+        title="Deck",
+        content=(
+            "<html><body>"
+            '<img src="https://via.placeholder.com/600x400">'
+            '<img src="https://images.unsplash.com/photo-123">'
+            "</body></html>"
+        ),
+        kind="html",
+    )
+
+    assert "2 images" in result
+    # Named, so the model can see these are the invented placeholder hosts
+    # rather than something the user handed it.
+    assert "via.placeholder.com" in result
+    assert "images.unsplash.com" in result
+    assert "data:" in result and "SVG" in result
+    # Reported, never refused: the canvas is saved either way.
+    assert "Created" in result
+    assert store.find_canvas_by_title(session, "Deck") is not None
+
+
+@pytest.mark.asyncio
+async def test_a_self_contained_page_is_not_nagged(store: Store):
+    """The note has to stay rare, or it is noise the model learns to skip."""
+    session = store.create_session()["id"]
+    skill = WriteCanvas(store)
+
+    result = await skill.use(
+        session=session,
+        title="Deck",
+        content=(
+            "<html><body><svg viewBox='0 0 10 10'><circle cx='5' cy='5' r='4'/>"
+            "</svg><img src='data:image/png;base64,iVBORw0KGgo='></body></html>"
+        ),
+        kind="html",
+    )
+    assert "WARNING" not in result
+    assert "Created" in result
+
+
+@pytest.mark.asyncio
+async def test_one_remote_image_is_singular(store: Store):
+    session = store.create_session()["id"]
+    result = await WriteCanvas(store).use(
+        session=session,
+        title="Page",
+        content='<html><body><img src="https://a.test/b.png"></body></html>',
+        kind="html",
+    )
+    assert "1 image in this canvas loads" in result
+
+
+def test_the_model_is_told_to_draw_images_rather_than_link_them(store: Store):
+    """The description is the half of this that acts before anything is written."""
+    described = WriteCanvas(store).schema()["description"].lower()
+    assert "inline svg" in described
+    assert "via.placeholder.com" in described
+    # And the one case where a remote URL is the right answer.
+    assert "user gave you that exact url" in described

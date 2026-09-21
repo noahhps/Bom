@@ -1,35 +1,59 @@
 import { AgentFlower } from "./AgentFlower";
+import { Icon } from "./Icon";
 
 /* The empty conversation.
  *
- * Four openers rather than a blank box. They are written as the sentence that
- * actually gets sent, not as a category -- "Summarise this" is a label, and a
- * label still leaves you with a cursor and nothing to type.
+ * A small shelf of recommended capabilities rather than a blank box. Each
+ * card is written as a useful starting point and puts a ready-to-edit prompt
+ * in the composer, so a recommendation never becomes a dead-end label.
  *
- * Each one is picked to exercise something this build genuinely does: the
- * clock skill, a pasted-in file, long-form reading, and a plain question. A
- * starter that promises something the server cannot do is worse than no
- * starter at all.
+ * The recommendations are deliberately grounded in capabilities this build
+ * exposes: web research, analysis, code, files, canvas work, and memory.
+ * A card that promises something the server cannot do is worse than no card.
  */
 
-const STARTERS = [
+const RECOMMENDED = [
   {
-    title: "Ask what I can do",
-    prompt: "What skills do you have available, and when would each one be useful?",
+    kind: "Skill",
+    icon: "search",
+    title: "Research a question",
+    description: "Search the web for current facts, sources, and context.",
+    prompt: "Research this question and include the most useful sources: ",
   },
   {
-    title: "Check a time zone",
-    prompt: "What time is it in Tokyo right now, and how far ahead of me is that?",
+    kind: "Skill",
+    icon: "chart",
+    title: "Analyze a dataset",
+    description: "Find patterns, compare segments, and explain what changed.",
+    prompt: "Analyze this dataset and call out the most important patterns and anomalies:\n\n",
   },
   {
-    title: "Explain some code",
-    prompt:
-      "Explain what this code does, step by step, and point out anything that looks wrong:\n\n",
+    kind: "Skill",
+    icon: "code",
+    title: "Review or write code",
+    description: "Debug an issue, explain a function, or shape a clean implementation.",
+    prompt: "Help me with this code. Explain the issue and suggest a clear fix:\n\n",
   },
   {
-    title: "Think through a decision",
-    prompt:
-      "Help me think through a decision. I will describe the options and the constraints, and I want the trade-offs laid out rather than a recommendation up front.\n\n",
+    kind: "Tool",
+    icon: "attachment",
+    title: "Work with a file",
+    description: "Attach a document, image, or spreadsheet and work from its contents.",
+    prompt: "Help me understand and work with the attached file. Start with a concise summary.",
+  },
+  {
+    kind: "Tool",
+    icon: "canvas",
+    title: "Draft on a canvas",
+    description: "Turn an idea into a plan, document, or reusable working draft.",
+    prompt: "Create a working draft for this idea, with a clear structure and next steps:\n\n",
+  },
+  {
+    kind: "Tool",
+    icon: "memory",
+    title: "Recall my context",
+    description: "Use saved preferences and previous notes to make the answer more useful.",
+    prompt: "Use what you remember about my preferences and help me with this:\n\n",
   },
 ];
 
@@ -56,19 +80,27 @@ export function StartersHead() {
 export function Starters({ onPick }) {
   return (
     <div className="starters">
+      <div className="starters-section-head">
+        <span className="mi">Recommended for you</span>
+        <span className="starters-section-hint">Pick a capability to get started</span>
+      </div>
       <div className="starters-grid">
-        {STARTERS.map((starter) => (
+        {RECOMMENDED.map((starter) => (
           <button
             key={starter.title}
             type="button"
             className="starter"
             // The full prompt, so a screen reader hears what pressing this
             // will actually put in the box rather than just the label.
-            aria-label={`Start with: ${starter.prompt.trim()}`}
+            aria-label={`Use ${starter.title}: ${starter.description}`}
             onClick={() => onPick(starter.prompt)}
           >
-            <span className="starter-title">{starter.title}</span>
-            <span className="starter-body">{starter.prompt.trim()}</span>
+            <span className="starter-icon"><Icon name={starter.icon} /></span>
+            <span className="starter-copy">
+              <span className="starter-meta">{starter.kind}</span>
+              <span className="starter-title">{starter.title}</span>
+              <span className="starter-body">{starter.description}</span>
+            </span>
           </button>
         ))}
       </div>

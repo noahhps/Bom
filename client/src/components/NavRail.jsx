@@ -10,9 +10,9 @@ import { swatchOf } from "../lib/theme";
 /* The rail from artboard 1a, which opens out under the pointer.
  *
  * Three destinations set vertically between two circles, and the circles are
- * controls rather than decoration: the one at the head opens this device's
- * settings, the one at the foot chooses which provider answers and which of
- * its models it answers with. Both stay put
+ * controls rather than decoration: the mark at the head starts a fresh
+ * conversation, while the one at the foot chooses which provider answers and
+ * which of its models it answers with. Both stay put
  * and stay clickable when the rail is shut, which is most of the time -- they
  * are the two things you reach for without wanting to read a menu first.
  *
@@ -268,10 +268,9 @@ export function NavRail({
           <button
             type="button"
             className="navrail-mark"
-            aria-current={view === "settings" ? "page" : undefined}
-            aria-label="This device — settings"
-            title="This device"
-            onClick={() => onView("settings")}
+            aria-label="Start a new conversation"
+            title="New conversation"
+            onClick={onNewSession}
           >
             <AgentFlower open mark size={42} />
           </button>

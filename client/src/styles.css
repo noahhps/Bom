@@ -4189,6 +4189,30 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   padding: 2px 7px;
 }
 
+/* Text arriving in a turn, from quickview.
+ *
+ * The span carries its own age as a negative `animation-delay`, so it renders
+ * at the point in the fade it would have reached had the node survived -- see
+ * lib/reveal.js for why it cannot survive. `both` matters: without the
+ * backwards fill a negative delay would start at full opacity and there would
+ * be no fade at all.
+ *
+ * `inline` and nothing else. These wrap arbitrary runs inside paragraphs,
+ * headings and list items, so anything that established a box here would
+ * change the layout of the sentence it landed in. */
+.body .tw {
+  display: inline;
+  animation: turn-reveal 420ms ease-out both;
+}
+@keyframes turn-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The text still arrives; it simply arrives finished. */
+  .body .tw { animation: none; }
+}
+
 .skill-trace {
   display: flex;
   flex-direction: column;

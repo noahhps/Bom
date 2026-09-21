@@ -1,6 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 
-import { renderMarkdown } from "../lib/markdown";
+import { useReveal } from "../hooks/useReveal";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
 import { DesignChoice } from "./DesignChoice";
@@ -41,11 +41,10 @@ export const Message = memo(function Message({
 }) {
   // renderMarkdown escapes the source before emitting a single tag, so no
   // model output reaches the DOM as markup. That is the whole contract; see
-  // lib/markdown.js.
-  const html = useMemo(
-    () => (role === "assistant" && content ? { __html: renderMarkdown(content) } : null),
-    [role, content],
-  );
+  // lib/markdown.js. useReveal only wraps what it is given -- it inserts its
+  // own spans after the escaping, never before it.
+  const revealed = useReveal(role === "assistant" ? content : "", streaming);
+  const html = role === "assistant" && content ? revealed : null;
 
   if (role === "user") {
     return (

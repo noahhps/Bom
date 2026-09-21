@@ -138,13 +138,24 @@
     0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
     0 8px 34px -10px color-mix(in srgb, var(--accent) 34%, transparent);
 
-  /* The reading column. The sheet is as wide as the window allows, but the
-     conversation inside it is not: measured across 1184px of sheet, a turn ran
-     the full width and the eye lost its place returning to the left margin.
-     Roughly two thirds, which is also about 90 characters of the body face.
-     The turns, the composer and the openers all share it, so the left edge of
-     everything you read lines up. */
-  --read-w: 780px;
+  /* The reading column. The sheet is as wide as the window allows, and the
+     conversation inside it follows -- up to a point, because a line that runs
+     the full width of a big monitor loses the eye on the way back to the left
+     margin.
+
+     It used to be a flat 780px, picked against a 1184px sheet and never
+     revisited. On anything bigger that stopped being a reading measure and
+     became a bug: at 2000px it left ~600px of empty page down each side while
+     a table inside it scrolled sideways with its first column cut off. The
+     width was there; the conversation was not allowed to use it.
+
+     So it scales. The floor is the old measure, so nothing narrows; the
+     ceiling is where lines stop being readable however much room is left. vw
+     rather than a percentage because the same number has to reach the turns,
+     the composer and the openers, which do not share a parent -- it
+     overestimates by the pinned rail's width, which only matters far below
+     the ceiling, where `width: 100%` is the real constraint anyway. */
+  --read-w: clamp(780px, 76vw, 1500px);
 
   /* How much of the composer is on screen once it has withdrawn, published by
      Composer.jsx. The thread keeps clear of this rather than of the whole box,

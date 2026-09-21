@@ -202,13 +202,21 @@ export function NavRail({
     ? forceOpen
     : pinned || hovered || focused || menuOpen || resizing;
 
+  // The toggle is inside the rail so that hovering it counts as hovering the
+  // rail -- but it must not count as focus *within* the panel. Clicking it to
+  // close the sidebar leaves it focused, and focus holds the panel open, so
+  // the one control that closes the rail was the one thing stopping it from
+  // closing. It is the handle, not the contents.
+  const holdsOpen = (el) =>
+    Boolean(el && node.current?.contains(el) && !el.closest(".rail-toggle"));
+
   // Focus moving between two children fires blur then focus, which would flap
   // the panel shut and open again. Asking where focus actually landed after
   // the browser has moved it is the cheap fix.
   const handleBlur = useCallback(() => {
     requestAnimationFrame(() => {
       const el = node.current;
-      if (el && !el.contains(document.activeElement)) setFocused(false);
+      if (el && !holdsOpen(document.activeElement)) setFocused(false);
     });
   }, []);
 
@@ -246,7 +254,9 @@ export function NavRail({
       aria-hidden={narrow && !open ? "true" : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
+      onFocus={(event) => {
+        if (holdsOpen(event.target)) setFocused(true);
+      }}
       onBlur={handleBlur}
     >
       {/* The reveal. Unpinned, the rail takes no width at all, so there is
@@ -279,20 +289,7 @@ export function NavRail({
           <span className="navrail-wordmark" aria-hidden="true">
             Bom
           </span>
-          <button
-            type="button"
-            className="navrail-pin"
-            aria-pressed={pinned}
-            aria-label={pinned ? "Unpin sidebar" : "Keep sidebar open"}
-            title={pinned ? "Unpin — open on hover" : "Keep open"}
-            // Shut, the pin is inert and out of the tab order, so tabbing into
-            // a closed rail lands on Chat rather than on a control nobody can
-            // see. It becomes reachable as soon as focus opens the panel.
-            tabIndex={open ? 0 : -1}
-            onClick={onTogglePin}
-          >
-            <Icon name={pinned ? "pinned" : "pin"} />
-          </button>
+
         </div>
 
         <div className="navrail-dest">
@@ -419,6 +416,35 @@ export function NavRail({
           </span>
         </div>
       </div>
+
+      {/* The sidebar's own control, and the only one: this used to be a pin
+          inside the header doing the same job from one fixed spot.
+          *
+          * It lives at the sheet's top left while the sidebar is shut and
+          * travels to the header when it opens, so the control is always
+          * where the sidebar's edge is rather than parked over whichever
+          * screen happens to be underneath.
+          *
+          * Inside .navrail on purpose. The rail opens on hover, and a button
+          * that sits over the open panel without being part of it would close
+          * the very thing it is standing on the moment the pointer reached
+          * it. As a descendant, hovering it is hovering the rail.
+          *
+          * Outside .navrail-inner, which clips its overflow -- the same reason
+          * ModelMenu is out here. */}
+      {!narrow ? (
+        <button
+          type="button"
+          className="rail-toggle"
+          data-open={open ? "" : undefined}
+          aria-pressed={pinned}
+          aria-label={pinned ? "Close sidebar" : "Open sidebar"}
+          title={pinned ? "Close sidebar" : "Open sidebar"}
+          onClick={onTogglePin}
+        >
+          <Icon name="sidebar" filled={open} />
+        </button>
+      ) : null}
 
       {/* The right edge, as a drag handle. Only while the rail is open: shut,
           its width is the icons' width and there is nothing to choose. */}

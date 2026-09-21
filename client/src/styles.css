@@ -760,37 +760,6 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* The pin. Only reachable once the rail is open, which is the only time it
    means anything -- and it is why the rail cannot close on mouseleave while
    the pointer is still inside it. */
-.navrail-pin {
-  display: grid;
-  place-items: center;
-  /* Zero-width while shut, for the same reason as the status label below: at
-     opacity 0 it still claimed 26px, and with the gaps that made the top row
-     72px of content in a 56px box -- so centring pushed the mark out to x = 2
-     instead of leaving it on the rail's centre line. */
-  width: 0;
-  overflow: hidden;
-  /* The UA gives a button 1px 6px. Under border-box that is a 12px floor the
-     width cannot go below, which is why zeroing the width alone still left the
-     mark 6px off the rail's centre line. The box is a centred 26px grid; the
-     padding was never doing anything. */
-  padding: 0;
-  height: 26px;
-  border-radius: 8px;
-  flex: none;
-  color: var(--text-faint);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.14s ease, background 0.16s ease, color 0.16s ease;
-}
-.navrail[data-open] .navrail-pin {
-  opacity: 1;
-  width: 26px;
-  pointer-events: auto;
-  transition-delay: 0.06s;
-}
-.navrail-pin:hover { background: rgba(20, 23, 29, 0.08); color: var(--ink); }
-.navrail-pin[aria-pressed="true"] { color: var(--accent); }
-.navrail-pin svg { width: 15px; height: 15px; }
 
 /* Destinations. */
 .navrail-dest {
@@ -2013,29 +1982,60 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   .design-source textarea { min-height: 300px; }
 }
 
-/* The sidebar's whole handle on the narrow layout: one button, top left.
+/* The sidebar's control, at both of the places it lives.
  *
- * Above the panel it opens (z-index over .navrail) rather than beside it, so
- * the same press closes it again -- which is the point of it being one button
- * rather than an open here and a close in there. Rendered only at that width;
- * on a laptop the rail has its own edge. */
+ * Flat, and deliberately so. It stands on four different surfaces -- the
+ * sheet, a tinted page header, the rail's grey -- and a button carrying its
+ * own card would be a card floating on each of them in turn. No background
+ * and no border, so it reads as drawn on whatever is underneath; only the
+ * hover gives it a shape, and that borrows the ink rather than the paper.
+ *
+ * Positioned against .navrail, which is at x=0 whatever its width, so the two
+ * places it can be are two pairs of numbers rather than two layouts. */
 .rail-toggle {
   position: absolute;
-  top: 13px;
-  left: 13px;
   z-index: 60;
+  top: 14px;
+  left: 14px;
   width: 36px;
   height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  border: 1px solid var(--line-soft);
-  background: var(--surface);
-  color: var(--ink);
-  transition: border-color 0.16s ease, background 0.16s ease;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  color: var(--text-dim);
+  transition:
+    top var(--rail-motion),
+    left var(--rail-motion),
+    color 0.16s ease,
+    background 0.16s ease;
 }
-.rail-toggle:hover { border-color: var(--line-firm); }
-.rail-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Open, it sits where the pin used to: on the header's line, at the rail's
+   inner edge. The rail is 252px wide and the panel's own padding puts its
+   controls 14px off that edge. */
+.rail-toggle[data-open] {
+  top: 25px;
+  left: 202px;
+  color: var(--ink);
+}
+.rail-toggle:hover { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+
+/* The corner the toggle stands in, while it is standing there. Shut, it is
+   over the sheet and the sheet's own first line has to start clear of it;
+   open, it has moved into the rail and the sheet gets its margin back.
+   Without this the chat title began at x=34 under a button spanning 14-50. */
+.app:not([data-rail="pinned"]) .topbar,
+.app:not([data-rail="pinned"]) .page-head {
+  padding-left: 58px;
+}
+.rail-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ground), 0 0 0 4px var(--accent);
+}
+/* The filled panel is the state. It is a child of the same glyph rather than a
+   second icon, so the outline it fills can never be a different shape. */
+.icon-solid { fill: currentColor; stroke: none; }
 
 /* -- top bar ---------------------------------------------------------------- */
 
@@ -3767,10 +3767,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   /* Less shell showing on a phone -- the framing is a nicety, the reading
      width is not. */
   .screen { margin: 6px; border-radius: 18px; }
-  /* Pinning means nothing when the rail is a panel over the sheet, so the pin
-     is hidden here. The stored preference is left alone -- it comes back on
-     the laptop. */
-  .navrail-pin { display: none; }
   .app[data-rail="pinned"] { --rail-w: 0px; }
 
   .popover { width: 210px; }

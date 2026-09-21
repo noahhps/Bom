@@ -69,6 +69,12 @@ const PATHS = {
     "M5.5 4.5h13a2 2 0 012 2v11a2 2 0 01-2 2h-13a2 2 0 01-2-2v-11a2 2 0 012-2z" +
     "M6.5 14L9.09 11.41Q10.5 10 11.91 11.41" +
     "L12.59 12.09Q14 13.5 15.41 12.09L17.5 10",
+  // The sidebar: a panel with a column down its left. Outlined when the
+  // sidebar is shut; the column fills in when it is open, which is the whole
+  // state the control has to report and needs no second glyph to say it.
+  sidebar:
+    "M5.5 5.5h13a2 2 0 012 2v9a2 2 0 01-2 2h-13a2 2 0 01-2-2v-9a2 2 0 012-2z" +
+    "M9.5 5.5v13",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",
@@ -128,7 +134,15 @@ const FILES = {
   device_hub: "/device_hub.svg",
 };
 
-export function Icon({ name, badge }) {
+// The solid part of a glyph that has one, drawn under the stroked path and
+// only when the caller asks for it. Filling a shape this way rather than
+// keeping a second glyph means the outline and the fill can never drift apart.
+const SOLIDS = {
+  // The sidebar's left column, with the two corners it shares with the frame.
+  sidebar: "M5.5 5.5h4v13h-4a2 2 0 01-2-2v-9a2 2 0 012-2z",
+};
+
+export function Icon({ name, badge, filled }) {
   const file = FILES[name];
   const glyph = file ? (
     // The image is set as `mask-image` itself rather than handed to the
@@ -152,6 +166,7 @@ export function Icon({ name, badge }) {
     />
   ) : (
     <svg viewBox="0 0 24 24" aria-hidden="true">
+      {filled && SOLIDS[name] ? <path className="icon-solid" d={SOLIDS[name]} /> : null}
       <path d={PATHS[name]} />
     </svg>
   );

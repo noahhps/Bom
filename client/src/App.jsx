@@ -364,11 +364,11 @@ export default function App() {
           <button
             type="button"
             className="rail-toggle"
-            aria-label="Show sidebar"
+            aria-label="Open sidebar"
             aria-expanded={false}
             onClick={() => setSidebarOpen(true)}
           >
-            <Icon name="menu" />
+            <Icon name="sidebar" />
           </button>
         ) : null}
         {/* The conversation list lives inside the rail now -- it unfolds under

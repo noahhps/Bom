@@ -193,6 +193,28 @@ deleting the chat takes them with it, and they never leak into another one. The
 bytes are columns in the same SQLite file as everything else, so `VACUUM INTO`
 still copies the lot in one shot.
 
+### Why the icons are not on the custom-property path
+
+A file-backed glyph is a mask over `currentColor`, and the image used to reach
+it as a custom property -- `style={{"--mask": url}}` against a
+`mask: var(--mask)` rule. That quietly tied every icon in the app to every
+custom property above it. Writing one on `:root` invalidates inherited custom
+properties for the whole document, and the composer writes one as the pointer
+moves, to publish how much of itself is on screen. So each icon had its mask
+re-resolved on every mouse move, and a mask is a paint property holding an
+image. That is what made the icons flicker whenever anything moved.
+
+`mask-image` is set on the element directly now, with no `var()` in it, so a
+custom property changing anywhere cannot reach it. Measured with 300 masked
+icons and 300 root writes: about 1080ms of style work before, about 780ms
+after -- a bit over a quarter of it was icon masks being resolved again for
+nothing.
+
+The composer also quantises what it publishes and skips the write when it has
+not changed. A hand resting on a mouse never stops twitching; at three decimals
+each twitch was a fresh value and a style write. Sixty small movements used to
+cost sixty writes, and now cost none.
+
 ### When the model garbles a tool call
 
 A local model writing a long argument -- an HTML document, a search objective

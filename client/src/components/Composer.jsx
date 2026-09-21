@@ -305,8 +305,18 @@ export function Composer({
     // Where the box sits, and how much room the thread leaves for it, are the
     // same fact. Setting one without the other is what let them drift apart.
     // `measure` already runs inside a frame, so this costs no extra scheduling.
+    //
+    // Quantised to a hundredth, and skipped when that has not moved. A hand
+    // resting on a mouse never stops twitching, and at three decimals every
+    // one of those twitches was a new value -- a style write per frame, for a
+    // difference no eye can see. `publishPeek` rounds to whole pixels and
+    // guards its own write, so holding `--near` still here keeps both quiet.
+    let wrote = null;
     const set = (near) => {
-      node.style.setProperty("--near", near.toFixed(3));
+      const step = Math.round(near * 100) / 100;
+      if (step === wrote) return;
+      wrote = step;
+      node.style.setProperty("--near", step.toFixed(2));
       publishPeek(near);
     };
 

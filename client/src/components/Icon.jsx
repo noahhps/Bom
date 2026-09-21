@@ -128,7 +128,25 @@ const FILES = {
 export function Icon({ name, badge }) {
   const file = FILES[name];
   const glyph = file ? (
-    <span className="icon-mask" style={{ "--mask": `url("${file}")` }} aria-hidden="true" />
+    // The image is set as `mask-image` itself rather than handed to the
+    // stylesheet through a custom property.
+    //
+    // It used to be `style={{ "--mask": ... }}` against a `mask: var(--mask)`
+    // rule, which quietly tied every icon in the app to every custom property
+    // above it. Writing one on :root -- which the composer does as the pointer
+    // moves, to publish how much of itself is on screen -- invalidates
+    // inherited custom properties for the whole document, so each of these had
+    // its mask re-resolved on every mouse move. A mask is a paint property
+    // holding an image, and re-resolving a few dozen of them per frame is what
+    // made the icons flicker whenever anything moved.
+    //
+    // Set directly it is an ordinary declared value with no var() in it, so a
+    // custom property changing anywhere cannot touch it.
+    <span
+      className="icon-mask"
+      style={{ WebkitMaskImage: `url("${file}")`, maskImage: `url("${file}")` }}
+      aria-hidden="true"
+    />
   ) : (
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d={PATHS[name]} />

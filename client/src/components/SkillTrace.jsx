@@ -93,6 +93,9 @@ function Card({ skill }) {
 }
 
 export function SkillTrace({ skills }) {
+  // Before the early return: hooks cannot be called conditionally, and a turn
+  // goes from no skills to some while this component is mounted.
+  const [open, setOpen] = useState(true);
   if (!skills?.length) return null;
 
   // The one still waiting, rather than the last in the list. They are usually
@@ -100,17 +103,52 @@ export function SkillTrace({ skills }) {
   // last to be called can be the first to answer -- and naming a skill that
   // has already answered is worse than naming none.
   const running = skills.find((s) => s.result === undefined);
+  // Running wins over a collapsed trace. The running state is the whole
+  // reason this component exists -- folding it away would put a turn that is
+  // waiting on a slow skill back to looking exactly like a turn that hung.
+  const shown = open || Boolean(running);
+
+  const count = skills.length === 1 ? "1 skill" : `${skills.length} skills`;
+  // Which ones, when they are out of sight. "Used 3 skills" alone is a fact
+  // about the turn rather than about the work; the services are what someone
+  // scanning a finished conversation is actually looking for.
+  //
+  // A skill with no service of its own falls back to the bare word "Tool",
+  // which is worth less than nothing in a list of three -- so it gives its
+  // own name instead. On the card that name is already on screen beside the
+  // source; here it is all there is.
+  const named = [
+    ...new Set(
+      skills.map((s) => {
+        const widget = describeSkill(s);
+        return widget.source === "Tool" ? widget.name : widget.source;
+      }),
+    ),
+  ].join(", ");
 
   return (
-    <div className="skill-trace" data-live={running ? "" : undefined}>
-      <div className="skill-trace-label mi">
-        {running
-          ? `Using ${running.name}…`
-          : `Used ${skills.length === 1 ? "1 skill" : `${skills.length} skills`}`}
-      </div>
-      {skills.map((skill, index) => (
-        <Card key={`${skill.name}-${index}`} skill={skill} />
-      ))}
+    <div className="skill-trace" data-live={running ? "" : undefined} data-open={shown ? "" : undefined}>
+      {/* The label was the heading and is now the control, because it already
+          said the one thing a collapsed trace needs to say. A separate toggle
+          beside it would be a second thing to aim at for the same job. */}
+      <button
+        type="button"
+        className="skill-trace-label mi"
+        aria-expanded={shown}
+        // Nothing to fold away while a call is in flight, so it stops being a
+        // button rather than becoming one that does nothing.
+        disabled={Boolean(running)}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <Icon name="chevron" />
+        {running ? `Using ${running.name}…` : shown ? `Used ${count}` : `Used ${count} · ${named}`}
+      </button>
+
+      {shown
+        ? skills.map((skill, index) => (
+            <Card key={`${skill.name}-${index}`} skill={skill} />
+          ))
+        : null}
     </div>
   );
 }

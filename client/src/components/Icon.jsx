@@ -52,21 +52,23 @@ const PATHS = {
   spark: "M12 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6z",
   compass: "M12 3a9 9 0 100 18 9 9 0 000-18M15 9l-2 4-4 2 2-4z",
   bolt: "M13 3L5 13h6l-1 8 8-11h-6z",
-  // A canvas with two trails of paint laid across it.
+  // A canvas with one trail of paint zig-zagging across it.
   //
-  // The corners are rounded and the trails are curves rather than folded
-  // corners, because both of the hard-edged versions of this read as
-  // something else at 18px: a bare frame is a picture placeholder, and a
-  // single angular zig-zag is a chart line. Two soft passes across the middle
-  // are unmistakably paint, and nothing else in the set is a wave.
+  // Every run is exactly 45 degrees -- (4,-4), (3.5,3.5), (3.5,-3.5) -- and
+  // each turn is a quadratic that eats 2px of the run either side of the
+  // corner, which is what makes the trail read as painted rather than
+  // plotted. The rounding is close to its limit: much past 2px the straight
+  // runs disappear into each other and the whole thing flattens into a sine
+  // wave, losing the 45 degrees that make it a zig-zag.
   //
-  // Drawn with Q then T so the second half of each trail mirrors the first
-  // automatically -- that is what keeps them soft rather than kinked where
-  // the curves meet.
+  // Two other shapes were tried and are worse at 18px. A wave along a
+  // diagonal axis is a letter S, whatever its amplitude. A sharp-cornered
+  // zig-zag is a chart line. The swing is kept to y 10-14 so that, with a
+  // 1.6px stroke, neither the peaks nor the ends touch the frame.
   canvas:
     "M5.5 4.5h13a2 2 0 012 2v11a2 2 0 01-2 2h-13a2 2 0 01-2-2v-11a2 2 0 012-2z" +
-    "M6.5 12Q9 8 11.5 11T17 8.5" +
-    "M6.5 16.5Q9 12.5 11.5 15.5T17 13",
+    "M6.5 14L9.09 11.41Q10.5 10 11.91 11.41" +
+    "L12.59 12.09Q14 13.5 15.41 12.09L17.5 10",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",

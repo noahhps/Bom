@@ -1630,13 +1630,16 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   pointer-events: none;
   /* An explicit radius, not a percentage. A bare `circle` sizes itself to the
      farthest corner -- from the middle of the bottom edge that is about 38px
-     on a 34px button, so even a 72% stop landed well above the middle and lit
-     the whole control. 20px reaches just past halfway and stops, which is the
-     half-circle this is meant to be. */
+     on a 34px button, so even a 72% stop lit the whole control.
+
+     26px is set against what the glow actually covers rather than how far it
+     technically reaches: the outer third of a radial gradient is too faint to
+     read as lit, so the radius has to overshoot the target. This one puts the
+     visible edge about 60% of the way up the glyph. */
   background: radial-gradient(
-    circle 20px at 50% 100%,
+    circle 26px at 50% 100%,
     var(--accent-soft) 0%,
-    var(--accent-soft) 22%,
+    var(--accent-soft) 30%,
     transparent 100%
   );
   /* Grown from the bottom edge, not faded in place: the origin is the middle

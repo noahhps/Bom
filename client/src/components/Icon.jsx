@@ -52,20 +52,21 @@ const PATHS = {
   spark: "M12 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6z",
   compass: "M12 3a9 9 0 100 18 9 9 0 000-18M15 9l-2 4-4 2 2-4z",
   bolt: "M13 3L5 13h6l-1 8 8-11h-6z",
-  // A canvas with a brush laid across its bottom-left corner, pointing up into
-  // it. Distinct from `document`, which is a page with a turned corner.
+  // A canvas with two trails of paint laid across it.
   //
-  // The proportions are the whole of why it reads. A small frame with a
-  // diagonal stick beside it is a magnifying glass -- that is the silhouette,
-  // and every early draft of this landed on it. Two things break that read: a
-  // frame large enough to be the subject rather than a lens, and a brush that
-  // crosses into it, which a magnifier's handle never does. The head is a
-  // parallelogram on the same 45 degrees as the handle, so the whole brush is
-  // one axis and survives being drawn 18px wide.
+  // The corners are rounded and the trails are curves rather than folded
+  // corners, because both of the hard-edged versions of this read as
+  // something else at 18px: a bare frame is a picture placeholder, and a
+  // single angular zig-zag is a chart line. Two soft passes across the middle
+  // are unmistakably paint, and nothing else in the set is a wave.
+  //
+  // Drawn with Q then T so the second half of each trail mirrors the first
+  // automatically -- that is what keeps them soft rather than kinked where
+  // the curves meet.
   canvas:
-    "M5 3h16v12H5z" +
-    "M3.67 20.33L6.5 17.5" +
-    "M5.65 16.65L7.35 18.35L10.6 15.1L8.9 13.4Z",
+    "M5.5 4.5h13a2 2 0 012 2v11a2 2 0 01-2 2h-13a2 2 0 01-2-2v-11a2 2 0 012-2z" +
+    "M6.5 12Q9 8 11.5 11T17 8.5" +
+    "M6.5 16.5Q9 12.5 11.5 15.5T17 13",
   // A down chevron for a disclosure. Rotated in CSS to point right when its
   // section is folded shut.
   chevron: "M6 9l6 6 6-6",

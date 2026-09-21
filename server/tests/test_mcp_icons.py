@@ -33,7 +33,7 @@ def client(tmp_path: Path) -> TestClient:
 
 
 def test_only_public_hosts_are_fetched():
-    """The one place Courier fetches a URL a reader typed, so it stays off the LAN."""
+    """The one place Bom fetches a URL a reader typed, so it stays off the LAN."""
     assert is_public_host("github.com")
     for private in ("127.0.0.1", "localhost", "192.168.1.1", "10.0.0.5", "169.254.1.1"):
         assert not is_public_host(private), private

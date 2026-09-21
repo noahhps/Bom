@@ -27,7 +27,9 @@ const LABEL: &str = "quickview";
 /// to exist before there is a screen to configure it from, and this keeps the
 /// choice in one place until that screen lands.
 pub fn shortcut_spec() -> String {
-    std::env::var("COURIER_QUICKVIEW_SHORTCUT").unwrap_or_else(|_| DEFAULT_SHORTCUT.into())
+    std::env::var("BOM_QUICKVIEW_SHORTCUT")
+        .or_else(|_| std::env::var("COURIER_QUICKVIEW_SHORTCUT"))
+        .unwrap_or_else(|_| DEFAULT_SHORTCUT.into())
 }
 
 /// Frost the window behind the page.
@@ -133,7 +135,8 @@ pub fn register(app: &AppHandle) -> Option<String> {
                  [quickview] on macOS Ctrl+Space is the system shortcut for \
                  'Select the previous input source'. Either turn that off in \
                  System Settings > Keyboard > Keyboard Shortcuts > Input Sources, \
-                 or set COURIER_QUICKVIEW_SHORTCUT to something else."
+                 or set BOM_QUICKVIEW_SHORTCUT to something else (the legacy \
+                 COURIER_QUICKVIEW_SHORTCUT name is still accepted)."
             );
             None
         }

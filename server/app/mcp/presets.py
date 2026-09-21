@@ -241,7 +241,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "auto_approve": ["browser_snapshot", "browser_navigate"],
         "notes": (
             "Runs on the server, not on your phone -- it drives a browser on the "
-            "machine Courier is installed on. First run downloads a browser engine."
+            "machine Bom is installed on. First run downloads a browser engine."
         ),
     },
     # -- Local to the server -------------------------------------------------
@@ -249,7 +249,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "name": "filesystem",
         "description": (
             "Read, write and search files in one directory on the machine running "
-            "Courier. Nothing outside the directory you name is reachable."
+            "Bom. Nothing outside the directory you name is reachable."
         ),
         "transport": "stdio",
         "command": "npx",
@@ -285,7 +285,7 @@ PRESETS: dict[str, dict[str, Any]] = {
     },
     # -- The escape hatch ----------------------------------------------------
     #
-    # Courier speaks no OAuth, so the many hosted servers that require it --
+    # Bom speaks no OAuth, so the many hosted servers that require it --
     # Notion, Linear, Slack, Atlassian -- cannot be reached directly. mcp-remote
     # runs the browser half of that dance locally and presents the result as an
     # ordinary stdio server, which is the one thing that makes them reachable
@@ -310,7 +310,7 @@ PRESETS: dict[str, dict[str, Any]] = {
             }
         ],
         "notes": (
-            "First run opens a browser on the machine running Courier to complete "
+            "First run opens a browser on the machine running Bom to complete "
             "the OAuth grant, then caches it under ~/.mcp-auth. Rename the server "
             "afterwards so several bridges can coexist."
         ),

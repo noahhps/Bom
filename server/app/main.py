@@ -136,7 +136,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # One or the other, never both: they answer to the same three names, and a
     # model offered two `add_event`s would be choosing between a private table
     # and the user's real calendar without being told which is which. Where
-    # EventKit exists the real calendar wins, because a calendar only Courier
+    # EventKit exists the real calendar wins, because a calendar only Bom
     # can see is one it will be confidently wrong about.
     #
     # The private table stays as the fallback for Windows and Linux, and its
@@ -152,7 +152,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         registry.register(FindEvents(store))
 
     # The photo library. No private fallback exists or should: there is no
-    # useful sense in which Courier could keep its own photos.
+    # useful sense in which Bom could keep its own photos.
     if device_photos_available():
         registry.register(ListPhotos())
         registry.register(ListAlbums())
@@ -237,7 +237,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         one thing SIGKILL cannot dodge: when the parent dies the kernel hands
         its children to init, and getppid() changes to 1.
         """
-        if os.environ.get("COURIER_EXIT_WITH_PARENT") != "1":
+        if (
+            os.environ.get("BOM_EXIT_WITH_PARENT") != "1"
+            and os.environ.get("COURIER_EXIT_WITH_PARENT") != "1"
+        ):
             return
         started_under = os.getppid()
         while True:
@@ -342,7 +345,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             flow.key = ""
         return _signin_page(
             "OpenRouter connected",
-            "You can close this tab and go back to Courier.",
+            "You can close this tab and go back to Bom.",
             ok=True,
         )
 

@@ -276,7 +276,7 @@ async def _route(provider):
 # A model given no steer reaches for the placeholder services it learned, and
 # those are the least dependable addresses on the web -- retired, down for
 # weeks, or wanting a photo id it invented. The page then renders as a finished
-# layout with holes in it, which reads as Courier losing the pictures rather
+# layout with holes in it, which reads as Bom losing the pictures rather
 # than the model naming ones that never existed.
 
 
@@ -388,7 +388,7 @@ def test_the_model_is_told_to_draw_images_rather_than_link_them(store: Store):
 
 # -- a tool call the backend could not read -----------------------------------
 #
-# Ollama parses the tool call before Courier ever sees it, and a small model
+# Ollama parses the tool call before Bom ever sees it, and a small model
 # writing a long argument -- an HTML document, quotes and newlines throughout
 # -- produces something that is nearly JSON. Ollama reports that in the stream
 # with a 200 and its own wording, quoting the whole unparsed payload. Left

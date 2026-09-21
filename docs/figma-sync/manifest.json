@@ -1,6 +1,6 @@
 {
-  "name": "Courier UI Sync",
-  "id": "courier-ui-sync-local",
+  "name": "Bom UI Sync",
+  "id": "bom-ui-sync-local",
   "api": "1.0.0",
   "main": "code.js",
   "editorType": ["figma"],

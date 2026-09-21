@@ -1,6 +1,6 @@
 {
-  "name": "Courier Design System",
-  "id": "courier-design-system-local",
+  "name": "Bom Design System",
+  "id": "bom-design-system-local",
   "api": "1.0.0",
   "main": "code.js",
   "editorType": ["figma"],

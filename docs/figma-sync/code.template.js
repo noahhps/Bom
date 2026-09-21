@@ -1,12 +1,12 @@
-/* Courier UI Sync -- brings the "Courier" page of Design Mockups in line with
+/* Bom UI Sync -- brings the "Bom" page of Design Mockups in line with
  * what client/src actually renders (Sep 2026).
  *
  * Run from Figma desktop: Plugins > Development > Import plugin from manifest,
- * pick docs/figma-sync/manifest.json, then run "Courier UI Sync" with the
+ * pick docs/figma-sync/manifest.json, then run "Bom UI Sync" with the
  * Design Mockups file open.
  *
  * Non-destructive. It
- *   - retypes the Courier/* text styles to DM Mono (the app is one mono family),
+ *   - retypes the Bom/* text styles to DM Mono (the app is one mono family),
  *   - updates the few variables that drifted and adds the new radii,
  *   - labels the old Screens section, Calendar, Tools and the old rail as legacy,
  *   - builds a fresh "Current UI" section: NavRail/Pinned, Composer/Main and
@@ -14,7 +14,7 @@
  * Re-running replaces only the "Current UI" section it built last time.
  *
  * code.js is generated from code.template.js by build.sh, which inlines the
- * brush-stroke mark from client/public/courier-mark.png.
+ * brush-stroke mark from client/public/bom-mark.png.
  */
 
 const MARK_B64 = "__MARK_B64__";
@@ -302,7 +302,7 @@ function buildRail(markHash) {
   add(rail, top, { fillW: true });
   const slot = frame("mark", { w: 24, h: 24 });
   const mark = figma.createRectangle();
-  mark.name = "courier-mark";
+  mark.name = "bom-mark";
   mark.resize(9.4, 30);
   mark.fills = markHash ? [{ type: "IMAGE", imageHash: markHash, scaleMode: "FILL" }] : [solid("#2c4fd6")];
   slot.appendChild(mark);
@@ -765,7 +765,7 @@ async function retypeStyles() {
   const styles = await figma.getLocalTextStylesAsync();
   const changed = [];
   for (const s of styles) {
-    if (!s.name.startsWith("Courier/")) continue;
+    if (!s.name.startsWith("Bom/")) continue;
     const heavy = /Bold|Medium|Semi/.test(s.fontName.style);
     s.fontName = { family: "DM Mono", style: heavy ? "Medium" : "Regular" };
     if (!s.name.includes("label/machine")) s.letterSpacing = { unit: "PERCENT", value: 0 };
@@ -776,8 +776,8 @@ async function retypeStyles() {
 
 async function syncVariables() {
   const cols = await figma.variables.getLocalVariableCollectionsAsync();
-  const col = cols.find((c) => c.name === "Courier");
-  if (!col) return "no Courier collection";
+  const col = cols.find((c) => c.name === "Bom");
+  if (!col) return "no Bom collection";
   const mode = col.modes[0].modeId;
   const vars = [];
   for (const id of col.variableIds) vars.push(await figma.variables.getVariableByIdAsync(id));
@@ -861,7 +861,7 @@ async function main() {
   };
   const caption = (str, x, y, size = 12.5, color = C.dim) => place(text(str, { size, color }), x, y);
 
-  caption("Courier — current UI", 80, 56, 27, C.ink);
+  caption("Bom — current UI", 80, 56, 27, C.ink);
   caption("Synced from client/src on 12 Sep 2026. DM Mono everywhere; accent is per conversation; Calendar and Tools are gone.", 80, 100);
 
   // Components.
@@ -962,9 +962,9 @@ async function main() {
   );
 
   figma.viewport.scrollAndZoomIntoView([section]);
-  return `Courier UI synced: ${styles.length} text styles retyped, variables ${vars}, section “${SECTION_NAME}” built.`;
+  return `Bom UI synced: ${styles.length} text styles retyped, variables ${vars}, section “${SECTION_NAME}” built.`;
 }
 
 main()
   .then((message) => figma.closePlugin(message))
-  .catch((error) => figma.closePlugin("Courier UI Sync failed: " + (error && error.message ? error.message : error)));
+  .catch((error) => figma.closePlugin("Bom UI Sync failed: " + (error && error.message ? error.message : error)));

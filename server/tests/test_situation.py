@@ -183,7 +183,7 @@ def _orchestrator(store: Store) -> Orchestrator:
         "MockSettings",
         (),
         {
-            "system_preamble": "You are Courier.",
+            "system_preamble": "You are Bom.",
             "context_tokens": 8192,
             "reply_tokens": 1024,
             "memory_max_facts": 20,
@@ -200,14 +200,14 @@ def test_prompt_carries_the_situation(store: Store):
         )
     )
     prompt, _ = _orchestrator(store).build_system_prompt(session["id"])
-    assert prompt.startswith("You are Courier.")
+    assert prompt.startswith("You are Bom.")
     assert "London, United Kingdom" in prompt
 
 
 def test_prompt_says_nothing_when_the_client_said_nothing(store: Store):
     session = store.create_session()
     prompt, _ = _orchestrator(store).build_system_prompt(session["id"])
-    assert prompt == "You are Courier."
+    assert prompt == "You are Bom."
 
 
 def test_situation_sits_between_the_preamble_and_the_facts(store: Store):
@@ -217,7 +217,7 @@ def test_situation_sits_between_the_preamble_and_the_facts(store: Store):
 
     prompt, fact_ids = _orchestrator(store).build_system_prompt(session["id"])
     assert fact_ids
-    assert prompt.index("You are Courier.") < prompt.index("Europe/London")
+    assert prompt.index("You are Bom.") < prompt.index("Europe/London")
     assert prompt.index("Europe/London") < prompt.index("Bess")
 
 

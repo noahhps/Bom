@@ -1,4 +1,4 @@
-"""MCP Skill implementation wrapping remote or subprocess MCP tools into Courier's Skill system."""
+"""MCP Skill implementation wrapping remote or subprocess MCP tools into Bom's Skill system."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def coerce_arguments(args: dict[str, Any], schema: dict[str, Any]) -> dict[str, 
 
 
 class MCPSkill(Skill):
-    """Bridge exposing an MCP tool as a native Courier Skill."""
+    """Bridge exposing an MCP tool as a native Bom Skill."""
 
     def __init__(
         self,

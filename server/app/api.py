@@ -1282,7 +1282,7 @@ def build_router(
     # An MCP server is recognised by its logo far faster than by its name, so
     # each one is given the service's own -- fetched once from the service's
     # site, cached, and overridable by upload. `icons.py` explains why this is
-    # the only place Courier fetches a URL a reader typed, and what it refuses.
+    # the only place Bom fetches a URL a reader typed, and what it refuses.
 
     def _icon_keys(server) -> tuple[str, str | None]:
         """(uploaded key, site key). The upload wins where it exists."""

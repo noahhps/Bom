@@ -1,7 +1,7 @@
 """The user's real calendar, through EventKit.
 
 This replaces a private table with the thing the person actually looks at. A
-calendar only Courier can see is worse than no calendar skill at all: it
+calendar only Bom can see is worse than no calendar skill at all: it
 answers confidently about a week it does not know, and the user's real
 appointments are in Calendar.app, Google or iCloud regardless.
 
@@ -9,7 +9,7 @@ Access is gated by TCC, which is the operating system asking the user rather
 than us asking. Two consequences shape this module:
 
 * The prompt is raised by the *responsible process*. Launched from the Tauri
-  bundle that is Courier.app, and the strings the prompt shows come from that
+  bundle that is Bom.app, and the strings the prompt shows come from that
   bundle's Info.plist -- which is why `NSCalendarsFullAccessUsageDescription`
   has to be there and not here.
 * A denial is permanent until the user changes it in System Settings. Nothing

@@ -113,7 +113,7 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit Bom", true, Some("Cmd+Q"))?;
             let menu = Menu::with_items(app, &[&open, &quick, &quit])?;
 
-            TrayIconBuilder::with_id("courier-tray")
+            TrayIconBuilder::with_id("bom-tray")
                 // The app icon, for now. Next event and reachability replace
                 // this once there is a server to ask.
                 .icon(app.default_window_icon().unwrap().clone())

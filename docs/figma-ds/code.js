@@ -169,7 +169,7 @@ function rect(name, w, h, fillVar) {
 
 function markRect(w, h) {
   const r = figma.createRectangle();
-  r.name = "courier-mark";
+  r.name = "bom-mark";
   r.resize(w, h);
   r.fills = MARK ? [{ type: "IMAGE", imageHash: MARK, scaleMode: "FIT" }] : [rawSolid("#2c4fd6")];
   return r;
@@ -913,7 +913,7 @@ async function buildCover(page, report) {
   cover.appendChild(mark);
   mark.x = 120;
   mark.y = 250;
-  const title = await txt("Courier", "Display/Cover", "text/primary");
+  const title = await txt("Bom", "Display/Cover", "text/primary");
   cover.appendChild(title);
   title.x = 120;
   title.y = 390;
@@ -2330,7 +2330,7 @@ function newPage(name, fallback) {
 async function main() {
   const existing = await figma.variables.getLocalVariableCollectionsAsync();
   if (existing.length || figma.root.children.length > 1 || figma.currentPage.children.length) {
-    return "Courier Design System: run this in a new, empty design file. Nothing was changed.";
+    return "Bom Design System: run this in a new, empty design file. Nothing was changed.";
   }
 
   await Promise.all(["Regular", "Medium", "Italic"].map((style) => figma.loadFontAsync({ family: "DM Mono", style })));
@@ -2366,7 +2366,7 @@ async function main() {
   const singles = Object.values(REG).filter((r) => r.node.type === "COMPONENT").length;
   const vars = Object.keys(V).filter((k) => typeof V[k] === "object").length;
   return (
-    `Courier Design System built: ${vars} variables in 4 collections (${MODES.length} accent modes), ` +
+    `Bom Design System built: ${vars} variables in 4 collections (${MODES.length} accent modes), ` +
     `${Object.keys(TS).length} text styles, ${Object.keys(ES).length} effect styles, ` +
     `${sets.length} component sets (${variants} variants) + ${singles} components.` +
     (NOTES.length ? ` ${NOTES.length} note(s) on the Cover.` : "")
@@ -2377,5 +2377,5 @@ main()
   .then((message) => figma.closePlugin(message))
   .catch((error) => {
     console.error(error);
-    figma.closePlugin("Courier Design System failed: " + (error && error.message ? error.message : error));
+    figma.closePlugin("Bom Design System failed: " + (error && error.message ? error.message : error));
   });

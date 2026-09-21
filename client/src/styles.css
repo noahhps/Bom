@@ -1150,7 +1150,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    so they read as two settings on the thread rather than as two form controls
    dropped into the header. The native select chrome is taken off and the
    shell's own chevron drawn in its place -- a platform dropdown arrow is the
-   one thing in this bar that would not be Courier's. */
+   one thing in this bar that would not be Bom's. */
 .topbar-project {
   display: inline-flex;
   align-items: center;

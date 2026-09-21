@@ -4,7 +4,7 @@ The format is a de facto standard rather than a specified one -- it grew out of
 Claude Desktop's config file and everything else copied it -- so this is
 deliberately forgiving about shape and strict about content. It accepts the
 whole file, the bare mapping, and the several spellings of "this one is over
-HTTP" that different tools emit, then produces something Courier's own store
+HTTP" that different tools emit, then produces something Bom's own store
 can take.
 
 What it will not do is invent a transport. A server that names neither a
@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 # server the edit form would refuse to save.
 _NAME = re.compile(r"^[\w .-]{1,100}$")
 
-# What various tools write to mean "not stdio". Courier stores "sse" only for
+# What various tools write to mean "not stdio". Bom stores "sse" only for
 # the 2024-11-05 shape; everything else is Streamable HTTP.
 _HTTP_KINDS = {"http", "streamable-http", "streamablehttp", "streamable_http"}
 _SSE_KINDS = {"sse"}

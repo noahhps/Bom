@@ -41,7 +41,7 @@ def _orchestrator(store: Store, registry: Registry) -> Orchestrator:
         "S",
         (),
         {
-            "system_preamble": "You are Courier.",
+            "system_preamble": "You are Bom.",
             "context_tokens": 8192,
             "reply_tokens": 1024,
             "ollama_think": "medium",
@@ -102,7 +102,7 @@ def test_agent_instructions_go_into_the_system_prompt(store: Store):
     store.set_session_agent(sid, agent.id)
 
     prompt_after, _ = orch.build_system_prompt(sid)
-    assert prompt_after.startswith("You are Courier.")
+    assert prompt_after.startswith("You are Bom.")
     assert "Cite every claim." in prompt_after
 
 

@@ -111,7 +111,7 @@ class MCPManager:
         init_params = {
             "protocolVersion": PREFERRED_PROTOCOL_VERSION,
             "capabilities": {},
-            "clientInfo": {"name": "Courier", "version": "0.1.0"},
+            "clientInfo": {"name": "Bom", "version": "0.1.0"},
         }
         init_res = await transport.send_request("initialize", init_params, timeout=20.0)
         await transport.send_notification("notifications/initialized")

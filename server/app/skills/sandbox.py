@@ -1,6 +1,6 @@
 """A local computer, as two skills: run a shell command, run Python.
 
-This is the most powerful thing Courier hands the model and the most dangerous,
+This is the most powerful thing Bom hands the model and the most dangerous,
 so three things are true of it by construction:
 
 * it is **off** unless `SANDBOX_ENABLED` is set -- an unconfigured capability

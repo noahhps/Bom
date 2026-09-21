@@ -1,16 +1,16 @@
 # The process and my encounters while building
 
 ## The Engineering
-Courier was initially meant to be a simple chat interface designed to replace Ollama.
+Bom was initially meant to be a simple chat interface designed to replace Ollama.
 I resented Ollama's design due to how stale and uninspired it felt (not to shame it, considering it is an essential part of this project).
 I mostly wanted an interface that allowed me the freedom to interact with the model in the ways I needed it to while also allowing me the ability to customize it how I wanted it.
 
-That's how I landed on the skill, memory, project, and calendar system that defines Courier today.
+That's how I landed on the skill, memory, project, and calendar system that defines Bom today.
 
 ### Skills
 Skills were mostly a byproduct of the memory system that I was initially building, as memory was half a skill in itself while also being a layer of the harness that was built around Ollama.
 Ollama itself lacked a memory layer in its client, while other clients that allowed Ollama's API injection took too much memory (Hermes and its use of Electron) or were too clunky to actually use.
-And speaking of Hermes, it's the single reason why I decided to use a web-based platform for Courier; no hate to Hermes, a lot of the UI/UX was actually inspired by their really awesome client (I adore the design they use at Nous Research for Hermes and just wish it wasn't built on Electron or as a CLI application).
+And speaking of Hermes, it's the single reason why I decided to use a web-based platform for Bom; no hate to Hermes, a lot of the UI/UX was actually inspired by their really awesome client (I adore the design they use at Nous Research for Hermes and just wish it wasn't built on Electron or as a CLI application).
 I believe that LLMs weren't and aren't meant to be interacted with through a CLI, and that an actually clickable UI is the future for human-AI interaction; another reason why I decided to use an actual UI.
 
 ### Memory
@@ -33,7 +33,7 @@ Although context may become an issue for some conversations, context should not 
 That's why the memory system currently omits thinking and focuses on actual conversation between the user and model, even as chat history saves thinking.
 
 ## The Design
-While building Courier, I iterated through a variety of designs with Claude.
+While building Bom, I iterated through a variety of designs with Claude.
 I was initially inspired by video games such as Marathon and the design language they employed throughout the game: a very corporate, near-cyberpunk feel which hovered around the struggle between absolute control and freedom/liberation.
 
 I wanted to design a harness which allowed the user absolute control while also giving them the freedom to work with an LLM however they wanted.

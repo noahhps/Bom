@@ -177,7 +177,7 @@ async function buildCover(page, report) {
   cover.appendChild(mark);
   mark.x = 120;
   mark.y = 250;
-  const title = await txt("Courier", "Display/Cover", "text/primary");
+  const title = await txt("Bom", "Display/Cover", "text/primary");
   cover.appendChild(title);
   title.x = 120;
   title.y = 390;

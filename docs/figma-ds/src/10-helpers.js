@@ -164,7 +164,7 @@ function rect(name, w, h, fillVar) {
 
 function markRect(w, h) {
   const r = figma.createRectangle();
-  r.name = "courier-mark";
+  r.name = "bom-mark";
   r.resize(w, h);
   r.fills = MARK ? [{ type: "IMAGE", imageHash: MARK, scaleMode: "FIT" }] : [rawSolid("#2c4fd6")];
   return r;

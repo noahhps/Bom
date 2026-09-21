@@ -1,6 +1,6 @@
 # UI / UX consistency
 
-Courier's client is six surfaces — the chat thread, QuickView, the four
+Bom's client is six surfaces — the chat thread, QuickView, the four
 management screens (Settings, Memory, Skills, Projects), the sidebar, and the
 token gate — drawn over one stylesheet and one token set. Most of it already
 reads as one product. This document is about the places where it does not, why
@@ -135,10 +135,10 @@ engineering item here and can be deferred behind the token work.
 ### 6. The product names itself two things
 
 The sidebar wordmark and the token gate both say **"Assistant"**; QuickView
-says **"Courier"**; the empty chat says **"What are we working on?"**. No screen
+says **"Bom"**; the empty chat says **"What are we working on?"**. No screen
 agrees on the product's name.
 
-**Remedy:** one name — **Courier** — everywhere. `components/NavRail.jsx` and
+**Remedy:** one name — **Bom** — everywhere. `components/NavRail.jsx` and
 `components/TokenGate.jsx` are the two that say "Assistant".
 
 ### 7. Voice drifts by screen
@@ -188,11 +188,11 @@ says it "runs on one accent", so the reduction is the honest option.
   surface" block in `client/src/styles.css`.
 
 - **The mark is now "the agent's flower", drawn crisp.** The old brush-stroke
-  `courier-mark.png` (a 161×512 raster that blurred when scaled) has been
+  `bom-mark.png` (a 161×512 raster that blurred when scaled) has been
   replaced across the app by `components/AgentFlower.jsx`: an eight-petal flower
   with a face, built from the accent tokens so it re-themes with the
   conversation, animated as a bud that blooms while a turn is streaming and
-  folds back up after. Its static open form, `client/public/courier-flower.svg`,
+  folds back up after. Its static open form, `client/public/bom-flower.svg`,
   is the source for the app and platform icons. This is a real win against
   findings 1 and 9 — the mark is now vector and token-driven rather than a
   fixed raster.
@@ -244,7 +244,7 @@ the stylesheet obey them. A proposed starting set, for `:root` and a short
   in-context titles `400`.
 - **One typeface.** `--font-mono`, defined once and shared — including by
   QuickView, via a token scope rather than a duplicate.
-- **One name.** Courier.
+- **One name.** Bom.
 - **Voice.** Warm first-person for assistant-owned content; neutral for
   device/configuration screens.
 

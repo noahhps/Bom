@@ -1,6 +1,6 @@
 """Where and when the user is, as reported by their own device.
 
-The server is not the user. Courier is meant to run on the machine with the
+The server is not the user. Bom is meant to run on the machine with the
 GPU and be reached from a phone in another room -- or another country -- so the
 server's clock and the server's timezone answer a question nobody asked. The
 only honest source for "what time is it for you" is the browser making the

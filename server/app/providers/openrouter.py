@@ -64,8 +64,8 @@ class OpenRouterProvider:
         *,
         base_url: str = DEFAULT_URL,
         max_tokens: int | None = None,
-        referer: str = "https://github.com/noahhps/Courier",
-        title: str = "Courier",
+        referer: str = "https://github.com/noahhps/Bom",
+        title: str = "Bom",
     ) -> None:
         self.name = "openrouter"
         self.model = model or DEFAULT_MODEL
@@ -74,7 +74,7 @@ class OpenRouterProvider:
         self.max_tokens = max_tokens
         # Attribution headers. Optional, and worth sending: they are what puts
         # this app's name on the OpenRouter activity page, so a bill can be
-        # read back as "Courier did this" rather than as an anonymous total.
+        # read back as "Bom did this" rather than as an anonymous total.
         self._attribution = {"HTTP-Referer": referer, "X-Title": title}
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=_TIMEOUT)
         self._catalogue: list[dict] = []

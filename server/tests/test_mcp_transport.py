@@ -1,7 +1,7 @@
 """Tests for the HTTP transports -- Streamable HTTP in particular.
 
 The Figma Dev Mode server is a Streamable HTTP server, so these cover the three
-things that stopped Courier talking to it: the Accept header, the session id,
+things that stopped Bom talking to it: the Accept header, the session id,
 and reading a JSON-RPC response out of an SSE-formatted POST body.
 """
 

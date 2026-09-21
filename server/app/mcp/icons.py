@@ -5,7 +5,7 @@ Figma one" -- and a row of identical generic glyphs makes a list of them hard to
 read. So the icon comes from the service's own site: its `<link rel="icon">`, or
 failing that /favicon.ico.
 
-Three things this is careful about, because it is the only part of Courier that
+Three things this is careful about, because it is the only part of Bom that
 fetches a URL a reader typed:
 
 * **It only ever talks to public hosts.** A server on 127.0.0.1 or 192.168.x.x
@@ -177,7 +177,7 @@ async def fetch_icon(domain: str) -> FetchedIcon | None:
             timeout=FETCH_TIMEOUT,
             follow_redirects=True,
             max_redirects=3,
-            headers={"User-Agent": "Courier/0.1 (MCP icon fetcher)"},
+            headers={"User-Agent": "Bom/0.1 (MCP icon fetcher)"},
         ) as client:
             try:
                 page = await client.get(base)

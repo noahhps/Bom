@@ -186,7 +186,7 @@ class StdioTransport(BaseMCPTransport):
 
                 # A message carrying both an id and a method is the server
                 # calling *us* -- roots/list, sampling/createMessage, elicitation.
-                # Courier offers none of those, but a server that waits on the
+                # Bom offers none of those, but a server that waits on the
                 # answer stalls forever unless it is told so.
                 if req_id is not None and "method" in msg:
                     await self._reply_unsupported(req_id, str(msg.get("method")))

@@ -1,4 +1,4 @@
-"""The machine Courier is running on, as far as the operating system allows.
+"""The machine Bom is running on, as far as the operating system allows.
 
 Everything in here is platform code behind a flat Python interface, so the
 skills above it never import a framework or branch on `sys.platform`. A module

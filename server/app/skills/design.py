@@ -167,7 +167,7 @@ class AskForDesign(Skill):
                 "style'), pass that name as `name` and you get that document "
                 "straight back, with nothing asked of them. If you leave "
                 "`name` out, they are shown the list and pick one. "
-                "IMPORTANT: design standards are stored inside Courier, not on "
+                "IMPORTANT: design standards are stored inside Bom, not on "
                 "disk. A design.md is NEVER a file. Never use read_file, "
                 "list_directory or any other file tool to go looking for one, "
                 "and never tell the user you could not find their design.md -- "

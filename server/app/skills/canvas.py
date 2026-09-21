@@ -75,7 +75,7 @@ def _remote_assets(text: str) -> list[str]:
     the least reliable addresses on the web: the free ones get retired
     (source.unsplash.com), fall over for weeks at a time (via.placeholder.com),
     or want a photo id it invented rather than looked up. The page then renders
-    as a finished layout with holes in it, which looks like Courier losing the
+    as a finished layout with holes in it, which looks like Bom losing the
     pictures rather than the model naming ones that were never there.
 
     Protocol-relative `//host/...` counts: inside a srcdoc frame on an opaque
@@ -144,7 +144,7 @@ class WriteCanvas(Skill):
                 "usually does not, because the placeholder services are dead or "
                 "retired, a photo id you did not look up does not exist, and "
                 "this machine may have no internet at all. It also sends the "
-                "user's address to a stranger, which is the one thing Courier "
+                "user's address to a stranger, which is the one thing Bom "
                 "is for avoiding. Never emit via.placeholder.com, "
                 "source.unsplash.com, images.unsplash.com, picsum.photos or "
                 "similar -- an inline SVG with a shape and a caption is a better "

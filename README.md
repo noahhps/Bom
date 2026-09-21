@@ -180,7 +180,7 @@ all.
 An **HTML canvas runs**. The preview is a sandboxed iframe with an opaque origin
 — `allow-scripts`, never `allow-same-origin` — so a page's JavaScript executes
 and an interactive layout or a script-driven slideshow renders, while the frame
-stays walled off from Courier: it cannot read the app's DOM, cookies,
+stays walled off from Bom: it cannot read the app's DOM, cookies,
 `localStorage` or bearer token, and any request it makes goes out cross-origin
 without the app's credentials. The worst a hallucinated script can do is send
 what is already on its own page somewhere; the two combined settings that would
@@ -219,7 +219,7 @@ cost sixty writes, and now cost none.
 
 A local model writing a long argument -- an HTML document, a search objective
 with quotes in it -- sometimes produces something that is *nearly* JSON. Ollama
-parses tool calls before Courier ever sees them, so it rejects the call itself
+parses tool calls before Bom ever sees them, so it rejects the call itself
 and reports it in the stream with a 200 and its own wording, quoting the entire
 unparsed payload.
 
@@ -229,7 +229,7 @@ the model is told its last call could not be read and why, and gets another go,
 twice, before the turn gives up and says so in a sentence. The raw payload never
 reaches the reader either way.
 
-This is the model's mistake rather than Courier's, and it is worth knowing
+This is the model's mistake rather than Bom's, and it is worth knowing
 which -- a bigger model makes it far less often.
 
 ### Pictures in a canvas
@@ -239,7 +239,7 @@ Images in a canvas are **drawn, not linked**: inline SVG, a CSS gradient, or a
 learned — `via.placeholder.com`, `source.unsplash.com`, a `picsum.photos` size,
 an `images.unsplash.com` photo id it invented — and those are the least
 dependable addresses on the web. Retired, down for weeks, or never real. The
-page then renders as a finished layout with holes in it, which reads as Courier
+page then renders as a finished layout with holes in it, which reads as Bom
 losing the pictures rather than the model naming ones that were never there.
 They also send your address to a stranger every time the panel opens, which is
 the one thing this app exists to avoid.
@@ -379,7 +379,7 @@ falls back to the list rather than to an apology — with a line saying what it
 looked for, so an unfamiliar list does not read as your own standard having
 gone missing.
 
-These documents live inside Courier, not on disk. A design.md is never a file,
+These documents live inside Bom, not on disk. A design.md is never a file,
 and the model is told so in as many words: left to infer it, a model asked for
 "the brutalist web design.md" goes hunting through your Desktop for a file that
 has never existed and comes back apologising.
@@ -423,7 +423,7 @@ changes something already written under it.
 
 ## The sandbox
 
-The most powerful thing Courier can be given, and the most dangerous: a local
+The most powerful thing Bom can be given, and the most dangerous: a local
 computer. With it on, two skills appear —
 
 | | |
@@ -585,7 +585,7 @@ message an hour later.
 revoke from here — the key on disk is the whole of the connection, which is
 also why you should revoke it at openrouter.ai if the machine is lost.
 
-> **This is a bill.** Everything else in Courier runs on hardware you own.
+> **This is a bill.** Everything else in Bom runs on hardware you own.
 > OpenRouter charges per token, on a key you connected, and every message sent
 > to it costs money — the settings page shows what the key has spent so far.
 > Models flagged **free** in the picker cost nothing and are rate limited

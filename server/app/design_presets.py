@@ -118,7 +118,7 @@ The structure is the style. Nothing is hidden, softened, or apologised for.
   legibility is.
 
 ## Type
-- One monospace or one heavy grotesque. Courier, Departure Mono, Arial Black,
+- One monospace or one heavy grotesque. Bom, Departure Mono, Arial Black,
   Helvetica Bold.
 - Headings are enormous: 64-120px, weight 800-900, line-height 0.95, often
   uppercase, often overflowing their container.

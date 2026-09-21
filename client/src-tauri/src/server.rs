@@ -7,7 +7,7 @@
 //!
 //! This is not the reasoning `run.sh` applies to Ollama, and deliberately so.
 //! Ollama is a shared system service with its own lifecycle, which is why
-//! nothing here tries to manage it. The Python server is Courier's own, one
+//! nothing here tries to manage it. The Python server is Bom's own, one
 //! per device under the current architecture, and owning it is the whole point
 //! of shipping a desktop app rather than a bookmark.
 
@@ -78,7 +78,9 @@ fn wait_until_ready() -> bool {
 /// running server and otherwise leaves the gate to say nothing is there. That
 /// is an honest failure rather than a mysterious one.
 fn interpreter() -> Option<(String, Vec<String>)> {
-    if let Ok(explicit) = std::env::var("COURIER_SERVER_BIN") {
+    if let Ok(explicit) = std::env::var("BOM_SERVER_BIN")
+        .or_else(|_| std::env::var("COURIER_SERVER_BIN"))
+    {
         return Some((explicit, vec!["-m".into(), "app".into()]));
     }
 
@@ -132,6 +134,8 @@ pub fn ensure_running(app: &AppHandle) -> bool {
         // Opt the child into its own orphan watchdog. `shutdown` below covers
         // a clean quit, but nothing in this process runs on SIGKILL, so the
         // server has to be able to notice on its own that we are gone.
+        .env("BOM_EXIT_WITH_PARENT", "1")
+        // Keep the old variable for already-installed server builds.
         .env("COURIER_EXIT_WITH_PARENT", "1")
         // The rest of the environment is inherited, so a reader who exported
         // OLLAMA_URL or GOOGLE_CLIENT_ID before launching gets what they meant.

@@ -35,6 +35,7 @@ from .providers import (
     ContextOverflow,
     Image,
     Message,
+    MalformedToolCall,
     ProviderError,
     ProviderRouter,
 )
@@ -88,6 +89,11 @@ CARRIED_REASONING_CHARS = 400   # the tail of the deliberation
 # window trims from the *head* -- so an unbounded result would push out the
 # user's actual question rather than itself.
 MAX_RESULT_CHARS = 4000
+
+
+#: How many rounds a turn may lose to unparseable tool calls before it
+#: gives up and reports the failure like any other.
+MAX_GARBLED_ROUNDS = 2
 
 
 class Orchestrator:
@@ -382,12 +388,19 @@ class Orchestrator:
             # stopped to ask for skills, they run and the window goes back with
             # their answers appended. `parts` accumulates across rounds, so an
             # answer written either side of a skill call arrives as one reply.
+            # Rounds lost to a tool call the backend could not parse.
+            # Budgeted rather than unlimited: a model that cannot encode
+            # an argument once will not manage it on the tenth attempt,
+            # and each attempt costs a whole round.
+            garbled = 0
+
             for _ in range(max_rounds):
                 final = None
                 round_text: list[str] = []
+                round_state = {"garbled": False}
 
-                async for chunk in self._stream_with_recovery(
-                    provider, window, think=thinking_level, tools=tools
+                async for chunk in self._stream_tolerating_garbled(
+                    provider, window, thinking_level, tools, round_state
                 ):
                     # The model's working, not its answer -- kept apart from
                     # `parts` so it is never mistaken for the reply, but stored
@@ -402,6 +415,36 @@ class Orchestrator:
                     if chunk.done:
                         final = chunk
 
+                # Nothing usable arrived: the backend could not parse the tool call
+                # the model wrote. The round is spent, so the model gets another and
+                # a plain account of what went wrong -- the same courtesy a person
+                # would get for a message that came through garbled.
+                #
+                # Deliberately not shown to the reader: Ollama's wording quotes the
+                # entire unparsed payload, which is pages of their own document
+                # handed back to them as an error.
+                if round_state["garbled"]:
+                    garbled += 1
+                    if garbled > MAX_GARBLED_ROUNDS:
+                        raise ProviderError(
+                            "The model kept producing tool calls that could not be "
+                            "read. This usually means it is struggling to encode a "
+                            "long value -- try asking for a shorter one, or a "
+                            "different model."
+                        )
+                    window.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "Your last tool call could not be read: its arguments "
+                                "were not valid JSON. That usually means a long value "
+                                "with unescaped quotes or newlines in it. Send the "
+                                "same call again with the arguments encoded properly. "
+                                "A long value is fine -- it only has to be escaped."
+                            ),
+                        )
+                    )
+                    continue
                 if final is None or not final.tool_calls:
                     break
 
@@ -625,6 +668,25 @@ class Orchestrator:
                 "truncated": exhausted,
             },
         )
+
+    async def _stream_tolerating_garbled(
+        self, provider, window, think, tools, state: dict
+    ):
+        """`_stream_with_recovery`, minus the one failure a retry can fix.
+
+        A tool call the backend could not parse raises out of the stream
+        mid-round. Caught here and reported through `state` rather than as an
+        exception, so the round loop can spend another round on it instead of
+        unwinding the whole turn -- the caller's body is an ordinary
+        `async for` either way.
+        """
+        try:
+            async for chunk in self._stream_with_recovery(
+                provider, window, think=think, tools=tools
+            ):
+                yield chunk
+        except MalformedToolCall:
+            state["garbled"] = True
 
     async def _stream_with_recovery(
         self,

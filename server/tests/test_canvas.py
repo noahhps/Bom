@@ -384,3 +384,145 @@ def test_the_model_is_told_to_draw_images_rather_than_link_them(store: Store):
     assert "via.placeholder.com" in described
     # And the one case where a remote URL is the right answer.
     assert "user gave you that exact url" in described
+
+
+# -- a tool call the backend could not read -----------------------------------
+#
+# Ollama parses the tool call before Courier ever sees it, and a small model
+# writing a long argument -- an HTML document, quotes and newlines throughout
+# -- produces something that is nearly JSON. Ollama reports that in the stream
+# with a 200 and its own wording, quoting the whole unparsed payload. Left
+# alone the turn died there and the reader got pages of their own document
+# handed back as an error message.
+
+
+def test_ollamas_parse_failure_is_recognised_as_its_own_thing():
+    from app.providers.base import MalformedToolCall
+    from app.providers.ollama import _translate_error
+
+    raw = "error parsing tool call: raw='{\"content\":\"<html>\\n<head>\"'"
+    problem = _translate_error(200, raw)
+    assert isinstance(problem, MalformedToolCall)
+    # Retryable, or the round loop would have nothing to act on.
+    assert problem.retryable
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Both of these came off a real gpt-oss run. The first is a canvas
+        # full of HTML; the second is a web search whose arguments ended with
+        # a stray empty key. Different tools, different mistakes, one class of
+        # failure -- the model cannot encode its own arguments.
+        "error parsing tool call: raw='{\"content\":\"<html>\"}'",
+        "error parsing tool call: raw='{\"numResults\":10,\"query\":\"x\",\"\"}', "
+        "err=invalid character '}' after object key",
+        "Error parsing tool call",
+        "invalid tool call syntax",
+    ],
+)
+def test_every_shape_of_that_failure_is_caught(body):
+    from app.providers.base import MalformedToolCall
+    from app.providers.ollama import _translate_error
+
+    assert isinstance(_translate_error(200, body), MalformedToolCall)
+
+
+def test_an_ordinary_error_is_still_an_ordinary_error():
+    """The match has to be narrow, or a real failure gets silently retried."""
+    from app.providers.base import MalformedToolCall
+    from app.providers.ollama import _translate_error
+
+    assert not isinstance(_translate_error(500, "model runner crashed"), MalformedToolCall)
+
+
+class _GarbledOnce:
+    """Fails to encode its first tool call, then gets it right."""
+
+    name = "mock"
+    model = "mock"
+
+    def __init__(self, failures: int = 1) -> None:
+        self.failures = failures
+        self.calls = 0
+        self.saw: list = []
+
+    async def stream(self, messages, *, think=None, tools=None):
+        self.calls += 1
+        self.saw.append(list(messages))
+        if self.calls <= self.failures:
+            from app.providers.ollama import _translate_error
+
+            raise _translate_error(200, "error parsing tool call: raw='{bad}'")
+            yield  # pragma: no cover - generator marker
+        if self.calls == self.failures + 1:
+            yield Chunk(
+                done=True,
+                tool_calls=(
+                    ToolCall(
+                        id="c1",
+                        name="write_canvas",
+                        arguments={"title": "Report", "content": "<h1>Hi</h1>", "kind": "html"},
+                    ),
+                ),
+            )
+        else:
+            yield Chunk(text="Rewritten in HTML.", done=True)
+
+    async def embed(self, texts):
+        return [[0.0] * 8 for _ in texts]
+
+    async def health(self):
+        return True
+
+
+def _orch(store: Store, provider):
+    registry = Registry()
+    registry.register(WriteCanvas(store))
+    router = type("R", (), {})()
+
+    async def resolve(prefer=None):
+        return type("Route", (), {"provider": provider, "reason": "local"})()
+
+    router.resolve = resolve
+    router.invalidate_health = lambda: None
+    settings = type("S", (), {
+        "system_preamble": "You help.", "context_tokens": 8192, "reply_tokens": 1024,
+        "ollama_think": "medium", "memory_max_facts": 20, "memory_fact_chars": 200,
+    })()
+    return Orchestrator(settings, store, router, registry)
+
+
+@pytest.mark.asyncio
+async def test_a_garbled_tool_call_costs_a_round_not_the_turn(store: Store):
+    provider = _GarbledOnce()
+    orch = _orch(store, provider)
+    session = store.create_session()["id"]
+
+    joined = "".join([f async for f in orch.run_turn(session, "rewrite it in html")])
+
+    # The turn finished, and the canvas the model was asked for exists.
+    assert "Rewritten in HTML." in joined
+    assert store.find_canvas_by_title(session, "Report") is not None
+    # Ollama's wording never reached the reader.
+    assert "error parsing tool call" not in joined
+    # The model was told what went wrong, in the window, on the next round.
+    retry = provider.saw[1]
+    assert any("not valid JSON" in (m.content or "") for m in retry)
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_never_recovers_still_reports(store: Store):
+    """The budget has to end somewhere, and it has to end legibly."""
+    provider = _GarbledOnce(failures=99)
+    orch = _orch(store, provider)
+    session = store.create_session()["id"]
+
+    joined = "".join([f async for f in orch.run_turn(session, "rewrite it in html")])
+
+    assert "event: error" in joined
+    assert "could not be read" in joined
+    # Still not the raw payload.
+    assert "error parsing tool call" not in joined
+    # Bounded: it did not burn every round available.
+    assert provider.calls <= 4

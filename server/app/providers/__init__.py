@@ -1,6 +1,7 @@
 from .base import (
     Chunk,
     ContextOverflow,
+    MalformedToolCall,
     Image,
     Message,
     ModelProvider,
@@ -24,6 +25,7 @@ __all__ = [
     "FALLBACK_ORDER",
     "Chunk",
     "ContextOverflow",
+    "MalformedToolCall",
     "Flow",
     "Image",
     "LOCAL",

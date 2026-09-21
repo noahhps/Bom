@@ -107,6 +107,22 @@ class ContextOverflow(ProviderError):
         super().__init__(message, retryable=True)
 
 
+class MalformedToolCall(ProviderError):
+    """The model emitted a tool call the backend could not parse.
+
+    Not the backend's fault and not ours: the model wrote something that is
+    nearly JSON. Small local models do this when an argument is long and full
+    of quotes and newlines -- an HTML document being the usual way to trip it.
+
+    Its own class because the recovery is specific and cheap. The turn is not
+    lost: the model is told its call did not parse and gets another round to
+    send it again, the way a person would say "that came through garbled".
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, retryable=True)
+
+
 @runtime_checkable
 class ModelProvider(Protocol):
     name: str

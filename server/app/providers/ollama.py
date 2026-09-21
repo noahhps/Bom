@@ -7,7 +7,14 @@ from collections.abc import AsyncIterator, Sequence
 
 import httpx
 
-from .base import Chunk, ContextOverflow, Message, ProviderError, ToolCall
+from .base import (
+    Chunk,
+    ContextOverflow,
+    MalformedToolCall,
+    Message,
+    ProviderError,
+    ToolCall,
+)
 
 # Generation can idle for a long time behind a cold model load; the read
 # timeout has to tolerate that, while connect stays short so a dead Ollama
@@ -248,6 +255,12 @@ def _translate_error(status: int, body: str) -> ProviderError:
         )
     if "context" in lowered and ("length" in lowered or "exceed" in lowered):
         return ContextOverflow(body)
+    if "error parsing tool call" in lowered or "invalid tool call" in lowered:
+        # Ollama's own parser rejecting what the model produced, reported in
+        # the stream with a 200. The raw payload it quotes is enormous and
+        # means nothing to a reader, so it does not travel: the orchestrator
+        # turns this into another round rather than an error on screen.
+        return MalformedToolCall(body)
     if "out of memory" in lowered or "cudamalloc" in lowered or "vram" in lowered:
         # Treated as overflow: the recovery is identical -- shrink and retry.
         return ContextOverflow(body)

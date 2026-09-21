@@ -226,7 +226,24 @@ class AskForDesign(Skill):
             )
 
         name, markdown = found
+        # The closing instruction is repeated after the document, not just
+        # before it. A standard is the better part of two thousand characters,
+        # and whatever was said ahead of it is that far behind the cursor by
+        # the time the model writes its next token -- which is where a small
+        # model stops being an agent and starts being a summariser, answering
+        # "here is the standard I would use" instead of using it. The last
+        # thing in the window is the thing it acts on, so the last thing in
+        # the window says what to do.
         return (
-            f"The user chose the {name!r} design standard. Follow it for "
-            f"everything you produce in this turn:\n\n{markdown}"
+            f"The user chose the {name!r} design standard. Follow it closely "
+            f"for everything you produce in this turn.\n\n{markdown}\n\n"
+            "---\n"
+            "That was the standard, not the work. Now produce the actual "
+            "result, in this same turn, styled to it. If it belongs in a "
+            "canvas -- a document, a report, a page, a deck, anything the "
+            "user will keep -- call write_canvas now with the finished "
+            "content. If you are restyling something that already exists, "
+            "call write_canvas with that canvas's exact existing title, so it "
+            "is replaced rather than left as it was. Do not reply describing "
+            "what you would do, and do not ask for a standard again."
         )

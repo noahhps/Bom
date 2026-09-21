@@ -193,6 +193,23 @@ deleting the chat takes them with it, and they never leak into another one. The
 bytes are columns in the same SQLite file as everything else, so `VACUUM INTO`
 still copies the lot in one shot.
 
+### When the model garbles a tool call
+
+A local model writing a long argument -- an HTML document, a search objective
+with quotes in it -- sometimes produces something that is *nearly* JSON. Ollama
+parses tool calls before Courier ever sees them, so it rejects the call itself
+and reports it in the stream with a 200 and its own wording, quoting the entire
+unparsed payload.
+
+That used to end the turn, and what reached the thread was pages of your own
+document handed back to you as an error message. Now it costs a round instead:
+the model is told its last call could not be read and why, and gets another go,
+twice, before the turn gives up and says so in a sentence. The raw payload never
+reaches the reader either way.
+
+This is the model's mistake rather than Courier's, and it is worth knowing
+which -- a bigger model makes it far less often.
+
 ### Pictures in a canvas
 
 Images in a canvas are **drawn, not linked**: inline SVG, a CSS gradient, or a

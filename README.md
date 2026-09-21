@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/noahhps/Bom/blob/main/bom-logo.svg?raw=true" alt="alt text" width="200">
+  <img src="https://github.com/noahhps/Bom/blob/main/bom-logo.svg?raw=true" alt="Project Logo" width="200">
   <h1>Bom / 봄 </h1>
 </div>
 

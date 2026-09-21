@@ -92,14 +92,14 @@ export function TopBar({
       {canvasCount > 0 ? (
         <button
           type="button"
-          className="icon-btn"
+          className="icon-btn canvas-btn"
           data-on={canvasOpen ? "" : undefined}
           aria-label={canvasOpen ? "Hide canvas" : "Show canvas"}
           aria-pressed={canvasOpen}
           title="Canvas"
           onClick={onToggleCanvas}
         >
-          <Icon name="document" />
+          <Icon name="canvas" />
         </button>
       ) : null}
 

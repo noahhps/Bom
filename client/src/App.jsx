@@ -346,17 +346,24 @@ export default function App() {
         }
       >
         {/* On the narrow layout the rail has no strip of its own, so this is
-            the whole of its handle: one button, top left, above the panel it
-            opens -- so the same press closes it again. */}
-        {narrow ? (
+            the whole of its handle: one button, top left.
+
+            Only while the panel is shut. It used to stay and turn into an X,
+            which is the conventional thing and the wrong thing here: every row
+            in the open panel already closes it -- a conversation, a
+            destination, a new chat -- so the X was a second way to do what
+            whatever you came for does anyway, sitting on top of the panel's
+            own header. Leaving it out is not a trap: there is nothing in the
+            panel that does not lead back out of it. */}
+        {narrow && !sidebarOpen ? (
           <button
             type="button"
             className="rail-toggle"
-            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            aria-expanded={sidebarOpen}
-            onClick={() => setSidebarOpen((was) => !was)}
+            aria-label="Show sidebar"
+            aria-expanded={false}
+            onClick={() => setSidebarOpen(true)}
           >
-            <Icon name={sidebarOpen ? "close" : "menu"} />
+            <Icon name="menu" />
           </button>
         ) : null}
         {/* The conversation list lives inside the rail now -- it unfolds under

@@ -1575,6 +1575,86 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    at the same weight. */
 .icon-btn[data-on] { background: rgba(20, 23, 29, 0.08); }
 
+/* The canvas toggle, lit from below.
+ *
+ * The flat grey every other icon button wears for `data-on` is doing too
+ * little here: this is the one control that changes what half the window is
+ * showing, and "slightly darker circle" is not a state you notice from across
+ * the desk. So it keeps the grey and gains a light inside it.
+ *
+ * The glow is anchored to the bottom edge of the button rather than its
+ * middle: a radial gradient centred at 50% 100% is a half-circle by
+ * construction -- the other half is outside the box -- which is what makes it
+ * read as the button being lit from below rather than as a blob sitting on
+ * top of the icon. It fades out by 72% of the radius, so the top half of the
+ * glyph stays on the plain background and the stroke never loses contrast.
+ *
+ * `overflow: hidden` clips it to the 50% radius, keeping the light inside the
+ * circle; `isolation` stops the stacking context leaking into the top bar. */
+.canvas-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+/* The glyph rides above the light. Without this the gradient paints over the
+   stroke, which is the one part that has to stay readable. */
+.canvas-btn > * {
+  position: relative;
+  z-index: 1;
+}
+.canvas-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  /* An explicit radius, not a percentage. A bare `circle` sizes itself to the
+     farthest corner -- from the middle of the bottom edge that is about 38px
+     on a 34px button, so even a 72% stop landed well above the middle and lit
+     the whole control. 20px reaches just past halfway and stops, which is the
+     half-circle this is meant to be. */
+  background: radial-gradient(
+    circle 20px at 50% 100%,
+    var(--accent-soft) 0%,
+    var(--accent-soft) 22%,
+    transparent 100%
+  );
+  /* Grown from the bottom edge, not faded in place: the origin is the middle
+     of that edge, so scaling up is the light spreading out of it. 200ms --
+     long enough to read as a rise, short enough that a toggle still feels
+     instant. */
+  opacity: 0;
+  transform: scale(0.3);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+}
+/* Light enough to read as a glow rather than a fill. The glyph above it is
+   drawn in --ink at full strength and has to stay legible across the boundary,
+   so the lit half is a tint, not a colour block. */
+.canvas-btn[data-on]::after {
+  opacity: 0.55;
+  transform: scale(1);
+}
+/* Pressed, the light dips rather than the whole button moving -- the glyph
+   above it stays put, so the icon does not jump under the finger. */
+.canvas-btn:active::after {
+  transform: scale(0.88);
+  transition-duration: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The rise is the part that moves, so that is the part that goes. The state
+     still changes -- it just arrives rather than travels. */
+  .canvas-btn::after {
+    transition: opacity 200ms ease-out;
+    transform: scale(1);
+  }
+  .canvas-btn:active::after { transform: scale(1); }
+}
+
 .canvas-body {
   flex: 1;
   min-height: 0;
@@ -3538,8 +3618,10 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
     inset: 0;
     width: 100vw;
     border-radius: 0;
-    /* Clears the toggle, which floats over this corner. */
-    padding: 62px 18px 18px;
+    /* The toggle is gone once this is open, so the corner it used to have to
+       clear is the panel's own again and its header starts at the top like
+       any other. */
+    padding: 18px 18px 18px;
     transform: translateX(-100%);
     visibility: hidden;
     transition:
@@ -3581,9 +3663,11 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
      screen once it has withdrawn. */
   .messages { padding: 20px 18px calc(var(--composer-peek) + 10px); }
   .composer { padding: 12px 18px 18px; }
-  /* Both leave the top-left corner to the sidebar button. */
+  /* Both leave the top-left corner to the sidebar button. Watch the
+     shorthand below: a later `.page-head { padding: ... }` in this same query
+     used to reset this to 20px, which put the button straight on top of the
+     page's own title -- the clearance is set there now, where it survives. */
   .topbar { padding: 0 14px 0 58px; }
-  .page-head { padding-left: 58px; }
 
   /* There is not room for the full set of header controls at this width, so
      the header gives up what is said twice elsewhere and compacts the rest
@@ -3621,7 +3705,10 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
   .page-body { flex-direction: column; padding: 16px; }
   .page-side { width: auto; align-self: stretch; }
-  .page-head { padding: 26px 20px 20px; }
+  /* The left keeps the button's corner clear; the top is what puts the
+     title's baseline on the button's, so the two read as one row rather than
+     as a control dropped on a heading. */
+  .page-head { padding: 13px 20px 20px 58px; }
   .page-head .inner { flex-direction: column; align-items: flex-start; gap: 16px; }
   .page-head h1 { font-size: var(--t-xl); }
   .skill-row { flex-direction: column; }

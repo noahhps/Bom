@@ -71,7 +71,7 @@ MAX_WINDOW_IMAGES = 4
 # The real limit is settings.max_tool_rounds -- a local model handed a shelf of
 # skills will loop on near-identical calls, and this is what stops a bad turn
 # from burning the whole context window.
-MAX_TOOL_ROUNDS = 12
+MAX_TOOL_ROUNDS = 20
 
 # How much of a past turn's working to carry into later turns, so the model
 # keeps the thread's context -- what it looked up and what it concluded --

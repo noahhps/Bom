@@ -3,6 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { StagedAttachments } from "./Attachments";
 import { Icon } from "./Icon";
 import { STICK_PX } from "./MessageList";
+import { seedFromContext } from "../lib/autotheme";
+import { swatchOf } from "../lib/theme";
 
 
 /**
@@ -30,6 +32,13 @@ const LEGACY = {
   default: "medium",
   label: "Effort",
 };
+
+function agentColor(agent) {
+  return swatchOf(
+    agent?.theme || { mode: "auto" },
+    seedFromContext({ id: agent?.id || "default", title: agent?.name || "None" }),
+  );
+}
 
 function ThinkingControl({ control, value, onChange, disabled }) {
   const mode = control?.mode || "none";
@@ -98,6 +107,9 @@ export function Composer({
   thinking,
   onSend,
   onStop,
+  agents = [],
+  agentId = null,
+  onAgent,
 }) {
   const [value, setValue] = useState("");
   // Whatever the current control's value is. Reset when the control changes
@@ -108,6 +120,7 @@ export function Composer({
   // An absent descriptor is not the same as "none" -- see LEGACY above.
   const control = thinking || LEGACY;
   const mode = control.mode;
+  const selectedAgent = agents.find((agent) => agent.id === agentId) || null;
   useEffect(() => {
     setEffort(control.default);
     // Keyed on the mode, not the object: a re-fetch of /status hands back a
@@ -583,32 +596,59 @@ export function Composer({
 
           <div className="spacer" />
 
-          <ThinkingControl
-            control={control}
-            value={effort}
-            onChange={setEffort}
-            disabled={disabled}
-          />
+          <div className="composer-right-controls">
+            {agents.length > 0 ? (
+              <label className="composer-agent-picker">
+                <span className="composer-agent-label mi">Agent</span>
+                <span className="composer-agent-control">
+                  <i
+                    className="composer-agent-dot"
+                    aria-hidden="true"
+                    style={{
+                      background: selectedAgent ? agentColor(selectedAgent) : "var(--accent)",
+                    }}
+                  />
+                  <select
+                    value={agentId || ""}
+                    aria-label="Choose an agent for this conversation"
+                    onChange={(event) => onAgent?.(event.target.value || null)}
+                  >
+                    <option value="">None</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+            ) : null}
 
-          {/* While a turn is streaming this is the way out of it, not a
-              greyed-out arrow. A disabled control says "not now"; the thing
-              the reader actually wants at that moment is to call the answer
-              off, and on local hardware a wrong one can run for a while.
-              `type="button"` so it cannot submit the form it lives in. */}
-          {disabled ? (
-            <button
-              type="button"
-              className="send"
-              aria-label="Stop generating"
-              onClick={onStop}
-            >
-              <Icon name="stop" />
-            </button>
-          ) : (
-            <button type="submit" className="send" aria-label="Send">
-              <Icon name="send" />
-            </button>
-          )}
+            <div className="composer-bottom-controls">
+              <ThinkingControl
+                control={control}
+                value={effort}
+                onChange={setEffort}
+                disabled={disabled}
+              />
+
+              {/* While a turn is streaming this is the way out of it, not a
+                  greyed-out arrow. A disabled control says "not now"; the
+                  thing the reader actually wants is to call the answer off. */}
+              {disabled ? (
+                <button
+                  type="button"
+                  className="send"
+                  aria-label="Stop generating"
+                  onClick={onStop}
+                >
+                  <Icon name="stop" />
+                </button>
+              ) : (
+                <button type="submit" className="send" aria-label="Send">
+                  <Icon name="send" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </form>

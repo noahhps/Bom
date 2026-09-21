@@ -90,6 +90,9 @@ class ChatRequest(BaseModel):
     # sentence is a real way to ask a question, but an empty POST is not.
     message: str = Field(default="", max_length=200_000)
     session_id: str | None = None
+    # Optional persona for a brand-new conversation. It is applied before the
+    # first turn runs, so the selected agent shapes the opening response too.
+    agent_id: str | None = None
     attachments: list[AttachmentIn] = Field(default_factory=list)
     # Sent with every message, recorded only on the first one. A conversation
     # that starts from the phone should say so even when the client opened it
@@ -795,7 +798,11 @@ def build_router(
             # usual case by the second message.
             store.set_session_situation(session_id, situation)
         else:
+            if body.agent_id and not store.get_agent(body.agent_id):
+                raise HTTPException(404, "no such agent")
             session_id = store.create_session(situation=situation)["id"]
+            if body.agent_id:
+                store.set_session_agent(session_id, body.agent_id)
 
         async def frames():
             yield f'event: session\ndata: {{"session_id": "{session_id}"}}\n\n'

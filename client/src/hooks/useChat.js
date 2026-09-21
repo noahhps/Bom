@@ -17,7 +17,7 @@ const message = (role, content = "", extra = {}) => ({
  * The conversation: which session is open, what is in it, and the turn in
  * flight. Everything durable lives on the server -- this is a view of it.
  */
-export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
+export function useChat(api, { onSessionsChanged, onCanvas, provider = null, agentId = null }) {
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
   // Mirror of the above, readable from a callback that outlived its render --
@@ -175,6 +175,10 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
           attachments,
           thinkingLevel,
           provider,
+          // A selected agent belongs to the unsent conversation only. Existing
+          // sessions keep their server-side assignment and are edited through
+          // the top-bar picker instead.
+          sessionId ? null : agentId,
           controller.signal,
         );
 
@@ -355,6 +359,7 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
       jumpToEnd,
       onCanvas,
       onSessionsChanged,
+      agentId,
       provider,
       schedule,
       sessionId,

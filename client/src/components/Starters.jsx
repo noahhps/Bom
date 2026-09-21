@@ -47,14 +47,7 @@ const RECOMMENDED = [
     title: "Draft on a canvas",
     description: "Turn an idea into a plan, document, or reusable working draft.",
     prompt: "Create a working draft for this idea, with a clear structure and next steps:\n\n",
-  },
-  {
-    kind: "Tool",
-    icon: "memory",
-    title: "Recall my context",
-    description: "Use saved preferences and previous notes to make the answer more useful.",
-    prompt: "Use what you remember about my preferences and help me with this:\n\n",
-  },
+  }
 ];
 
 /* Above the composer. The greeting belongs on the side of the box the eye
@@ -80,9 +73,11 @@ export function StartersHead() {
 export function Starters({ onPick }) {
   return (
     <div className="starters">
-      <div className="starters-section-head">
-        <span className="mi">Recommended for you</span>
-        <span className="starters-section-hint">Pick a capability to get started</span>
+      <div className="starters-toolbar">
+        <div className="starters-section-head">
+          <span className="mi">Recommended for you</span>
+          <span className="starters-section-hint">Pick a capability to get started</span>
+        </div>
       </div>
       <div className="starters-grid">
         {RECOMMENDED.map((starter) => (

@@ -97,6 +97,9 @@ export default function App() {
   // backend uses is the opposite case and lives on the server -- see
   // useModels.
   const [provider, setProvider] = useState(null);
+  // The agent picked on the empty new-conversation screen. It is sent with
+  // the first turn so the server can assign it before the model runs.
+  const [newAgentId, setNewAgentId] = useState(null);
 
   const bootstrapped = useRef("");
   const signOutRef = useRef(() => {});
@@ -141,7 +144,7 @@ export default function App() {
     [],
   );
 
-  const chat = useChat(api, { onSessionsChanged, onCanvas, provider });
+  const chat = useChat(api, { onSessionsChanged, onCanvas, provider, agentId: newAgentId });
   const { setBadge, openSession, startNew } = chat;
 
   const canvas = useCanvas(api, chat.sessionId);
@@ -159,6 +162,7 @@ export default function App() {
     // The accent is the agent's now, not the chat's -- useTheme resolves
     // agent -> project -> app.
     agents: agents.agents,
+    pendingAgentId: newAgentId,
     title: chat.title,
     messages: chat.messages,
   });
@@ -263,6 +267,7 @@ export default function App() {
   const handleNewSession = useCallback(() => {
     setView("chat");
     setSidebarOpen(false);
+    setNewAgentId(null);
     startNew();
     setFocusToken((n) => n + 1);
   }, [startNew]);
@@ -460,6 +465,9 @@ export default function App() {
                 // reasoning control; the composer draws what it is handed.
                 thinking={thinking}
                 onSend={chat.send}
+                agents={chat.sessionId ? [] : agents.agents}
+                agentId={newAgentId}
+                onAgent={setNewAgentId}
               />
 
               {chat.messages.length === 0 ? (

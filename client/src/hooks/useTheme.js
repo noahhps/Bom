@@ -19,7 +19,16 @@ import { DEFAULT_ACCENT, applyPalette, palette, seedOf } from "../lib/theme";
  * outside it, and a themed app with an unthemed modal on top of it is worse
  * than either.
  */
-export function useTheme({ api, sessionId, sessions, projects, agents, title, messages }) {
+export function useTheme({
+  api,
+  sessionId,
+  sessions,
+  projects,
+  agents,
+  title,
+  messages,
+  pendingAgentId = null,
+}) {
   const [appAccent, setAppAccent] = useState(null);
   const [loaded, setLoaded] = useState(false);
   // Local echo of what the server holds for a folder, so a swatch lights up on
@@ -50,15 +59,31 @@ export function useTheme({ api, sessionId, sessions, projects, agents, title, me
     [sessions, sessionId],
   );
   const agent = useMemo(
-    () => (agents || []).find((a) => a.id === session?.agent_id) || null,
-    [agents, session],
+    () => {
+      const id = session?.agent_id || (!sessionId ? pendingAgentId : null);
+      return (agents || []).find((a) => a.id === id) || null;
+    },
+    [agents, pendingAgentId, session, sessionId],
   );
   const project = useMemo(
     () => projects.find((p) => p.id === session?.project_id) || null,
     [projects, session],
   );
 
-  const agentAccent = agent?.theme || null;
+  // An agent is itself a color scope. If it has no explicit accent, automatic
+  // color still needs to stay with the agent rather than falling through to a
+  // project or the app; that is what makes switching personas legible.
+  const agentAccent = useMemo(
+    () => (agent ? agent.theme || { mode: "auto" } : null),
+    [agent],
+  );
+  const agentSeed = useMemo(
+    () =>
+      agent
+        ? seedFromContext({ id: agent.id, title: agent.name })
+        : null,
+    [agent],
+  );
   const projectAccent =
     (project && projectOverrides[project.id] !== undefined
       ? projectOverrides[project.id]
@@ -103,7 +128,10 @@ export function useTheme({ api, sessionId, sessions, projects, agents, title, me
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, title, signature]);
 
-  const tokens = useMemo(() => palette(active, contextSeed), [active, contextSeed]);
+  const tokens = useMemo(
+    () => palette(active, agentAccent ? agentSeed : contextSeed),
+    [active, agentAccent, agentSeed, contextSeed],
+  );
 
   useEffect(() => {
     // Nothing at all until the app accent has been read: applying the default

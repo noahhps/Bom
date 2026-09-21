@@ -66,17 +66,20 @@ function Label({ label }) {
  * `useTheme` resolves in when it dresses the conversation itself, so a chat
  * shows the same colour in the rail as it does once opened.
  *
- * Null when neither has an accent, and the row draws no bead at all. A bead on
- * every conversation would be the app's own colour repeated down the whole
- * list, which says nothing about any of them. */
+ * An assigned agent always gets a bead. Agents without an explicit theme use a
+ * stable color derived from their name, while unassigned chats still fall back
+ * to the project accent when one exists. */
 function accentOf(session, projects, agents) {
   // The agent it is run as wins, then the project it is filed under -- the same
   // order `useTheme` resolves in, so the bead is the colour the conversation
-  // actually opens in. A chat with neither shows no bead: a column of the app's
-  // own colour repeated says nothing about any row.
+  // actually opens in. An assigned agent always has a stable color, including
+  // when its theme is automatic.
   const agent = session.agent_id && agents?.find((a) => a.id === session.agent_id);
-  if (agent?.theme) {
-    return swatchOf(agent.theme, seedFromContext({ id: agent.id, title: agent.name }));
+  if (agent) {
+    return swatchOf(
+      agent.theme || { mode: "auto" },
+      seedFromContext({ id: agent.id, title: agent.name }),
+    );
   }
 
   if (!session.project_id) return null;
@@ -115,9 +118,8 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
       }}
     >
       <button className="navrail-session" onClick={() => onOpenSession(session.id)}>
-        {/* The bead is how a conversation shows which project it belongs to,
-            now that the folders it used to sit inside are gone from here.
-            It reads its project's colour unless it has one of its own. */}
+        {/* The bead shows the assigned agent's color first, then the project's
+            color for chats that have no agent. */}
         {accent ? (
           <span className="accent-bead" aria-hidden="true" style={{ background: accent }} />
         ) : null}

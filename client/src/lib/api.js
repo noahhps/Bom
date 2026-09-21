@@ -334,6 +334,7 @@ export function createApi(token, onUnauthorized = () => {}) {
       attachments = [],
       thinkingLevel = null,
       provider = null,
+      agentId = null,
       signal = undefined,
     ) =>
       request("/chat", {
@@ -347,6 +348,7 @@ export function createApi(token, onUnauthorized = () => {}) {
           attachments: attachments.map(({ name, mime, data }) => ({ name, mime, data })),
           think: thinkingLevel,
           provider,
+          agent_id: agentId,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

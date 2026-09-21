@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import { renderMarkdown } from "../lib/markdown";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
+import { DesignChoice } from "./DesignChoice";
 import { Reasoning } from "./Reasoning";
 import { SkillApproval } from "./SkillApproval";
 import { SkillTrace } from "./SkillTrace";
@@ -32,6 +33,7 @@ export const Message = memo(function Message({
   attachments,
   skills,
   onDecide,
+  onChooseDesign,
   onContinue,
   truncated,
   continuable,
@@ -98,6 +100,15 @@ export const Message = memo(function Message({
           ?.filter((s) => s.approval)
           .map((s) => (
             <SkillApproval key={s.approval.id} skill={s} onDecide={onDecide} />
+          ))}
+
+        {/* The other thing a turn can be stopped on: a question about how the
+            result should look. Same place, same reason -- the answer is not
+            moving until one of these is pressed. */}
+        {skills
+          ?.filter((s) => s.design)
+          .map((s) => (
+            <DesignChoice key={s.design.id} skill={s} onChoose={onChooseDesign} />
           ))}
 
         <SkillTrace skills={skills} />

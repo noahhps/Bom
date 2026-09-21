@@ -24,6 +24,7 @@ from .orchestrator import Orchestrator
 from .providers import OAuthFlows, ProviderError, ProviderRouter, model_setting_key
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import ReadCanvas, WriteCanvas
+from .skills.design import AskForDesign
 from .device.mac_calendar import available as device_calendar_available
 from .device.mac_photos import available as device_photos_available
 from .skills.device_calendar import AddDeviceEvent, FindDeviceEvents, ListDeviceEvents
@@ -167,6 +168,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # revision see what it is revising.
     registry.register(WriteCanvas(store))
     registry.register(ReadCanvas(store))
+    # Which design standard a result should follow. The turn stops on this one
+    # and asks the reader -- see skills/design.py and the turn loop.
+    registry.register(AskForDesign(store))
     # The local computer. Registered always so the Skills page can show it and
     # say what it needs, but `available` is False -- and so it is never offered
     # to the model -- unless SANDBOX_ENABLED is set. It runs code as this user,

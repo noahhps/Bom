@@ -459,6 +459,33 @@ MIGRATIONS: list[str] = [
     ALTER TABLE agents ADD COLUMN icon TEXT;
     ALTER TABLE agents ADD COLUMN theme TEXT;
     """,
+    # 16 -- design standards the reader keeps.
+    #
+    # A design.md is the styling brief a result is held to: type, colour,
+    # spacing, components, and the voice the words are written in. The model
+    # asks for one before it writes a document, a page or a deck, and the
+    # reader picks from the presets that ship with the server or from these --
+    # their own, pasted or uploaded on the Design page.
+    #
+    # The markdown is stored whole rather than parsed into fields. It is read
+    # by a language model, not by this code: any structure it has is structure
+    # the model understands, and a schema here would only be a second, worse
+    # copy of the document that could disagree with it.
+    #
+    # `summary` is the one line the chooser shows beside the name, so a reader
+    # deciding between six of them does not have to open each.
+    """
+    CREATE TABLE designs (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      summary     TEXT,
+      markdown    TEXT NOT NULL,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+
+    CREATE INDEX idx_designs_name ON designs(name COLLATE NOCASE);
+    """,
 ]
 
 

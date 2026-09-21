@@ -249,6 +249,36 @@ class StoredAgent:
 
 
 @dataclass
+class StoredDesign:
+    """A design standard the reader keeps -- their own design.md.
+
+    The markdown is held whole. It is read by a language model rather than by
+    this code, so any structure it has is structure the model understands, and
+    a schema here would only be a second, worse copy that could disagree.
+    """
+
+    id: str
+    name: str
+    summary: str | None
+    markdown: str
+    created_at: int
+    updated_at: int
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "summary": self.summary,
+            "markdown": self.markdown,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            # Marks it apart from the presets the server ships, which the
+            # chooser lists alongside these and which cannot be edited.
+            "source": "custom",
+        }
+
+
+@dataclass
 class StoredMCPServer:
     id: str
     name: str
@@ -1444,6 +1474,58 @@ class Store:
         self.db.execute(
             "UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, session_id)
         )
+
+    # -- designs ----------------------------------------------------------
+
+    def create_design(
+        self, name: str, markdown: str, *, summary: str | None = None
+    ) -> StoredDesign:
+        now = _now()
+        design = StoredDesign(
+            id=_new_id("dsn"),
+            name=name,
+            summary=summary,
+            markdown=markdown,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.execute(
+            """
+            INSERT INTO designs (id, name, summary, markdown, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (design.id, design.name, design.summary, design.markdown,
+             design.created_at, design.updated_at),
+        )
+        return design
+
+    def list_designs(self) -> list[StoredDesign]:
+        rows = self.db.query("SELECT * FROM designs ORDER BY name COLLATE NOCASE")
+        return [StoredDesign(**dict(row)) for row in rows]
+
+    def get_design(self, design_id: str) -> StoredDesign | None:
+        row = self.db.query_one("SELECT * FROM designs WHERE id = ?", (design_id,))
+        return StoredDesign(**dict(row)) if row else None
+
+    def update_design(self, design_id: str, changes: dict) -> StoredDesign | None:
+        """Merge named fields into a design. None if there is no such design."""
+        current = self.get_design(design_id)
+        if current is None:
+            return None
+        name = changes["name"] if "name" in changes else current.name
+        summary = changes["summary"] if "summary" in changes else current.summary
+        markdown = changes["markdown"] if "markdown" in changes else current.markdown
+        self.db.execute(
+            "UPDATE designs SET name = ?, summary = ?, markdown = ?, updated_at = ? "
+            "WHERE id = ?",
+            (name, summary, markdown, _now(), design_id),
+        )
+        return self.get_design(design_id)
+
+    def delete_design(self, design_id: str) -> bool:
+        existed = self.get_design(design_id) is not None
+        self.db.execute("DELETE FROM designs WHERE id = ?", (design_id,))
+        return existed
 
     def session_agent(self, session_id: str) -> StoredAgent | None:
         """The agent a conversation is assigned to, if any."""

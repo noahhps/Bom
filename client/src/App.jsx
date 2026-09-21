@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Agents } from "./components/Agents";
+import { Design } from "./components/Design";
 import { Canvas } from "./components/Canvas";
 import { Icon } from "./components/Icon";
 import { Composer } from "./components/Composer";
@@ -17,6 +18,7 @@ import { Starters } from "./components/Starters";
 import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
 import { useAgents } from "./hooks/useAgents";
+import { useDesigns } from "./hooks/useDesigns";
 import { useCanvas } from "./hooks/useCanvas";
 import { useCanvasWidth } from "./hooks/useCanvasWidth";
 import { useChat } from "./hooks/useChat";
@@ -120,6 +122,7 @@ export default function App() {
   // above its own `const` is a temporal dead zone error that blanks the page.
   const projects = useProjects(api);
   const agents = useAgents(api);
+  const designs = useDesigns(api);
   const { refresh } = sessions;
   const onSessionsChanged = useCallback(() => {
     refresh().catch(() => {});
@@ -436,6 +439,7 @@ export default function App() {
                 model={chat.badge?.text}
                 scrollToken={chat.scrollToken}
                 onDecide={chat.decide}
+                onChooseDesign={chat.chooseDesign}
                 onContinue={chat.continueTurn}
               />
 
@@ -490,6 +494,14 @@ export default function App() {
               // conversation list has to be refetched for the top-bar picker to
               // show the truth.
               onChanged={onSessionsChanged}
+            />
+          ) : view === "design" ? (
+            <Design
+              designs={designs.designs}
+              presets={designs.presets}
+              onCreate={designs.create}
+              onUpdate={designs.update}
+              onDelete={designs.remove}
             />
           ) : (
             <Settings

@@ -44,6 +44,7 @@ from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
+from .design_presets import PRESETS as DESIGN_PRESETS
 
 # Where the app-wide accent lives in `app_settings`. Namespaced like the
 # memory switches beside it, because that table is shared.
@@ -266,6 +267,27 @@ class AgentPatch(BaseModel):
     skills: list[str] | None = None
     icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
     theme: Accent | None = None
+
+
+class DesignIn(BaseModel):
+    """A design standard the reader is adding -- their own design.md."""
+
+    name: str = Field(min_length=1, max_length=120)
+    summary: str | None = Field(default=None, max_length=300)
+    # Held whole and unparsed: it is read by a language model, not by this
+    # code. Generous cap -- a real design.md runs to a few thousand words.
+    markdown: str = Field(min_length=1, max_length=200_000)
+
+
+class DesignPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    summary: str | None = Field(default=None, max_length=300)
+    markdown: str | None = Field(default=None, min_length=1, max_length=200_000)
+
+
+class DesignChoice(BaseModel):
+    # A preset id, a stored design's id, or "none" to decline a standard.
+    choice: str = Field(min_length=1, max_length=120)
 
 
 class SessionAgent(BaseModel):
@@ -633,6 +655,63 @@ def build_router(
             raise HTTPException(404, "no such agent")
         store.set_session_agent(session_id, body.agent_id)
         return {"ok": True, "agent_id": body.agent_id}
+
+    # -- designs ----------------------------------------------------------
+    #
+    # A design.md is the styling brief a result is held to. The presets ship
+    # with the server and cannot be edited; these routes are the reader's own,
+    # which sit beside them in the chooser the model raises mid-turn.
+
+    @router.get("/designs")
+    def list_designs() -> dict:
+        return {"designs": [d.to_dict() for d in store.list_designs()]}
+
+    # Declared before `/designs/{design_id}` so "presets" is matched as itself
+    # rather than as a design with that id -- FastAPI resolves in declaration
+    # order, and nothing creates a design under that id.
+    @router.get("/designs/presets")
+    def list_design_presets() -> dict:
+        return {"presets": DESIGN_PRESETS}
+
+    @router.post("/designs")
+    def create_design(body: DesignIn) -> dict:
+        return store.create_design(
+            body.name.strip(),
+            body.markdown,
+            summary=(body.summary or "").strip() or None,
+        ).to_dict()
+
+    @router.patch("/designs/{design_id}")
+    def update_design(design_id: str, body: DesignPatch) -> dict:
+        changes = body.model_dump(exclude_unset=True)
+        if "name" in changes:
+            name = (changes["name"] or "").strip()
+            if not name:
+                raise HTTPException(400, "a design needs a name")
+            changes["name"] = name
+        updated = store.update_design(design_id, changes)
+        if updated is None:
+            raise HTTPException(404, "no such design")
+        return updated.to_dict()
+
+    @router.delete("/designs/{design_id}")
+    def delete_design(design_id: str) -> dict:
+        if not store.delete_design(design_id):
+            raise HTTPException(404, "no such design")
+        return {"ok": True}
+
+    @router.post("/chat/design/{request_id}")
+    def answer_design(request_id: str, body: DesignChoice) -> dict:
+        """Answer the design question a turn is holding open.
+
+        The turn is still streaming on another connection and resumes the
+        moment this lands; the chosen document goes back into the window as
+        that skill's result. A 404 is the ordinary race -- the turn was
+        stopped, or the question stood long enough to take its default.
+        """
+        if not orchestrator.choices.resolve(request_id, body.choice):
+            raise HTTPException(404, "that question is no longer waiting")
+        return {"ok": True}
 
     # -- accents ----------------------------------------------------------
     #

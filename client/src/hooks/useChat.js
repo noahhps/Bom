@@ -232,6 +232,24 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
               prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
             );
             jumpToEnd();
+          } else if (event === "design_choice") {
+            // The turn is blocked on the server waiting for a design standard.
+            // Attached to the row that is waiting, the way an approval is: the
+            // trace already draws that row as running, and this is what it is
+            // running on.
+            let asked = false;
+            skills = [...skills]
+              .reverse()
+              .map((s) =>
+                !asked && s.result === undefined
+                  ? ((asked = true), { ...s, design: { id: data.id, options: data.options } })
+                  : s,
+              )
+              .reverse();
+            setMessages((prev) =>
+              prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
+            );
+            jumpToEnd();
           } else if (event === "tool_result") {
             // Fills in the last unanswered row for that skill rather than the
             // last row overall: two skills can be called in one round.
@@ -248,6 +266,7 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
                       result: data.text,
                       denied: data.denied || undefined,
                       approval: undefined,
+                      design: undefined,
                     })
                   : s,
               )
@@ -380,6 +399,41 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
   );
 
   /**
+   * Answer the design question a turn is holding open.
+   *
+   * The same shape as `decide`: the turn is still streaming on the connection
+   * `send` opened, this is a separate request that unblocks it, and the chosen
+   * document arrives back down the stream as an ordinary `tool_result`. So
+   * nothing here writes the outcome -- it only records that the pick was made,
+   * which takes the chooser off screen without waiting for a round trip.
+   */
+  const chooseDesign = useCallback(
+    async (id, choice) => {
+      const mark = (patch) =>
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.skills?.some((s) => s.design?.id === id)
+              ? {
+                  ...m,
+                  skills: m.skills.map((s) =>
+                    s.design?.id === id ? { ...s, design: { ...s.design, ...patch } } : s,
+                  ),
+                }
+              : m,
+          ),
+        );
+
+      mark({ answered: choice });
+      try {
+        await api.answerDesign(id, choice);
+      } catch {
+        mark({ answered: undefined, expired: true });
+      }
+    },
+    [api],
+  );
+
+  /**
    * End the turn in flight, keeping what has arrived.
    *
    * Aborting the fetch is the whole mechanism -- there is no "stop" message to
@@ -418,6 +472,7 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
     send,
     stop,
     decide,
+    chooseDesign,
     continueTurn,
   };
 }

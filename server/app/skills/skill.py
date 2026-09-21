@@ -32,6 +32,13 @@ class Skill(ABC):
     #: turn at once.
     wants_session: bool = False
 
+    #: Set by a skill whose whole purpose is to put a question to the reader.
+    #: The turn loop stops on it the way it stops for an approval -- it streams
+    #: the options, waits for the pick, and passes the answer in as an argument
+    #: -- so the skill itself stays ordinary and just reads the answer.
+    #: `"design"` is the only kind so far: which design.md to follow.
+    asks: str | None = None
+
     #: What running this skill changes on screen beyond its text result, so the
     #: turn loop can push the fresh state to the client. `"canvas"` means the
     #: loop should re-read and stream this session's canvases after the call.

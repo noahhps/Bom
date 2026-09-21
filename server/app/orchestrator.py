@@ -26,6 +26,7 @@ from .approvals import (
     read_auto_approved,
     write_auto_approved,
 )
+from .choices import Choices
 from .config import Settings, ThinkingLevel
 from .memory import MEMORY_DEFAULTS
 from .situation import Situation, render as render_situation
@@ -37,6 +38,7 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
+from .skills.design import NO_DESIGN, options as design_options
 from .skills.registry import Registry
 from .store import Store, StoredAttachment, StoredMessage
 
@@ -100,6 +102,10 @@ class Orchestrator:
         # said yes to. Both in memory: a prompt belongs to an open stream, and
         # a session grant is scoped to a conversation the reader is still in.
         self.approvals = Approvals()
+        # Questions the turn stops to ask where the answer is a pick rather
+        # than a yes -- which design standard to follow. Same lifetime as the
+        # approvals beside it, and for the same reason.
+        self.choices = Choices()
         self._session_grants: dict[str, set[str]] = {}
 
     def _skill_schemas(self, allowed: set[str] | None = None) -> list[dict] | None:
@@ -453,23 +459,48 @@ class Orchestrator:
                         )
                         continue
 
-                    # Ask, unless something already standing says not to. The
-                    # prompt is one more frame on the stream this answer is
-                    # already arriving on, so the wait costs a pending request
-                    # rather than a second trip through the model.
-                    decision = self._standing_decision(call.name, session_id)
-                    if decision is None:
-                        request_id, waiter = self.approvals.open()
+                    skill_asked = self.registry.get(call.name) if self.registry else None
+                    # Anything the skill needs that the model did not supply.
+                    extra: dict = {}
+
+                    # A skill whose whole purpose is to put a question to the
+                    # reader asks it here, and that question stands in for the
+                    # approval prompt -- answering it *is* the consent, and
+                    # making someone approve a question before being asked it
+                    # is two prompts for one decision.
+                    if skill_asked is not None and skill_asked.asks == "design":
+                        request_id, waiter = self.choices.open()
                         yield _sse(
-                            "skill_approval",
+                            "design_choice",
                             {
                                 "id": request_id,
-                                "name": call.name,
-                                "arguments": call.arguments,
+                                "options": design_options(self.store),
                             },
                         )
-                        decision = await self.approvals.wait(request_id, waiter)
-                        self._remember_decision(call.name, session_id, decision)
+                        # Silence here is a real answer rather than a refusal:
+                        # the turn carries on and writes the thing unstyled.
+                        extra["choice"] = await self.choices.wait(
+                            request_id, waiter, NO_DESIGN
+                        )
+                        decision = ALLOW_ONCE
+                    else:
+                        # Ask, unless something already standing says not to. The
+                        # prompt is one more frame on the stream this answer is
+                        # already arriving on, so the wait costs a pending request
+                        # rather than a second trip through the model.
+                        decision = self._standing_decision(call.name, session_id)
+                        if decision is None:
+                            request_id, waiter = self.approvals.open()
+                            yield _sse(
+                                "skill_approval",
+                                {
+                                    "id": request_id,
+                                    "name": call.name,
+                                    "arguments": call.arguments,
+                                },
+                            )
+                            decision = await self.approvals.wait(request_id, waiter)
+                            self._remember_decision(call.name, session_id, decision)
 
                     if not allowed(decision):
                         # A refusal is an answer. It goes into the window where
@@ -485,7 +516,7 @@ class Orchestrator:
                         record["result"] = result
                         record["denied"] = True
                     else:
-                        result = await self._run_skill(call, session_id)
+                        result = await self._run_skill(call, session_id, extra=extra)
                         record["result"] = result
 
                     yield _sse(
@@ -628,7 +659,9 @@ class Orchestrator:
         elif decision == ALLOW_SESSION and session_id:
             self._session_grants.setdefault(session_id, set()).add(name)
 
-    async def _run_skill(self, call, session_id: str | None = None) -> str:
+    async def _run_skill(
+        self, call, session_id: str | None = None, extra: dict | None = None
+    ) -> str:
         """One skill call, reduced to text the model can read.
 
         Every failure returns rather than raises. A model that mistypes an
@@ -654,6 +687,10 @@ class Orchestrator:
             # hallucinated `session` argument cannot point the skill at another
             # conversation.
             arguments["session"] = session_id
+        # Whatever the turn loop resolved on the skill's behalf -- the reader's
+        # design pick. Applied last, for the same reason: the model does not
+        # get to supply it.
+        arguments.update(extra or {})
         try:
             result = await skill.use(**arguments)
         except TypeError as exc:

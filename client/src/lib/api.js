@@ -201,6 +201,30 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "POST",
         body: JSON.stringify({ decision }),
       }),
+    // -- designs ---------------------------------------------------------
+    // A design.md is the styling brief a result is held to. The presets ship
+    // with the server; these are the reader's own, which sit beside them in
+    // the chooser the model raises mid-turn.
+    listDesigns: () => json("/designs"),
+    listDesignPresets: () => json("/designs/presets"),
+    createDesign: (design) =>
+      json("/designs", { method: "POST", body: JSON.stringify(design) }),
+    updateDesign: (id, patch) =>
+      json("/designs/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    deleteDesign: (id) =>
+      request("/designs/" + encodeURIComponent(id), { method: "DELETE" }),
+    // Answer the question a turn is holding open. Like answerApproval, the
+    // turn is still streaming on another connection and resumes when this
+    // lands; the chosen document goes back into the window as the result.
+    answerDesign: (id, choice) =>
+      json("/chat/design/" + encodeURIComponent(id), {
+        method: "POST",
+        body: JSON.stringify({ choice }),
+      }),
+
     listSessions: () => json("/sessions"),
     createSession: () =>
       json("/sessions", {

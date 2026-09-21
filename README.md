@@ -295,6 +295,62 @@ the provider holds one model at a time and a turn already streaming keeps the
 one it started with, so choosing a model per agent is the same change as the
 per-conversation model override in **Not built yet**, and lands with it.
 
+## Design standards
+
+Ask any model for a one-pager and it invents a look on the spot. Ask it eight
+times and you get eight strangers — a different heading scale each time, a new
+accent colour, a table that is bordered on Tuesday and ruled on Thursday. The
+model is not being inconsistent; it was never told what consistent meant.
+
+A **design.md** is that brief, as a short document: principles, type, colour,
+layout, components, and the voice the words are written in. Whichever one you
+pick is handed to the model whole, before it starts writing.
+
+It is asked for rather than configured. When the model is about to make
+something whose look matters — a document, a report, a web page, a canvas, a
+deck, a diagram — it calls `ask_for_design`, and *the turn stops there*: the
+chooser appears in the thread at the point the answer is waiting, the same way
+a skill approval does, and the turn resumes the moment you pick. No second
+round trip, no settings page you had to know about in advance, and the question
+arrives when it is actually relevant rather than at the top of every chat.
+
+Every answer is a real answer. **No standard** is one of the rows, and the
+model is told to carry on with its own judgement and not to ask again that
+turn — declining is not cancelling. If nobody answers within three minutes the
+turn takes that same answer and continues, because a chooser nobody is looking
+at must not be able to hang a conversation.
+
+Eight presets ship with the server, written to be genuinely different from one
+another rather than eight shades of the same restraint:
+
+| | |
+|---|---|
+| **Swiss** | Grid, one grotesque, black and one red. Order before ornament. |
+| **Academic paper** | Numbered sections, a text serif, black on white, survives printing. |
+| **Business memo** | Answer first, skimmable headings, one page where possible. |
+| **Editorial** | Magazine feature: serif body, big headline, pull quotes, one column. |
+| **Soft product UI** | Rounded, calm, one brand ramp and a single soft shadow. |
+| **Terminal** | Monospace on a character grid, six semantic colours, dense. |
+| **Brutalist web** | Hard borders, no radius, enormous type, one alarming accent. |
+| **Zine** | Riso duotone, mixed faces, rotated collage, handmade and loud. |
+
+They take their cues from the design traditions they are named for; the
+documents themselves are written for this repository rather than lifted from
+anyone's brand book.
+
+Your own sit beside them on the **Design** page, offered in the same list and
+picked the same way — and marked **yours**, which is also the order they are
+listed in. Write one in the editor, which keeps the source beside a live
+preview, or press **Upload .md** and hand it a file you already have: the
+markdown lands in the editor with its first `# heading` taken as the name, so
+you can look it over before it is saved. A preset is read-only and can only be
+**forked** — a copy you then own — because a preset that drifts per machine is
+just an unlabelled custom standard.
+
+Nothing points at a design once it has been used. The document is copied into
+the window at the moment it is chosen, not referenced, so deleting one never
+changes something already written under it.
+
 ## The sandbox
 
 The most powerful thing Courier can be given, and the most dangerous: a local
@@ -541,6 +597,8 @@ server/app/
   store.py         sessions and messages
   orchestrator.py  §6 request lifecycle
   approvals.py     the prompts a turn waits on, and the standing grants
+  choices.py       the same, for a question whose every answer is an answer
+  design_presets.py  the eight design.md documents that ship with it
   api.py           HTTP surface
   providers/
     base.py        ModelProvider protocol — the seam, in place from day one

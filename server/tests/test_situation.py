@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -102,11 +103,23 @@ def test_the_block_stands_alone_if_the_preamble_is_replaced():
 
 
 def test_shipped_preamble_frames_the_timestamp_as_the_start():
-    """The two halves of the prompt have to agree about what the stated time is."""
+    """The two halves of the prompt have to agree about what the stated time is.
+
+    The word itself is read off the block rather than spelled out here. This
+    used to pin the preamble to "started" while the block said "began" -- so it
+    passed only while the two halves disagreed, and rewording either one broke
+    a test of the invariant over a string neither half was obliged to keep.
+    Which word they use is not this test's business; that they use the same one
+    is the whole of it.
+    """
     from app.config import Settings
 
     preamble = Settings().system_preamble
-    assert "when this conversation started" in preamble
+    block = render(Situation(timezone="Asia/Tokyo"), STARTED)
+
+    said = re.search(r"when the conversation (\w+)", block)
+    assert said, "the block no longer says when its timestamp is from"
+    assert f"when this conversation {said.group(1)}" in preamble
     # The old wording told the model to admit it did not know the date, which
     # now sits directly above a block stating it.
     assert "do not know the current date" not in preamble

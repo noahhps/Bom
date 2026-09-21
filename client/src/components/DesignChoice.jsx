@@ -16,7 +16,7 @@
  * so theirs sort to the top; the presets are the fallback everyone has.
  */
 export function DesignChoice({ skill, onChoose }) {
-  const { id, options, answered, expired } = skill.design;
+  const { id, options, answered, expired, askedFor } = skill.design;
   const listed = options || [];
   // Custom first: someone who has saved their own house style is almost never
   // reaching past it for "Swiss grid".
@@ -32,6 +32,17 @@ export function DesignChoice({ skill, onChoose }) {
         <span className="design-ask-label mi">Design standard</span>
         <span className="design-ask-name">What should this look like?</span>
       </div>
+
+      {/* The list can appear for two different reasons, and they are not the
+          same question. Unprompted, it means "you have not said". After a
+          standard was asked for by name and matched nothing, it means "not
+          that one, but here is what there is" -- and saying so is what stops
+          someone concluding their own standard has gone missing. */}
+      {askedFor && !answered && !expired ? (
+        <p className="design-ask-note">
+          Nothing here is called “{askedFor}”. These are the standards you have:
+        </p>
+      ) : null}
 
       {expired ? (
         <p className="design-ask-note">

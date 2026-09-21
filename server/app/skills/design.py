@@ -60,6 +60,77 @@ def options(store: Store) -> list[dict]:
     return listed
 
 
+#: The shortest key that may match as a substring rather than outright. Four
+#: of the preset ids are common English words -- "soft", "memo", "zine" -- and
+#: letting a four-letter key match anywhere inside a phrase turns "a software
+#: design" into the Soft product UI standard. Short ids still match exactly.
+_MIN_LOOSE = 5
+
+
+def _norm(text: str) -> str:
+    """A name reduced to the part worth comparing.
+
+    Case, punctuation and spacing all vary with how the user happened to type
+    it, and a trailing ".md" is how half of them will refer to these at all --
+    the page calls them design.md files, so "brutalist web design.md" is the
+    expected spelling rather than a mistake.
+    """
+    text = text.strip().lower()
+    for suffix in (".md", ".markdown", ".txt"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+    # "design" and "style" are what someone appends to name the *kind* of
+    # thing, not which one. Dropped so "brutalist web design" reaches
+    # "brutalist web" rather than missing it by one word.
+    for filler in ("design", "standard", "style", "theme", "template"):
+        text = text.replace(filler, "")
+    return "".join(ch for ch in text if ch.isalnum())
+
+
+def match(store: Store, named: str) -> str | None:
+    """The id of the standard `named` refers to, or None if nothing fits.
+
+    This is what keeps a named standard from becoming a filesystem search. The
+    user says "use the brutalist web design.md"; the model passes that string
+    through, and it has to arrive at the preset called "Brutalist web" without
+    anyone going near a disk -- these documents have never been files.
+
+    The reader's own are tried before the presets: if someone has saved a
+    standard of their own called "Editorial", they meant theirs.
+    """
+    query = _norm(named)
+    if not query:
+        return None
+
+    # (id, every string that may stand for it). Custom first so it wins.
+    candidates: list[tuple[str, list[str]]] = [
+        (design.id, [design.name]) for design in store.list_designs()
+    ]
+    candidates += [(preset["id"], [preset["id"], preset["name"]]) for preset in PRESETS]
+
+    for design_id, names in candidates:
+        if any(_norm(name) == query for name in names):
+            return design_id
+
+    # Nothing matched outright. Longest key first, so "Brutalist web" is
+    # preferred over a bare "brutalist" if both were ever on the list.
+    loose = sorted(
+        ((_norm(name), design_id) for design_id, names in candidates for name in names),
+        key=lambda pair: len(pair[0]),
+        reverse=True,
+    )
+    for key, design_id in loose:
+        if len(key) >= _MIN_LOOSE and (key in query or query in key):
+            return design_id
+
+    # Last resort, and exact only: the words the presets are tagged with, so
+    # "minimal" or "mono" land somewhere sensible rather than nowhere.
+    for preset in PRESETS:
+        if any(_norm(tag) == query for tag in preset.get("tags", ())):
+            return preset["id"]
+    return None
+
+
 def resolve(store: Store, choice: str) -> tuple[str, str] | None:
     """The chosen standard as (name, markdown), or None if there is no such id.
 
@@ -86,25 +157,60 @@ class AskForDesign(Skill):
         super().__init__(
             name="ask_for_design",
             description=(
-                "Ask the user which design standard to follow, and get back a "
-                "design.md: the type, colour, spacing, components and voice the "
-                "result should use. Call this BEFORE you start writing anything "
-                "whose look matters -- a document, a report, a web page, a "
-                "canvas, a slide deck, a diagram, a styled artifact of any kind "
-                "-- unless the user has already told you the style to use or "
-                "pointed you at one. The user picks from a set of presets and "
-                "their own saved standards, or declines. It costs one prompt "
-                "and stops you inventing a look they then have to correct. "
-                "Follow the document you get back closely, and do not ask twice "
-                "in one turn."
+                "Get a design.md: the type, colour, spacing, components and "
+                "voice a result should use. Call this BEFORE you start writing "
+                "anything whose look matters -- a document, a report, a web "
+                "page, a canvas, a slide deck, a diagram, a styled artifact of "
+                "any kind. "
+                "If the user named a standard ('use the brutalist web "
+                "design.md', 'do it in the Swiss style', 'use my house "
+                "style'), pass that name as `name` and you get that document "
+                "straight back, with nothing asked of them. If you leave "
+                "`name` out, they are shown the list and pick one. "
+                "IMPORTANT: design standards are stored inside Courier, not on "
+                "disk. A design.md is NEVER a file. Never use read_file, "
+                "list_directory or any other file tool to go looking for one, "
+                "and never tell the user you could not find their design.md -- "
+                "call this instead, which is the only thing that can reach "
+                "them. "
+                "Follow the document you get back closely, and do not call "
+                "this twice in one turn."
             ),
-            # No arguments the model supplies: what it is for is the whole of
-            # the call, and the reader's pick is injected by the turn loop.
-            parameters={"type": "object", "properties": {}},
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": (
+                            "The standard the user named, in their own words "
+                            "-- 'brutalist web design.md', 'Swiss', 'my house "
+                            "style'. Leave out to show them the list instead. "
+                            "A name that matches nothing falls back to the "
+                            "list, so a guess costs nothing."
+                        ),
+                    },
+                },
+            },
         )
         self.store = store
 
-    async def use(self, session: str | None = None, choice: str = NO_DESIGN) -> str:
+    async def use(
+        self,
+        session: str | None = None,
+        name: str = "",
+        choice: str = NO_DESIGN,
+    ) -> str:
+        """`choice` is the turn loop's word on this, and it is the last word.
+
+        The loop has already turned whatever the model passed as `name` into a
+        `choice` -- either by matching it or by putting the list to the reader
+        -- so by the time this runs, `name` is only of interest when the skill
+        is driven directly. Resolving it here as a fallback keeps `use()`
+        honest on its own, and costs nothing in the path that matters.
+        """
+        if (not choice or choice == NO_DESIGN) and name:
+            choice = match(self.store, name) or NO_DESIGN
+
         if not choice or choice == NO_DESIGN:
             return (
                 "The user did not choose a design standard. Use your own "

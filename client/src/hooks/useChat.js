@@ -242,7 +242,14 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null }) {
               .reverse()
               .map((s) =>
                 !asked && s.result === undefined
-                  ? ((asked = true), { ...s, design: { id: data.id, options: data.options } })
+                  ? ((asked = true), {
+                      ...s,
+                      design: {
+                        id: data.id,
+                        options: data.options,
+                        askedFor: data.asked_for || undefined,
+                      },
+                    })
                   : s,
               )
               .reverse();

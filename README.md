@@ -314,6 +314,19 @@ a skill approval does, and the turn resumes the moment you pick. No second
 round trip, no settings page you had to know about in advance, and the question
 arrives when it is actually relevant rather than at the top of every chat.
 
+If you name one yourself — *"use the brutalist web design.md"*, *"do it in the
+Swiss style"*, *"use my house style"* — nothing is asked at all: the model
+passes the name through and gets that document straight back. Matching is
+forgiving about how you say it, `.md` and all, and a name that fits nothing
+falls back to the list rather than to an apology — with a line saying what it
+looked for, so an unfamiliar list does not read as your own standard having
+gone missing.
+
+These documents live inside Courier, not on disk. A design.md is never a file,
+and the model is told so in as many words: left to infer it, a model asked for
+"the brutalist web design.md" goes hunting through your Desktop for a file that
+has never existed and comes back apologising.
+
 Every answer is a real answer. **No standard** is one of the rows, and the
 model is told to carry on with its own judgement and not to ask again that
 turn — declining is not cancelling. If nobody answers within three minutes the

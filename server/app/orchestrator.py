@@ -38,7 +38,11 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
-from .skills.design import NO_DESIGN, options as design_options
+from .skills.design import (
+    NO_DESIGN,
+    match as design_match,
+    options as design_options,
+)
 from .skills.registry import Registry
 from .store import Store, StoredAttachment, StoredMessage
 
@@ -469,19 +473,37 @@ class Orchestrator:
                     # making someone approve a question before being asked it
                     # is two prompts for one decision.
                     if skill_asked is not None and skill_asked.asks == "design":
-                        request_id, waiter = self.choices.open()
-                        yield _sse(
-                            "design_choice",
-                            {
-                                "id": request_id,
-                                "options": design_options(self.store),
-                            },
-                        )
-                        # Silence here is a real answer rather than a refusal:
-                        # the turn carries on and writes the thing unstyled.
-                        extra["choice"] = await self.choices.wait(
-                            request_id, waiter, NO_DESIGN
-                        )
+                        # The user may already have said which one -- "use the
+                        # brutalist web design.md" -- in which case the model
+                        # passes that through and there is nothing to ask. They
+                        # answered the question before it was put; putting it
+                        # anyway is the second prompt this whole path exists to
+                        # avoid.
+                        named = str(call.arguments.get("name") or "").strip()
+                        picked = design_match(self.store, named) if named else None
+                        if picked is not None:
+                            extra["choice"] = picked
+                        else:
+                            request_id, waiter = self.choices.open()
+                            yield _sse(
+                                "design_choice",
+                                {
+                                    "id": request_id,
+                                    "options": design_options(self.store),
+                                    # What they asked for, when it matched
+                                    # nothing. The chooser says so rather than
+                                    # appearing for no visible reason -- an
+                                    # unexplained list is how someone concludes
+                                    # their own standard has gone missing.
+                                    "asked_for": named or None,
+                                },
+                            )
+                            # Silence here is a real answer rather than a
+                            # refusal: the turn carries on and writes the thing
+                            # unstyled.
+                            extra["choice"] = await self.choices.wait(
+                                request_id, waiter, NO_DESIGN
+                            )
                         decision = ALLOW_ONCE
                     else:
                         # Ask, unless something already standing says not to. The

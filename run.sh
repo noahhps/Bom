@@ -15,6 +15,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Keep the server import rooted in this checkout. The editable install inside
+# .venv can retain an absolute path when the project directory is renamed
+# (for example from Courier to Bom), which otherwise leaves `python -m app`
+# pointing at a directory that no longer exists.
+export PYTHONPATH="$PWD/server${PYTHONPATH:+:$PYTHONPATH}"
+
 MODE=serve
 SKIP_BUILD=0
 PORT="${BIND_PORT:-8080}"

@@ -1,4 +1,4 @@
-![alt text](https://github.com/noahhps/Bom/blob/main/bom-logo.svg "dashboard UI Title Image")
+<img src="https://github.com" alt="dashboard UI Title Image" width="300" />
 # Bom / 봄 
 
 

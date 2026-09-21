@@ -1,5 +1,5 @@
-![alt text](https://github.com/noahhps/Courier/blob/main/image.png "dashboard UI Title Image")
-# Courier
+![alt text](https://github.com/noahhps/Bom/blob/main/image.png "dashboard UI Title Image")
+# Bom
 
 A harness designed to deliver a new paradigm of interactions with AI.
 

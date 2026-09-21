@@ -276,7 +276,7 @@ export function NavRail({
             <AgentFlower open mark size={42} />
           </button>
           <span className="navrail-wordmark" aria-hidden="true">
-            Courier
+            Bom
           </span>
           <button
             type="button"

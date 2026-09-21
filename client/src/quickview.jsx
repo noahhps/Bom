@@ -695,7 +695,7 @@ function QuickView() {
   const send = useCallback(
     async (text, attachments = []) => {
       if (!api) {
-        setError("This device has no access token yet. Open Courier and sign in first.");
+        setError("This device has no access token yet. Open Bom and sign in first.");
         return;
       }
 

@@ -96,7 +96,7 @@ pub fn run() {
             quickview::setup(handle);
             let bound = quickview::register(handle);
 
-            let open = MenuItem::with_id(app, "open", "Open Courier", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open Bom", true, None::<&str>)?;
             // Named with the key it answers to, so the tray is where you find
             // out what the shortcut is. When registration failed there is no
             // key to name, and the item says so rather than lying.
@@ -110,7 +110,7 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let quit = MenuItem::with_id(app, "quit", "Quit Courier", true, Some("Cmd+Q"))?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Bom", true, Some("Cmd+Q"))?;
             let menu = Menu::with_items(app, &[&open, &quick, &quit])?;
 
             TrayIconBuilder::with_id("courier-tray")
@@ -188,7 +188,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building Courier");
+        .expect("error while building Bom");
 
     app.run(|handle, event| {
         // Exit is the one place the server can be stopped from: window close

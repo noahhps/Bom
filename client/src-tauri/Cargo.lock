@@ -143,6 +143,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bom"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-shell",
+ "tauri-plugin-window-state",
+ "window-vibrancy",
+]
+
+[[package]]
 name = "brotli"
 version = "8.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -379,20 +393,6 @@ dependencies = [
  "bitflags 2.13.1",
  "core-foundation",
  "libc",
-]
-
-[[package]]
-name = "courier"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-shell",
- "tauri-plugin-window-state",
- "window-vibrancy",
 ]
 
 [[package]]

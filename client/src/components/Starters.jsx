@@ -16,6 +16,7 @@ const RECOMMENDED = [
   {
     kind: "Skill",
     icon: "search",
+    label: "Research",
     title: "Research a question",
     description: "Search the web for current facts, sources, and context.",
     prompt: "Research this question and include the most useful sources: ",
@@ -23,6 +24,7 @@ const RECOMMENDED = [
   {
     kind: "Skill",
     icon: "chart",
+    label: "Analyze data",
     title: "Analyze a dataset",
     description: "Find patterns, compare segments, and explain what changed.",
     prompt: "Analyze this dataset and call out the most important patterns and anomalies:\n\n",
@@ -30,6 +32,7 @@ const RECOMMENDED = [
   {
     kind: "Skill",
     icon: "code",
+    label: "Write code",
     title: "Review or write code",
     description: "Debug an issue, explain a function, or shape a clean implementation.",
     prompt: "Help me with this code. Explain the issue and suggest a clear fix:\n\n",
@@ -37,6 +40,7 @@ const RECOMMENDED = [
   {
     kind: "Tool",
     icon: "attachment",
+    label: "Use a file",
     title: "Work with a file",
     description: "Attach a document, image, or spreadsheet and work from its contents.",
     prompt: "Help me understand and work with the attached file. Start with a concise summary.",
@@ -44,6 +48,7 @@ const RECOMMENDED = [
   {
     kind: "Tool",
     icon: "canvas",
+    label: "Draft on canvas",
     title: "Draft on a canvas",
     description: "Turn an idea into a plan, document, or reusable working draft.",
     prompt: "Create a working draft for this idea, with a clear structure and next steps:\n\n",
@@ -69,33 +74,33 @@ export function StartersHead() {
 }
 
 /* Below it, so the composer itself lands on the centre line rather than being
-   pushed under it by whatever sits above. */
+   pushed under it by whatever sits above.
+ *
+ * A row of chips rather than a shelf of cards. These are suggestions, and a
+ * suggestion that takes a paragraph to make itself is competing with the box
+ * it is meant to be feeding: five cards put ~300px of prose under the
+ * composer on the one screen whose subject is the composer.
+ *
+ * The long copy has not gone anywhere -- it is the button's accessible name,
+ * and the title is its tooltip. A chip is a glance; the sentence is there for
+ * anyone who stops on it or is listening rather than looking. */
 export function Starters({ onPick }) {
   return (
     <div className="starters">
-      <div className="starters-toolbar">
-        <div className="starters-section-head">
-          <span className="mi">Recommended for you</span>
-          <span className="starters-section-hint">Pick a capability to get started</span>
-        </div>
-      </div>
-      <div className="starters-grid">
+      <div className="starters-row">
         {RECOMMENDED.map((starter) => (
           <button
             key={starter.title}
             type="button"
             className="starter"
-            // The full prompt, so a screen reader hears what pressing this
-            // will actually put in the box rather than just the label.
-            aria-label={`Use ${starter.title}: ${starter.description}`}
+            title={starter.description}
+            // The full sentence, so a screen reader hears what pressing this
+            // will actually put in the box rather than the two words on it.
+            aria-label={`${starter.title}: ${starter.description}`}
             onClick={() => onPick(starter.prompt)}
           >
-            <span className="starter-icon"><Icon name={starter.icon} /></span>
-            <span className="starter-copy">
-              <span className="starter-meta">{starter.kind}</span>
-              <span className="starter-title">{starter.title}</span>
-              <span className="starter-body">{starter.description}</span>
-            </span>
+            <Icon name={starter.icon} />
+            {starter.label}
           </button>
         ))}
       </div>

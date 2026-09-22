@@ -2174,7 +2174,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: flex;
   flex-direction: column;
 }
-.starters-grid,
+.starters-row,
 .starters-head {
   width: 100%;
   max-width: var(--read-w);
@@ -2201,94 +2201,53 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   max-width: 52ch;
 }
 
-.starters-grid {
-  display: grid;
-  /* Two up when there is room, one when there is not. `auto-fit` rather than a
-     media query: the sheet narrows when the rail is pinned or dragged wider,
-     and the breakpoint that matters is this column's width, not the window's. */
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-}
-
-.starters-toolbar {
-  width: 100%;
-  max-width: var(--read-w);
-  margin: 0 auto;
+/* A row of chips, centred under the composer.
+ *
+ * These were cards -- icon tile, kind, title and two lines of description
+ * apiece -- which put about 300px of prose directly under the box on the one
+ * screen whose subject is the box. A suggestion should cost a glance. The
+ * sentence survives as the button's accessible name and its tooltip.
+ *
+ * Wraps rather than scrolls: five chips fit one line on a laptop and two on a
+ * phone, and a row that scrolls sideways hides the suggestion you wanted. */
+.starters-row {
   display: flex;
-  align-items: center;
-  gap: 18px;
-  min-width: 0;
-}
-.starters-section-head {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: 16px;
-  padding: 4px 2px 9px;
-}
-.starters-section-hint {
-  font: 400 var(--t-xs)/1.4 var(--font);
-  color: var(--text-faint);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 2px;
 }
 
 .starter {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  text-align: left;
-  padding: 15px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  /* Fully round, unlike the composer's own radius: these are the lightest
+     thing on the screen and should not read as five more boxes under it. */
+  border-radius: 999px;
   border: 1px solid var(--line);
-  /* The rounded-control radius, not a fourth hand-picked value. The starters
-     sit directly under the composer on the empty screen and read as the same
-     family of things you act on, so they round by the same amount. */
-  border-radius: var(--r-control);
   background: var(--surface);
-  transition: border-color 0.14s ease, background 0.14s ease;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
 }
-.starter:hover { border-color: var(--line-strong); background: var(--rail); }
+.starter:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
 .starter:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.starter-icon {
-  display: grid;
-  place-items: center;
+/* The glyph is the chip's quiet half: same weight as the label, no tile and
+   no accent behind it. The tile was what made these read as cards. */
+.starter > :is(svg, .icon-mask) {
+  width: 15px;
+  height: 15px;
   flex: none;
-  width: 31px;
-  height: 31px;
-  margin-top: 1px;
-  border-radius: 9px;
-  background: var(--accent-field);
-  color: var(--accent);
-}
-.starter-icon > :is(svg, .icon-mask) { width: 17px; height: 17px; }
-.starter-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.starter-meta {
-  font: 500 var(--t-micro)/1 var(--font-mono);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.starter-title {
-  font: 500 var(--t-md)/1.3 var(--font);
-  color: var(--ink);
-}
-.starter-body {
-  font: 400 var(--t-sm)/1.55 var(--font);
-  color: var(--text-faint);
-  /* Two lines, then an ellipsis. The whole prompt goes into the box on the
-     press; the card only has to say enough to choose by. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-@media (max-width: 700px) {
-  .starters-toolbar { align-items: flex-start; flex-direction: column; gap: 4px; }
-  .starters-section-head { width: 100%; }
+  opacity: 0.75;
 }
 
 .turn-user { display: flex; justify-content: flex-end; }

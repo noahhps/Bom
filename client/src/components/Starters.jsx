@@ -60,11 +60,18 @@ const RECOMMENDED = [
 export function StartersHead() {
   return (
     <div className="starters-head">
-      {/* The one place the mark gets to be large: the flower, open, with
-          room to be seen. Decorative, so it is hidden from screen readers --
-          the heading under it already says where you are. */}
-      <AgentFlower open mark size={68} className="starters-mark" />
-      <h2 className="h">What are we working on?</h2>
+      {/* The mark and the greeting on one line, centred over the composer and
+          the chips beneath it, so the whole empty screen sits on a single
+          axis rather than reading left-aligned above a centred row.
+          *
+          * Smaller than it was at 68px: standing beside 27px text rather than
+          * above it, the old size made the heading look like its caption.
+          * Decorative, so it stays out of the accessible tree -- the heading
+          * next to it already says where you are. */}
+      <div className="starters-greeting">
+        <AgentFlower open mark size={40} className="starters-mark" />
+        <h2 className="h">What are we working on?</h2>
+      </div>
       <p className="p">
         Everything here runs on your own hardware. Nothing leaves the machine
         unless you send it to the cloud provider on purpose.

@@ -52,3 +52,31 @@ export function formatSize(bytes) {
 
 export const isImage = (attachment) =>
   attachment.kind === "image" || (attachment.mime || "").startsWith("image/");
+
+/**
+ * Hand the reader a file to keep.
+ *
+ * An object URL on a throwaway link, the same move the memory export makes.
+ * Revoked on the next tick rather than straight away: some engines start the
+ * download asynchronously and would find the URL already gone.
+ */
+export function saveFile(name, text, mime = "text/plain") {
+  const url = URL.createObjectURL(new Blob([text], { type: `${mime};charset=utf-8` }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A title as a filename: lowercase words joined by dashes, never empty. */
+export function fileStem(title) {
+  const stem = String(title || "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return stem || "canvas";
+}

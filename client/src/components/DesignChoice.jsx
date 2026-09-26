@@ -15,8 +15,27 @@
  * came from. A standard someone wrote themselves is the more specific answer,
  * so theirs sort to the top; the presets are the fallback everyone has.
  */
+/* What the turn was about to build, when that is why it stopped. */
+const MAKING = {
+  write_slides: "this deck",
+  write_sheet: "this sheet",
+  write_canvas: "this page",
+};
+
+/** Ground, ink and accent, as three stripes. */
+function Swatch({ colours }) {
+  if (!colours?.length) return null;
+  return (
+    <span className="swatch" aria-hidden="true">
+      {colours.map((c, i) => (
+        <i key={i} style={{ background: c }} />
+      ))}
+    </span>
+  );
+}
+
 export function DesignChoice({ skill, onChoose }) {
-  const { id, options, answered, expired, askedFor } = skill.design;
+  const { id, options, answered, expired, askedFor, before } = skill.design;
   const listed = options || [];
   // Custom first: someone who has saved their own house style is almost never
   // reaching past it for "Swiss grid".
@@ -30,8 +49,19 @@ export function DesignChoice({ skill, onChoose }) {
     <div className="design-ask" data-answered={answered ? "" : undefined}>
       <div className="design-ask-head">
         <span className="design-ask-label mi">Design standard</span>
-        <span className="design-ask-name">What should this look like?</span>
+        <span className="design-ask-name">
+          {before
+            ? `Before it builds ${MAKING[before] || "this"} — what should it look like?`
+            : "What should this look like?"}
+        </span>
       </div>
+
+      {before && !answered && !expired ? (
+        <p className="design-ask-note">
+          Pick a standard and it is used for everything else in this
+          conversation too. You can change it from the top bar.
+        </p>
+      ) : null}
 
       {/* The list can appear for two different reasons, and they are not the
           same question. Unprompted, it means "you have not said". After a
@@ -66,6 +96,7 @@ export function DesignChoice({ skill, onChoose }) {
                   onClick={() => onChoose(id, option.id)}
                 >
                   <span className="design-opt-top">
+                    <Swatch colours={option.swatch} />
                     <span className="design-opt-name">{option.name}</span>
                     {option.source === "custom" ? (
                       <span className="design-opt-source mi">Yours</span>

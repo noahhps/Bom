@@ -18,7 +18,9 @@ id, or the sentinel for "no standard, use your judgement".
 
 from __future__ import annotations
 
-from ..design_presets import PRESETS
+import json
+
+from ..design_presets import PRESETS, swatch, tokens_for
 from ..store import Store
 from .skill import Skill
 
@@ -44,6 +46,9 @@ def options(store: Store) -> list[dict]:
             "summary": preset["summary"],
             "tags": preset.get("tags", []),
             "source": "preset",
+            # Ground, ink and accent, so the chooser can show the look rather
+            # than describe it.
+            "swatch": swatch(preset["id"]),
         }
         for preset in PRESETS
     ]
@@ -159,9 +164,11 @@ class AskForDesign(Skill):
             description=(
                 "Get a design.md: the type, colour, spacing, components and "
                 "voice a result should use. Call this BEFORE you start writing "
-                "anything whose look matters -- a document, a report, a web "
-                "page, a canvas, a slide deck, a diagram, a styled artifact of "
-                "any kind. "
+                "anything whose look matters -- slides, a spreadsheet, a web "
+                "page, a poster, a report, a canvas, a diagram, a styled "
+                "artifact of any kind. The user is shown their standards and "
+                "picks one; once a conversation has a standard, calling this "
+                "again returns it without asking. "
                 "If the user named a standard ('use the brutalist web "
                 "design.md', 'do it in the Swiss style', 'use my house "
                 "style'), pass that name as `name` and you get that document "
@@ -189,6 +196,14 @@ class AskForDesign(Skill):
                             "list, so a guess costs nothing."
                         ),
                     },
+                    "change": {
+                        "type": "boolean",
+                        "description": (
+                            "True when the user wants a different look from the "
+                            "one this conversation already has. Shows them the "
+                            "list again instead of returning the current one."
+                        ),
+                    },
                 },
             },
         )
@@ -199,6 +214,7 @@ class AskForDesign(Skill):
         session: str | None = None,
         name: str = "",
         choice: str = NO_DESIGN,
+        change: bool = False,
     ) -> str:
         """`choice` is the turn loop's word on this, and it is the last word.
 
@@ -226,6 +242,20 @@ class AskForDesign(Skill):
             )
 
         name, markdown = found
+        tokens = tokens_for(choice)
+        # The same standard as values the tools take directly. write_slides and
+        # write_sheet draw from structured data, and a small model asked to read
+        # "#E3000F used for at most 5% of the page" out of prose and into a
+        # theme object gets it wrong far more often than one handed the object.
+        token_note = (
+            "\n\nAs a `theme` for write_slides and write_sheet, and as CSS custom "
+            f"properties for a page, this standard is:\n{json.dumps(tokens)}"
+            if tokens
+            else "\n\nWhen you call write_slides or write_sheet, turn this "
+            "standard's colours and fonts into their `theme` (background, "
+            "surface, text, muted, accent, line, heading_font, body_font, "
+            "heading_weight, heading_case, radius)."
+        )
         # The closing instruction is repeated after the document, not just
         # before it. A standard is the better part of two thousand characters,
         # and whatever was said ahead of it is that far behind the cursor by
@@ -236,14 +266,14 @@ class AskForDesign(Skill):
         # the window says what to do.
         return (
             f"The user chose the {name!r} design standard. Follow it closely "
-            f"for everything you produce in this turn.\n\n{markdown}\n\n"
+            f"for everything you produce in this conversation.\n\n{markdown}"
+            f"{token_note}\n\n"
             "---\n"
             "That was the standard, not the work. Now produce the actual "
-            "result, in this same turn, styled to it. If it belongs in a "
-            "canvas -- a document, a report, a page, a deck, anything the "
-            "user will keep -- call write_canvas now with the finished "
-            "content. If you are restyling something that already exists, "
-            "call write_canvas with that canvas's exact existing title, so it "
-            "is replaced rather than left as it was. Do not reply describing "
+            "result, in this same turn, styled to it: write_slides for a "
+            "presentation, write_sheet for a spreadsheet, write_canvas for a "
+            "page or a document. If you are restyling something that already "
+            "exists, write it again with its exact existing title, so it is "
+            "replaced rather than left as it was. Do not reply describing "
             "what you would do, and do not ask for a standard again."
         )

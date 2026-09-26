@@ -17,6 +17,9 @@ whichever is chosen and a reader writing their own has a template to copy.
 
 from __future__ import annotations
 
+import json
+import re
+
 SWISS = """# Swiss / International Typographic
 
 Order before ornament. The grid is the design; everything else is restraint.
@@ -382,6 +385,13 @@ PRESETS: list[dict] = [
         "summary": "Grid, one grotesque, black and one red. Order before ornament.",
         "tags": ["minimal", "grid", "typographic"],
         "markdown": SWISS,
+        "tokens": {
+            "background": "#FFFFFF", "surface": "#F4F4F4", "text": "#111111",
+            "muted": "#767676", "accent": "#E3000F", "line": "#E5E5E5",
+            "heading_font": "'Helvetica Neue', Helvetica, Inter, Arial, sans-serif",
+            "body_font": "'Helvetica Neue', Helvetica, Inter, Arial, sans-serif",
+            "heading_weight": 600, "heading_case": "none", "radius": 0,
+        },
     },
     {
         "id": "academic",
@@ -389,6 +399,13 @@ PRESETS: list[dict] = [
         "summary": "Numbered sections, a text serif, black on white, survives printing.",
         "tags": ["formal", "print", "cited"],
         "markdown": ACADEMIC,
+        "tokens": {
+            "background": "#FFFFFF", "surface": "#F6F6F4", "text": "#111111",
+            "muted": "#555555", "accent": "#0B5394", "line": "#CFCFCF",
+            "heading_font": "Charter, 'Source Serif 4', 'Iowan Old Style', Georgia, serif",
+            "body_font": "Charter, 'Source Serif 4', 'Iowan Old Style', Georgia, serif",
+            "heading_weight": 700, "heading_case": "none", "radius": 0,
+        },
     },
     {
         "id": "memo",
@@ -396,6 +413,13 @@ PRESETS: list[dict] = [
         "summary": "Answer first, skimmable headings, one page where possible.",
         "tags": ["business", "concise", "decision"],
         "markdown": MEMO,
+        "tokens": {
+            "background": "#FFFFFF", "surface": "#F3F5F8", "text": "#1A1A1A",
+            "muted": "#595959", "accent": "#1F3864", "line": "#D9D9D9",
+            "heading_font": "Inter, Calibri, Arial, Helvetica, sans-serif",
+            "body_font": "Inter, Calibri, Arial, Helvetica, sans-serif",
+            "heading_weight": 700, "heading_case": "none", "radius": 2,
+        },
     },
     {
         "id": "editorial",
@@ -403,6 +427,13 @@ PRESETS: list[dict] = [
         "summary": "Magazine feature: serif body, big headline, pull quotes, one column.",
         "tags": ["longform", "serif", "magazine"],
         "markdown": EDITORIAL,
+        "tokens": {
+            "background": "#FBFAF8", "surface": "#F2EFEA", "text": "#1A1A1A",
+            "muted": "#6B6B6B", "accent": "#7B2D26", "line": "#DDD9D2",
+            "heading_font": "'Playfair Display', 'Iowan Old Style', Georgia, serif",
+            "body_font": "Georgia, 'Source Serif 4', 'Iowan Old Style', serif",
+            "heading_weight": 700, "heading_case": "none", "radius": 0,
+        },
     },
     {
         "id": "soft",
@@ -410,6 +441,14 @@ PRESETS: list[dict] = [
         "summary": "Rounded, calm, one brand ramp and a single soft shadow.",
         "tags": ["product", "ui", "friendly"],
         "markdown": SOFT,
+        "tokens": {
+            "background": "#FBFBFD", "surface": "#FFFFFF", "text": "#16181D",
+            "muted": "#6E7481", "accent": "#5B5BD6", "accent_2": "#10B981",
+            "line": "#ECEDF1",
+            "heading_font": "Inter, 'SF Pro Display', Figtree, system-ui, sans-serif",
+            "body_font": "Inter, 'SF Pro Text', Figtree, system-ui, sans-serif",
+            "heading_weight": 600, "heading_case": "none", "radius": 14,
+        },
     },
     {
         "id": "terminal",
@@ -417,6 +456,14 @@ PRESETS: list[dict] = [
         "summary": "Monospace on a character grid, six semantic colours, dense.",
         "tags": ["mono", "dense", "technical"],
         "markdown": TERMINAL,
+        "tokens": {
+            "background": "#0D1117", "surface": "#161B22", "text": "#C9D1D9",
+            "muted": "#8B949E", "accent": "#3FB950", "accent_2": "#58A6FF",
+            "line": "#30363D",
+            "heading_font": "'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+            "body_font": "'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace",
+            "heading_weight": 600, "heading_case": "upper", "radius": 0,
+        },
     },
     {
         "id": "brutalist",
@@ -424,6 +471,13 @@ PRESETS: list[dict] = [
         "summary": "Hard borders, no radius, enormous type, one alarming accent.",
         "tags": ["loud", "high-contrast", "raw"],
         "markdown": BRUTALIST,
+        "tokens": {
+            "background": "#FFFFFF", "surface": "#FFFFFF", "text": "#000000",
+            "muted": "#222222", "accent": "#FF3B00", "line": "#000000",
+            "heading_font": "'Arial Black', 'Helvetica Neue', Arial, sans-serif",
+            "body_font": "'Helvetica Neue', Helvetica, Arial, sans-serif",
+            "heading_weight": 900, "heading_case": "upper", "radius": 0,
+        },
     },
     {
         "id": "zine",
@@ -431,5 +485,122 @@ PRESETS: list[dict] = [
         "summary": "Riso duotone, mixed faces, rotated collage, handmade and loud.",
         "tags": ["expressive", "handmade", "poster"],
         "markdown": ZINE,
+        "tokens": {
+            "background": "#F2EDE3", "surface": "#EADFC4", "text": "#1B1B1B",
+            "muted": "#4A4A4A", "accent": "#FF48B0", "accent_2": "#2A3ABF",
+            "line": "#1B1B1B",
+            "heading_font": "'Arial Black', Impact, 'Helvetica Neue', sans-serif",
+            "body_font": "'Courier New', 'Courier Prime', Courier, monospace",
+            "heading_weight": 900, "heading_case": "upper", "radius": 0,
+        },
     },
 ]
+
+
+# -- theme tokens --------------------------------------------------------------
+#
+# The markdown is for the model to read; these are for the tools to apply. A
+# deck or a sheet is drawn by the client from structured data, so its look is a
+# handful of named values rather than a stylesheet -- and a preset carries the
+# values its own document describes, so choosing "Swiss" can colour a deck the
+# model already wrote without asking it to write the deck again.
+#
+# The same keys are what write_slides and write_sheet accept as `theme`, so a
+# model styling to a custom design.md fills in the same shape by hand.
+
+THEME_KEYS = (
+    "background",      # the page / slide ground
+    "surface",         # a card, a table stripe, a callout
+    "text",            # body text
+    "muted",           # captions, labels, secondary text
+    "accent",          # the one colour that means "look here"
+    "accent_2",        # an optional second, for a duotone or a chart series
+    "line",            # rules and borders
+    "heading_font",    # a CSS font stack
+    "body_font",
+    "heading_weight",  # 300-900
+    "heading_case",    # "upper" or "none"
+    "radius",          # px, 0-48
+)
+
+_COLOUR_KEYS = {"background", "surface", "text", "muted", "accent", "accent_2", "line"}
+_FONT_KEYS = {"heading_font", "body_font"}
+
+# A colour the client can put in a style attribute without it becoming a second
+# declaration: hex, rgb()/hsl() with plain numbers, or a bare CSS keyword. The
+# client checks again before it draws -- this is so a stored deck is clean.
+_COLOUR = re.compile(
+    r"^(#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla)\([0-9.,%\s/+-]{3,60}\)|[a-zA-Z]{3,24})$"
+)
+# A font stack: names, quotes, commas and spaces. No semicolons, no url().
+_FONT = re.compile(r"^[\w\s,'\"-]{1,160}$")
+
+_BY_ID_TOKENS = {preset["id"]: preset.get("tokens") for preset in PRESETS}
+
+
+def tokens_for(design_id: str | None) -> dict | None:
+    """A preset's theme tokens, or None for a custom standard or no standard.
+
+    Only presets carry them. A reader's own design.md is prose the model reads;
+    turning it into numbers is the model's job, done in the `theme` it passes.
+    """
+    if not design_id:
+        return None
+    tokens = _BY_ID_TOKENS.get(design_id)
+    return dict(tokens) if tokens else None
+
+
+def clean_theme(raw) -> dict:
+    """A theme as it may be stored: known keys, plausible values, nothing else.
+
+    Accepts a dict or a JSON string -- some backends hand an object argument
+    over as its serialised text. Anything unrecognised is dropped rather than
+    refused: a model that invents `"shadow": "lots"` should still get its deck.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    theme: dict = {}
+    for key in THEME_KEYS:
+        value = raw.get(key)
+        if value is None or value == "":
+            continue
+        if key in _COLOUR_KEYS:
+            text = str(value).strip()
+            if _COLOUR.match(text):
+                theme[key] = text
+        elif key in _FONT_KEYS:
+            text = " ".join(str(value).split())
+            if _FONT.match(text):
+                theme[key] = text
+        elif key == "heading_weight":
+            try:
+                weight = int(value)
+            except (TypeError, ValueError):
+                continue
+            theme[key] = max(300, min(900, round(weight / 100) * 100))
+        elif key == "heading_case":
+            text = str(value).strip().lower()
+            theme[key] = "upper" if text in ("upper", "uppercase", "caps") else "none"
+        elif key == "radius":
+            try:
+                theme[key] = max(0, min(48, int(float(value))))
+            except (TypeError, ValueError):
+                continue
+    return theme
+
+
+def swatch(design_id: str) -> list[str] | None:
+    """Three colours that say what a preset looks like: ground, ink, accent.
+
+    Drawn beside its name in the chooser, so picking a look is a matter of
+    seeing it rather than reading a summary of it.
+    """
+    tokens = _BY_ID_TOKENS.get(design_id)
+    if not tokens:
+        return None
+    return [tokens["background"], tokens["text"], tokens["accent"]]

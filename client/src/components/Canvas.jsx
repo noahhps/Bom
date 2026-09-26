@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { DeckView, exportDeck } from "./DeckView";
 import { Icon } from "./Icon";
+import { SheetView } from "./SheetView";
+import { fileStem, saveFile } from "../lib/files";
 import { renderMarkdown } from "../lib/markdown";
+import { blankSheet, parseSheet, serializeSheet, toCsv } from "../lib/sheet";
+import { blankDeck, parseDeck, serializeDeck } from "../lib/slides";
 
 // How long after the last keystroke the panel saves. Long enough that a fast
 // typist is not firing a request per word, short enough that a glance away and
@@ -10,7 +15,44 @@ const SAVE_DEBOUNCE = 700;
 
 // The kinds that have something to preview. A code canvas is only ever the
 // editor -- there is nothing to render it into -- so it never shows the toggle.
-const PREVIEWABLE = new Set(["markdown", "html"]);
+const PREVIEWABLE = new Set(["markdown", "html", "sheet", "slides"]);
+
+// Stored as JSON and drawn by a component of their own. Their "preview" is the
+// real working view -- the grid, the deck -- and the text editor is the
+// escape hatch, labelled Source rather than Edit.
+const STRUCTURED = new Set(["sheet", "slides"]);
+
+/* What the + menu can make, in the order a person reaches for them. Each
+   starts with something in it: an empty grid with a header, a deck with a
+   title slide. A blank JSON box is not a sheet. */
+export const CANVAS_KINDS = [
+  { kind: "markdown", label: "Document", icon: "document", title: "Untitled document", content: () => "" },
+  { kind: "sheet", label: "Sheet", icon: "sheet", title: "Untitled sheet", content: () => serializeSheet(blankSheet()) },
+  { kind: "slides", label: "Slides", icon: "slides", title: "Untitled deck", content: () => serializeDeck(blankDeck()) },
+  { kind: "html", label: "Web page", icon: "canvas", title: "Untitled page", content: () => "" },
+  { kind: "code", label: "Code", icon: "code", title: "Untitled code", content: () => "" },
+];
+
+// How each kind is named in the header. "markdown" and "html" are how they are
+// stored, not how anyone refers to them.
+const KIND_LABEL = { markdown: "document", html: "page", sheet: "sheet", slides: "slides" };
+
+// The file a code canvas saves as, by the language it says it is in.
+const EXTENSIONS = {
+  python: "py", javascript: "js", typescript: "ts", jsx: "jsx", tsx: "tsx", html: "html",
+  css: "css", json: "json", rust: "rs", go: "go", java: "java", ruby: "rb", shell: "sh",
+  bash: "sh", sql: "sql", c: "c", cpp: "cpp", swift: "swift", kotlin: "kt", yaml: "yml",
+};
+
+/* The kinds, as a row of choices -- in the + menu and on the empty panel. */
+function KindChoices({ onPick }) {
+  return CANVAS_KINDS.map((k) => (
+    <button key={k.kind} type="button" className="canvas-kind-choice" onClick={() => onPick(k)}>
+      <Icon name={k.icon} />
+      {k.label}
+    </button>
+  ));
+}
 
 // Strip a single wrapping code fence, which a model often puts around canvas
 // content (```html … ```) even when asked not to. The editor keeps the raw
@@ -48,6 +90,17 @@ function looksLikeHtml(text) {
  * which is a model rewrite, not the reader's own typing (that only bumps the
  * timestamp once the save lands, by which point the text already matches).
  */
+/* Which view a canvas opens on. A page or a written document that already has
+   content opens rendered -- you want to see it, not read its source -- and a
+   sheet or a deck always does, since its source is not where you work on it. A
+   blank or code canvas opens in the editor. */
+const openingMode = (canvas) =>
+  canvas &&
+  (STRUCTURED.has(canvas.kind) ||
+    (PREVIEWABLE.has(canvas.kind) && (canvas.content || "").trim()))
+    ? "preview"
+    : "edit";
+
 export function Canvas({
   canvases,
   active,
@@ -56,6 +109,7 @@ export function Canvas({
   onSave,
   onCreate,
   onDelete,
+  fallbackTheme = null,
   resizable = false,
   width,
   onResizeStart,
@@ -63,14 +117,16 @@ export function Canvas({
 }) {
   const [draft, setDraft] = useState(active?.content ?? "");
   const [titleDraft, setTitleDraft] = useState(active?.title ?? "");
-  // Open on the rendered view for a page or a written document that already
-  // has content -- you want to see it, not read its source. A blank or code
-  // canvas opens in the editor, since there is nothing to render.
-  const [mode, setMode] = useState(() =>
-    active && PREVIEWABLE.has(active.kind) && (active.content || "").trim()
-      ? "preview"
-      : "edit",
-  );
+  const [mode, setMode] = useState(() => openingMode(active));
+  // The + menu of kinds to make.
+  const [menu, setMenu] = useState(false);
+  const menuNode = useRef(null);
+  // The last body this panel sent to be saved. When the save lands the canvas
+  // comes back with a new timestamp and that same body, and re-syncing to it
+  // would throw away anything typed while the request was in flight -- so an
+  // echo of our own save is recognised and skipped. A rewrite from the model
+  // carries different content and still comes through.
+  const sent = useRef(null);
   const [copied, setCopied] = useState(false);
   // Whether the HTML preview runs JavaScript. On by default so an interactive
   // page or a JS slideshow just works; the iframe is sandboxed to an opaque
@@ -87,7 +143,15 @@ export function Canvas({
   // another canvas, or a rewrite the model just streamed in. Keyed on the
   // server timestamp so the reader's own keystrokes (which do not move it until
   // the save resolves) never yank the cursor back.
+  const lastId = useRef(activeId);
   useEffect(() => {
+    const switched = lastId.current !== activeId;
+    lastId.current = activeId;
+    if (!switched && sent.current !== null && active?.content === sent.current) {
+      setTitleDraft(active?.title ?? "");
+      return;
+    }
+    sent.current = null;
     setDraft(active?.content ?? "");
     setTitleDraft(active?.title ?? "");
   }, [activeId, stamp]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -97,9 +161,31 @@ export function Canvas({
   // autosave while the reader is editing does not yank them back to preview
   // every keystroke -- only opening or switching canvases sets the view.
   useEffect(() => {
-    const previewable = active && PREVIEWABLE.has(active.kind);
-    setMode(previewable && (active.content || "").trim() ? "preview" : "edit");
+    setMode(openingMode(active));
   }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The + menu shuts on a click anywhere else, or Escape.
+  useEffect(() => {
+    if (!menu) return undefined;
+    const away = (event) => {
+      if (!menuNode.current?.contains(event.target)) setMenu(false);
+    };
+    const key = (event) => event.key === "Escape" && setMenu(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [menu]);
+
+  const make = useCallback(
+    (choice) => {
+      setMenu(false);
+      onCreate({ title: choice.title, kind: choice.kind, content: choice.content() }).catch(() => {});
+    },
+    [onCreate],
+  );
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -108,10 +194,24 @@ export function Canvas({
       clearTimeout(timer.current);
       const id = activeId;
       timer.current = setTimeout(() => {
-        if (id) onSave(id, patch).catch(() => {});
+        if (!id) return;
+        if (patch.content !== undefined) sent.current = patch.content;
+        onSave(id, patch).catch(() => {});
       }, SAVE_DEBOUNCE);
     },
     [activeId, onSave],
+  );
+
+  // A sheet or a deck edited in its own view. The view hands back the whole
+  // new document; it is written into the draft (so Source shows it) and saved
+  // on the same debounce as typing.
+  const onStructured = useCallback(
+    (data) => {
+      const text = active?.kind === "sheet" ? serializeSheet(data) : serializeDeck(data);
+      setDraft(text);
+      scheduleSave({ content: text });
+    },
+    [active?.kind, scheduleSave],
   );
 
   const onBody = useCallback(
@@ -132,15 +232,40 @@ export function Canvas({
     [scheduleSave],
   );
 
+  const kind = active?.kind;
+  const sheet = useMemo(() => (kind === "sheet" ? parseSheet(draft) : null), [kind, draft]);
+  const deck = useMemo(() => (kind === "slides" ? parseDeck(draft) : null), [kind, draft]);
+
+  // A sheet copies as tab-separated values, which is what a spreadsheet
+  // splits into cells on paste. Everything else copies as its text.
   const copy = useCallback(() => {
-    navigator.clipboard?.writeText(draft).then(
+    const text = sheet ? toCsv(sheet, "\t") : draft;
+    navigator.clipboard?.writeText(text).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1200);
       },
       () => {},
     );
-  }, [draft]);
+  }, [draft, sheet]);
+
+  // Each kind leaves as the file someone would expect to open it with: a sheet
+  // as CSV, a deck as a standalone HTML presentation, a page as .html.
+  const download = useCallback(async () => {
+    if (!active) return;
+    const stem = fileStem(titleDraft || active.title);
+    if (sheet) return saveFile(`${stem}.csv`, toCsv(sheet), "text/csv");
+    if (deck) {
+      const html = await exportDeck(deck, fallbackTheme, titleDraft || active.title);
+      return saveFile(`${stem}.html`, html, "text/html");
+    }
+    if (active.kind === "html") return saveFile(`${stem}.html`, stripFence(draft), "text/html");
+    if (active.kind === "code") {
+      const ext = EXTENSIONS[(active.language || "").toLowerCase()] || "txt";
+      return saveFile(`${stem}.${ext}`, draft);
+    }
+    return saveFile(`${stem}.md`, draft, "text/markdown");
+  }, [active, deck, draft, fallbackTheme, sheet, titleDraft]);
 
   // HTML regardless of how it was labelled: an explicit html canvas, or a
   // markdown one whose content is plainly a page (the common case when the
@@ -160,7 +285,13 @@ export function Canvas({
   );
 
   const canPreview = active && (PREVIEWABLE.has(active.kind) || isHtml);
-  const mono = active && (active.kind === "code" || isHtml);
+  const structured = active && STRUCTURED.has(active.kind);
+  const mono = active && (active.kind === "code" || isHtml || structured);
+  // What the two views are called. For a sheet or a deck the rendered view is
+  // where the work happens and comes first; the text is its source.
+  const views = structured
+    ? [["preview", active.kind === "sheet" ? "Grid" : "Deck"], ["edit", "Source"]]
+    : [["edit", "Edit"], ["preview", "Preview"]];
 
   return (
     <aside className="canvas" aria-label="Canvas">
@@ -219,7 +350,7 @@ export function Canvas({
           <span className="canvas-kind mi">
             {active.kind === "code" && active.language
               ? active.language
-              : active.kind}
+              : KIND_LABEL[active.kind] || active.kind}
           </span>
         ) : null}
 
@@ -227,22 +358,19 @@ export function Canvas({
 
         {canPreview ? (
           <div className="canvas-modes" role="tablist" aria-label="View">
-            <button
-              type="button"
-              className="canvas-mode"
-              data-on={mode === "edit" ? "" : undefined}
-              onClick={() => setMode("edit")}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className="canvas-mode"
-              data-on={mode === "preview" ? "" : undefined}
-              onClick={() => setMode("preview")}
-            >
-              Preview
-            </button>
+            {views.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={mode === value}
+                className="canvas-mode"
+                data-on={mode === value ? "" : undefined}
+                onClick={() => setMode(value)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         ) : null}
 
@@ -266,15 +394,24 @@ export function Canvas({
           </button>
         ) : null}
 
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="New canvas"
-          title="New canvas"
-          onClick={() => onCreate().catch(() => {})}
-        >
-          <Icon name="plus" />
-        </button>
+        <div className="canvas-new" ref={menuNode}>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="New canvas"
+            aria-haspopup="menu"
+            aria-expanded={menu}
+            title="New canvas"
+            onClick={() => setMenu((was) => !was)}
+          >
+            <Icon name="plus" />
+          </button>
+          {menu ? (
+            <div className="canvas-new-menu" role="menu" aria-label="New canvas">
+              <KindChoices onPick={make} />
+            </div>
+          ) : null}
+        </div>
         <button
           type="button"
           className="icon-btn"
@@ -288,8 +425,21 @@ export function Canvas({
 
       {active ? (
         <>
-          <div className="canvas-body">
-            {previewHtml ? (
+          <div className="canvas-body" data-kind={active.kind}>
+            {structured && mode === "preview" ? (
+              sheet ? (
+                <SheetView sheet={sheet} fallbackTheme={fallbackTheme} onChange={onStructured} />
+              ) : deck ? (
+                <DeckView deck={deck} fallbackTheme={fallbackTheme} onChange={onStructured} />
+              ) : (
+                <div className="canvas-empty">
+                  <p>This {KIND_LABEL[active.kind]}’s source isn’t valid JSON, so it can’t be drawn.</p>
+                  <button type="button" className="canvas-foot-btn" onClick={() => setMode("edit")}>
+                    Open the source
+                  </button>
+                </div>
+              )
+            ) : previewHtml ? (
               <div className="body canvas-preview" dangerouslySetInnerHTML={previewHtml} />
             ) : isHtml && mode === "preview" ? (
               // Sandboxed to an opaque origin: with `allow-scripts` the page's
@@ -323,6 +473,16 @@ export function Canvas({
             <button type="button" className="canvas-foot-btn" onClick={copy}>
               {copied ? "Copied" : "Copy"}
             </button>
+            <button
+              type="button"
+              className="canvas-foot-btn"
+              onClick={() => download().catch(() => {})}
+              title={
+                sheet ? "Download as CSV" : deck ? "Download as a standalone HTML presentation" : "Download"
+              }
+            >
+              {sheet ? "CSV" : deck ? "Export" : "Download"}
+            </button>
             <div className="spacer" />
             <button
               type="button"
@@ -336,16 +496,12 @@ export function Canvas({
         </>
       ) : (
         <div className="canvas-empty">
-          <p>No canvas in this conversation yet.</p>
-          <button
-            type="button"
-            className="canvas-foot-btn"
-            onClick={() => onCreate().catch(() => {})}
-          >
-            New canvas
-          </button>
+          <p>No canvas in this conversation yet. Start one:</p>
+          <div className="canvas-kind-choices">
+            <KindChoices onPick={make} />
+          </div>
           <p className="mi" data-soft>
-            Or ask the assistant to draft one — it opens here.
+            Or ask for one — a deck, a sheet, a page — and it opens here.
           </p>
         </div>
       )}

@@ -39,11 +39,15 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
+from .design_mode import DESIGN, DESIGN_PREAMBLE
+from .design_presets import tokens_for
 from .skills.design import (
     NO_DESIGN,
     match as design_match,
     options as design_options,
+    resolve as design_resolve,
 )
+from .skills.args import plain_text
 from .skills.registry import Registry
 from .store import Store, StoredAttachment, StoredMessage
 
@@ -186,9 +190,23 @@ class Orchestrator:
         if agent and agent.instructions and agent.instructions.strip():
             prompt = f"{prompt}\n\n{agent.instructions.strip()}"
 
+        # A design conversation's working method. In the stable prefix beside
+        # the agent, and for the same reason: a conversation's mode is fixed
+        # when it starts, so this never churns the cache.
+        mode = self.store.session_mode(session_id) if session_id else "chat"
+        if mode == DESIGN:
+            prompt = f"{prompt}\n\n{DESIGN_PREAMBLE}"
+
         situation = self._situation_block(session_id)
         if situation:
             prompt = f"{prompt}\n\n{situation}"
+
+        # The standard this conversation settled on. After the situation: it
+        # changes when the reader picks another look, which is rare but not
+        # never, and the situation behind it never does.
+        standard = self._design_block(session_id, mode)
+        if standard:
+            prompt = f"{prompt}\n\n{standard}"
 
         if not self._memory_enabled():
             return prompt, []
@@ -229,6 +247,60 @@ class Orchestrator:
         # whole reason the block is stable enough to cache.
         started = datetime.fromtimestamp(session["created_at"] / 1000, tz=timezone.utc)
         return render_situation(situation, started)
+
+    def _design_block(self, session_id: str | None, mode: str) -> str:
+        """What the model should know about this conversation's design standard.
+
+        In a design conversation the whole document rides along, so every turn
+        is styled to it without the model having to fetch it first. In an
+        ordinary chat it is one line: the chat may have made one deck an hour
+        ago and moved on, and two thousand characters of type scale on every
+        later turn would be paying for a brief nobody is using.
+        """
+        if not session_id:
+            return ""
+        chosen = self.store.session_design(session_id)
+        if chosen is None:
+            return ""
+        if chosen == NO_DESIGN:
+            return (
+                "The user chose no design standard for this conversation. Use "
+                "your own judgement for the look, and do not ask again unless "
+                "they want to pick one."
+            )
+        found = design_resolve(self.store, chosen)
+        if found is None:
+            return ""
+        name, markdown = found
+        if mode != DESIGN:
+            return (
+                f"This conversation's design standard is {name!r}. Anything with "
+                "a look -- slides, a sheet, a page -- follows it; ask_for_design "
+                "returns it without asking."
+            )
+        tokens = tokens_for(chosen)
+        theme = f"\n\nAs a theme: {json.dumps(tokens)}" if tokens else ""
+        return (
+            f"This conversation's design standard is {name!r}. Follow it for "
+            "everything you make here; it has already been chosen, so do not "
+            f"ask for one again unless the user wants a different look.\n\n"
+            f"{markdown.strip()}{theme}"
+        )
+
+    def _design_offered(self, allowed_skills: set[str] | None) -> bool:
+        """Whether the design question can be put in this conversation at all.
+
+        Only when ask_for_design is switched on, and within an agent's subset
+        where there is one: a reader who switched the chooser off has said they
+        do not want to be asked, and a gate that asked anyway would be the
+        chooser by another name.
+        """
+        if self.registry is None:
+            return False
+        skill = self.registry.get("ask_for_design")
+        if skill is None or not skill.enabled or not skill.available:
+            return False
+        return allowed_skills is None or "ask_for_design" in allowed_skills
 
     def _memory_enabled(self) -> bool:
         """The "Remember between chats" switch, checked where it matters.
@@ -393,6 +465,10 @@ class Orchestrator:
             # an argument once will not manage it on the tenth attempt,
             # and each attempt costs a whole round.
             garbled = 0
+            # Whether the design question has been settled this turn, either by
+            # ask_for_design or by the gate below. Once is enough: a turn that
+            # writes a deck and then a sheet should not ask twice.
+            design_settled = False
 
             for _ in range(max_rounds):
                 final = None
@@ -509,6 +585,8 @@ class Orchestrator:
                     skill_asked = self.registry.get(call.name) if self.registry else None
                     # Anything the skill needs that the model did not supply.
                     extra: dict = {}
+                    # The standard picked at the gate, when the gate asked.
+                    gated: str | None = None
 
                     # A skill whose whole purpose is to put a question to the
                     # reader asks it here, and that question stands in for the
@@ -522,10 +600,22 @@ class Orchestrator:
                         # answered the question before it was put; putting it
                         # anyway is the second prompt this whole path exists to
                         # avoid.
-                        named = str(call.arguments.get("name") or "").strip()
+                        named = plain_text(call.arguments.get("name"))
                         picked = design_match(self.store, named) if named else None
+                        # A conversation that already settled on a look keeps
+                        # it: asking again on every deck is how a chooser gets
+                        # dismissed without being read. `change` is the way
+                        # back to the list, for "try a different style".
+                        remembered = (
+                            self.store.session_design(session_id) if session_id else None
+                        )
+                        wants_change = str(call.arguments.get("change")).lower() in (
+                            "true", "1", "yes",
+                        )
                         if picked is not None:
                             extra["choice"] = picked
+                        elif remembered is not None and not named and not wants_change:
+                            extra["choice"] = remembered
                         else:
                             request_id, waiter = self.choices.open()
                             yield _sse(
@@ -547,8 +637,49 @@ class Orchestrator:
                             extra["choice"] = await self.choices.wait(
                                 request_id, waiter, NO_DESIGN
                             )
+                        if session_id:
+                            self.store.set_session_design(session_id, extra["choice"])
+                        design_settled = True
                         decision = ALLOW_ONCE
                     else:
+                        # The gate. A deck, a sheet or a page is about to be
+                        # made in a conversation that has never been asked what
+                        # it should look like -- the model went straight to the
+                        # work. Asking here, before it runs, is what makes "ask
+                        # the user about the design" a property of the harness
+                        # rather than a hope about the model.
+                        if (
+                            not design_settled
+                            and session_id
+                            and skill_asked is not None
+                            and skill_asked.wants_design(call.arguments)
+                            and self.store.session_design(session_id) is None
+                            and self._design_offered(allowed_skills)
+                        ):
+                            request_id, waiter = self.choices.open()
+                            yield _sse(
+                                "design_choice",
+                                {
+                                    "id": request_id,
+                                    "options": design_options(self.store),
+                                    "asked_for": None,
+                                    # Which call is waiting, so the chooser can
+                                    # say it is about to build something rather
+                                    # than asking out of nowhere.
+                                    "before": call.name,
+                                },
+                            )
+                            gated = await self.choices.wait(request_id, waiter, NO_DESIGN)
+                            self.store.set_session_design(session_id, gated)
+                            design_settled = True
+                            tokens = tokens_for(gated)
+                            # A deck or a sheet is drawn from tokens, so a
+                            # preset picked now can style what was already
+                            # written -- no second generation.
+                            if tokens and skill_asked.themed:
+                                extra["theme_override"] = tokens
+
+
                         # Ask, unless something already standing says not to. The
                         # prompt is one more frame on the stream this answer is
                         # already arriving on, so the wait costs a pending request
@@ -581,7 +712,16 @@ class Orchestrator:
                         record["result"] = result
                         record["denied"] = True
                     else:
+                        # The conversation's standard, for a skill that takes a
+                        # theme: whatever the model's own theme left out comes
+                        # from here, so a deck is never unstyled just because
+                        # the model forgot to copy the colours across.
+                        if skill_asked is not None and skill_asked.themed and session_id:
+                            defaults = tokens_for(self.store.session_design(session_id))
+                            if defaults:
+                                extra.setdefault("design_defaults", defaults)
                         result = await self._run_skill(call, session_id, extra=extra)
+                        result += _gated_note(self.store, gated, extra, call.name)
                         record["result"] = result
 
                     yield _sse(
@@ -853,6 +993,36 @@ class Orchestrator:
 
         self.store.rename_session(session_id, title)
         return title
+
+
+def _gated_note(store: Store, gated: str | None, extra: dict, tool: str) -> str:
+    """What the model is told when the look was chosen after it wrote the thing.
+
+    Three cases. Nothing was asked, or the reader declined: nothing to add. A
+    preset was picked for a deck or a sheet: its tokens were already applied,
+    so the model only needs to know which standard it is now working to. Any
+    other pick -- the reader's own standard, or a page -- cannot be applied
+    without the model, so the document goes back with an instruction to redo
+    the work to it, in this same turn.
+    """
+    if not gated or gated == NO_DESIGN:
+        return ""
+    found = design_resolve(store, gated)
+    if found is None:
+        return ""
+    name, markdown = found
+    if "theme_override" in extra:
+        return (
+            f"\n\nThe user picked the {name!r} design standard for this "
+            "conversation, and its colours and type were applied to what you "
+            "just wrote. Follow its layout and voice rules in anything further."
+        )
+    return (
+        f"\n\nBefore this ran, the user picked the {name!r} design standard for "
+        f"this conversation:\n\n{markdown.strip()}\n\n---\nWhat you just wrote "
+        f"was made without it. Call {tool} again now with the same title, "
+        "restyled to this standard, so the user sees the finished version."
+    )
 
 
 def _carried_trace(stored: StoredMessage) -> str:

@@ -44,7 +44,9 @@ from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
+from .design_mode import normalize as normalize_mode
 from .design_presets import PRESETS as DESIGN_PRESETS
+from .skills.design import NO_DESIGN, resolve as resolve_design
 
 # Where the app-wide accent lives in `app_settings`. Namespaced like the
 # memory switches beside it, because that table is shared.
@@ -83,6 +85,10 @@ class ClientContext(BaseModel):
 
 class SessionIn(BaseModel):
     client: ClientContext | None = None
+    # "chat" or "design". Anything else is an ordinary chat -- see design_mode.
+    mode: str | None = Field(default=None, max_length=20)
+    # A design standard picked before the first message, or "none".
+    design: str | None = Field(default=None, max_length=120)
 
 
 class ChatRequest(BaseModel):
@@ -93,6 +99,11 @@ class ChatRequest(BaseModel):
     # Optional persona for a brand-new conversation. It is applied before the
     # first turn runs, so the selected agent shapes the opening response too.
     agent_id: str | None = None
+    # For a brand-new conversation only, like `agent_id`: what it is started
+    # as ("chat" or "design"), and a design standard picked on the empty
+    # screen before anything was sent. Ignored once the session exists.
+    mode: str | None = Field(default=None, max_length=20)
+    design: str | None = Field(default=None, max_length=120)
     attachments: list[AttachmentIn] = Field(default_factory=list)
     # Sent with every message, recorded only on the first one. A conversation
     # that starts from the phone should say so even when the client opened it
@@ -293,6 +304,12 @@ class DesignChoice(BaseModel):
     choice: str = Field(min_length=1, max_length=120)
 
 
+class SessionDesign(BaseModel):
+    # A preset id, a stored design's id, "none" for no standard, or null to
+    # forget the choice so the next deck asks again.
+    design: str | None = Field(default=None, max_length=120)
+
+
 class SessionAgent(BaseModel):
     # None runs the conversation as the default assistant. Explicitly nullable,
     # like SessionProject, so "unassign" is something the client can say.
@@ -456,14 +473,33 @@ def build_router(
     def list_sessions() -> dict:
         return {"sessions": [_read_accent(s) for s in store.list_sessions()]}
 
+    def _valid_design(design: str | None) -> str | None:
+        """A design id worth storing, or a 404 for one that names nothing."""
+        if not design:
+            return None
+        if design != NO_DESIGN and resolve_design(store, design) is None:
+            raise HTTPException(404, "no such design standard")
+        return design
+
     @router.post("/sessions")
     def create_session(body: SessionIn | None = None) -> dict:
         # Body-less POSTs still work: an older client, or curl, is a caller
         # that simply has nothing to report about where it is.
         client = body.client if body else None
         return store.create_session(
-            situation=Situation.from_client(client.model_dump() if client else None)
+            situation=Situation.from_client(client.model_dump() if client else None),
+            mode=normalize_mode(body.mode if body else None),
+            design=_valid_design(body.design if body else None),
         )
+
+    @router.put("/sessions/{session_id}/design")
+    def set_session_design(session_id: str, body: SessionDesign) -> dict:
+        """Pick, change or forget the standard a conversation is styled to."""
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        design = _valid_design(body.design)
+        store.set_session_design(session_id, design)
+        return {"ok": True, "design": design}
 
     @router.get("/sessions/{session_id}")
     def get_session(session_id: str) -> dict:
@@ -800,7 +836,11 @@ def build_router(
         else:
             if body.agent_id and not store.get_agent(body.agent_id):
                 raise HTTPException(404, "no such agent")
-            session_id = store.create_session(situation=situation)["id"]
+            session_id = store.create_session(
+                situation=situation,
+                mode=normalize_mode(body.mode),
+                design=_valid_design(body.design),
+            )["id"]
             if body.agent_id:
                 store.set_session_agent(session_id, body.agent_id)
 

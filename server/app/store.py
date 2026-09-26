@@ -359,7 +359,12 @@ class Store:
     # -- sessions ---------------------------------------------------------
 
     def create_session(
-        self, title: str | None = None, situation: Situation | None = None
+        self,
+        title: str | None = None,
+        situation: Situation | None = None,
+        *,
+        mode: str = "chat",
+        design: str | None = None,
     ) -> dict:
         session_id = _new_id("ses")
         now = _now()
@@ -367,8 +372,9 @@ class Store:
         self.db.execute(
             """
             INSERT INTO sessions
-                   (id, title, created_at, updated_at, tz, locale, utc_offset, region)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   (id, title, created_at, updated_at, tz, locale, utc_offset, region,
+                    mode, design)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
@@ -379,6 +385,8 @@ class Store:
                 where["locale"],
                 where["utc_offset"],
                 where["region"],
+                mode,
+                design,
             ),
         )
         return {
@@ -387,8 +395,27 @@ class Store:
             "created_at": now,
             "updated_at": now,
             "theme": None,
+            "mode": mode,
+            "design": design,
             **where,
         }
+
+    def session_mode(self, session_id: str) -> str:
+        """'design' for a design conversation, 'chat' for everything else."""
+        row = self.db.query_one("SELECT mode FROM sessions WHERE id = ?", (session_id,))
+        return (row["mode"] if row else None) or "chat"
+
+    def session_design(self, session_id: str) -> str | None:
+        """The standard this conversation settled on, 'none', or None if never asked."""
+        row = self.db.query_one("SELECT design FROM sessions WHERE id = ?", (session_id,))
+        return row["design"] if row else None
+
+    def set_session_design(self, session_id: str, design: str | None) -> None:
+        """Remember a conversation's standard. Does not touch `updated_at`, for
+        the same reason recolouring does not: it is not something said."""
+        self.db.execute(
+            "UPDATE sessions SET design = ? WHERE id = ?", (design, session_id)
+        )
 
     def session_situation(self, session_id: str) -> Situation:
         """Where and when this conversation started. Empty if it never said."""
@@ -430,7 +457,7 @@ class Store:
         rows = self.db.query(
             """
             SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id,
-                   s.agent_id, s.theme,
+                   s.agent_id, s.theme, s.mode, s.design,
                    (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
             FROM sessions s
             ORDER BY s.updated_at DESC

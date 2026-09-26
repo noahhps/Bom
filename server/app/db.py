@@ -486,6 +486,26 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_designs_name ON designs(name COLLATE NOCASE);
     """,
+    # 17 -- design conversations, and the standard a conversation settled on.
+    #
+    # `mode` is what the conversation was started as: 'chat', the assistant as
+    # it has always been, or 'design', which reads a second preamble about
+    # making things that look good and is listed under Design in the rail. Not
+    # null, defaulted, so every existing conversation is simply a chat.
+    #
+    # `design` is the design standard the reader picked for this conversation --
+    # a preset id, a stored design's id, or 'none' for "no standard, use your
+    # judgement". NULL means nobody has been asked yet, which is not the same
+    # as 'none': NULL is what makes the turn loop ask before it builds a deck,
+    # and 'none' is the answer that stops it asking again.
+    #
+    # Deliberately not a foreign key. Presets are not rows, and a deleted
+    # custom standard should leave its conversations readable -- resolving an
+    # id that has gone is handled where it is read, as "no longer available".
+    """
+    ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
+    ALTER TABLE sessions ADD COLUMN design TEXT;
+    """,
 ]
 
 

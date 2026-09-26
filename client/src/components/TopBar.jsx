@@ -25,9 +25,22 @@ export function TopBar({
   agents = [],
   agentId = null,
   onAgent,
+  // A design conversation: its tag beside the title, and the standard it is
+  // styled to as a picker of its own.
+  mode = "chat",
+  looks = [],
+  look = null,
+  onLook,
 }) {
+  const design = mode === "design";
   return (
-    <header className="topbar">
+    <header className="topbar" data-mode={design ? "design" : undefined}>
+      {design ? (
+        <span className="topbar-mode mi" title="Design conversation">
+          <Icon name="design" />
+          <span className="topbar-mode-label">Design</span>
+        </span>
+      ) : null}
       <span className="title">{title}</span>
 
       {badge ? (
@@ -60,6 +73,29 @@ export function TopBar({
                 {p.name}
               </option>
             ))}
+          </select>
+        </label>
+      ) : null}
+
+      {/* The look. On in every design conversation, sent or not -- an
+          unsent one keeps the pick locally and sends it with the first
+          message. "Ask when needed" is no pick at all, which is what makes the
+          model stop and ask before it builds something. */}
+      {design ? (
+        <label className="topbar-project topbar-look">
+          <span className="mi">Look</span>
+          <select
+            value={look || ""}
+            aria-label="Design standard for this conversation"
+            onChange={(event) => onLook(event.target.value || null)}
+          >
+            <option value="">Ask when needed</option>
+            {looks.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+            <option value="none">No standard</option>
           </select>
         </label>
       ) : null}

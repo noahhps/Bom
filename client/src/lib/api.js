@@ -226,10 +226,18 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
 
     listSessions: () => json("/sessions"),
-    createSession: () =>
+    // `mode` is "chat" or "design"; `design` a standard picked up front.
+    createSession: ({ mode = null, design = null } = {}) =>
       json("/sessions", {
         method: "POST",
-        body: JSON.stringify({ client: clientContext() }),
+        body: JSON.stringify({ client: clientContext(), mode, design }),
+      }),
+    // The design standard a conversation is styled to: a preset id, one of
+    // the reader's own, "none", or null to forget it so the next deck asks.
+    setSessionDesign: (sessionId, design) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/design", {
+        method: "PUT",
+        body: JSON.stringify({ design }),
       }),
     listProjects: () => json("/projects"),
     createProject: (name) =>
@@ -336,6 +344,10 @@ export function createApi(token, onUnauthorized = () => {}) {
       provider = null,
       agentId = null,
       signal = undefined,
+      // For a brand-new conversation only: "chat" or "design", and a design
+      // standard chosen on the empty screen. The server ignores both once the
+      // session exists.
+      { mode = null, design = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -349,6 +361,8 @@ export function createApi(token, onUnauthorized = () => {}) {
           think: thinkingLevel,
           provider,
           agent_id: agentId,
+          mode,
+          design,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

@@ -45,6 +45,17 @@ class Skill(ABC):
     #: None -- the default -- means the skill's text answer is all there is.
     surfaces: str | None = None
 
+    #: Set by a skill whose output has a look -- a deck, a sheet, a page. When a
+    #: conversation has never chosen a design standard, the turn loop asks for
+    #: one before running it, so the thing is made to a brief rather than to
+    #: whatever the model reaches for. See `wants_design` for the per-call test.
+    needs_design: bool = False
+
+    #: Set by a skill that takes a `theme` of design tokens. The turn loop hands
+    #: it the conversation's standard as `design_defaults`, which fills whatever
+    #: the model's own theme left out.
+    themed: bool = False
+
     def __init__(
         self,
         *,
@@ -58,6 +69,15 @@ class Skill(ABC):
         self.parameters = parameters or {"type": "object", "properties": {}}
         self.enabled = True
         self.requires = requires
+
+    def wants_design(self, arguments: dict) -> bool:
+        """Whether this particular call makes something whose look matters.
+
+        The class flag by default. A skill that only sometimes does -- the
+        canvas, which is a page one call and a code snippet the next --
+        overrides this to look at the arguments.
+        """
+        return self.needs_design
 
     @property
     def available(self) -> bool:

@@ -29,7 +29,10 @@ PRESETS: list[dict] = [
             "paragraph, write it into a canvas the user can keep, and keep your "
             "chat reply to the headline and what is still uncertain."
         ),
-        "skills": ["web_search", "search_history", "current_time", "read_canvas", "write_canvas"],
+        "skills": [
+            "web_search", "search_history", "current_time", "read_canvas",
+            "write_canvas", "write_slides", "ask_for_design",
+        ],
     },
     {
         "id": "coder",
@@ -70,7 +73,10 @@ PRESETS: list[dict] = [
             "would most change the plan before writing it, not after. Note where "
             "an estimate is a guess."
         ),
-        "skills": ["write_canvas", "read_canvas", "current_time", "search_history"],
+        "skills": [
+            "write_canvas", "read_canvas", "write_sheet", "edit_sheet",
+            "current_time", "search_history",
+        ],
     },
     {
         "id": "analyst",
@@ -79,11 +85,33 @@ PRESETS: list[dict] = [
             "You work with data and numbers, and you compute rather than "
             "estimate: any figure you report should come from a run_python run, "
             "not from your head. Read the files you are pointed at, show the "
-            "short version of your working, and put tables or a written-up "
-            "result in a canvas. Say plainly when the data does not support a "
-            "conclusion the user is hoping for."
+            "short version of your working, and put tables in a sheet -- with "
+            "formulas for anything derived -- and a written-up result in a "
+            "canvas. Say plainly when the data does not support a conclusion "
+            "the user is hoping for."
         ),
-        "skills": ["run_python", "read_file", "list_directory", "read_canvas", "write_canvas"],
+        "skills": [
+            "run_python", "read_file", "list_directory", "read_canvas", "write_canvas",
+            "write_sheet", "edit_sheet", "write_slides", "ask_for_design",
+        ],
+    },
+    {
+        "id": "designer",
+        "name": "Designer",
+        "instructions": (
+            "You make things that look finished: decks, sheets, pages, posters. "
+            "Settle the look first with ask_for_design, then build the real "
+            "thing in the canvas -- write_slides for a presentation, write_sheet "
+            "for numbers, write_canvas with kind html for a page -- styled to "
+            "that standard. Keep a clear hierarchy, one accent, a type scale and "
+            "a spacing scale, and draw visuals inline rather than linking them. "
+            "Reply briefly with the decisions that matter and what you would "
+            "refine next."
+        ),
+        "skills": [
+            "ask_for_design", "write_slides", "write_sheet", "edit_sheet",
+            "write_canvas", "read_canvas",
+        ],
     },
     {
         "id": "companion",

@@ -156,3 +156,48 @@ export function describeSkill(skill) {
     preview: clip(skill?.result),
   };
 }
+
+/* What a turn is doing, in the words the working label settles into.
+ *
+ * Every word has to be true. A label that rotated through "Searching",
+ * "Reading", "Drafting" on a timer while the model did something else entirely
+ * would look like information and be the opposite -- worse than the one word
+ * it replaced. So each word here is read off the turn itself: a skill that is
+ * running says what that skill does, a turn held on the reader says so, and
+ * otherwise it is the model's own work, with "Thinking" only once the model has
+ * actually started to reason.
+ *
+ * Fifteen characters at most -- the label grows and shrinks to fit each word,
+ * and a long one would push it across the column. */
+const DOING = {
+  web_search: "Searching",
+  search_files: "Searching",
+  search_history: "Recalling",
+  remember: "Remembering",
+  forget: "Forgetting",
+  current_time: "Checking time",
+  list_directory: "Reading",
+  read_file: "Reading",
+  read_canvas: "Reading",
+  write_canvas: "Drafting",
+  add_event: "Scheduling",
+  update_event: "Scheduling",
+  list_events: "Checking dates",
+  find_events: "Checking dates",
+  list_photos: "Looking",
+  list_albums: "Looking",
+  create_album: "Sorting photos",
+  add_to_album: "Sorting photos",
+  run_python: "Running code",
+  run_shell: "Running code",
+};
+
+export function workingWord(skills, thinking) {
+  // Held on the reader rather than working: an approval or a design choice is
+  // on screen and nothing moves until it is answered.
+  if (skills?.some((s) => s.approval || s.design)) return "Waiting on you";
+  // The one still waiting, for the same reason SkillTrace names it.
+  const running = skills?.find((s) => s.result === undefined);
+  if (running) return DOING[running.name] || "Running a skill";
+  return thinking ? "Thinking" : "Working";
+}

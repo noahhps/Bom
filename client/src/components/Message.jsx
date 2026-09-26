@@ -1,8 +1,10 @@
 import { memo } from "react";
 
 import { useReveal } from "../hooks/useReveal";
+import { workingWord } from "../lib/skillWidgets";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
+import { Decode } from "./Decode";
 import { DesignChoice } from "./DesignChoice";
 import { Reasoning } from "./Reasoning";
 import { SkillApproval } from "./SkillApproval";
@@ -116,8 +118,11 @@ export const Message = memo(function Message({
           <div className="body" dangerouslySetInnerHTML={html} />
         ) : streaming ? (
           // The gap between the turn starting and its first token. Without
-          // something here the answer column is simply blank.
-          <span className="working">{thinking ? "Thinking" : "Working"}</span>
+          // something here the answer column is simply blank. The word is
+          // read off the turn -- see workingWord -- so it says what is
+          // actually happening: the skill that is running, a prompt waiting
+          // on the reader, or the model's own thinking.
+          <Decode className="working" word={workingWord(skills, thinking)} />
         ) : (
           <div className="body">{content}</div>
         )}

@@ -2320,11 +2320,16 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
  *
  * Dormant, the petals are drawn part-way in behind a 15px bud and twisted,
  * so only their pointed edges show round it -- a closed flower, not a disc.
- * Hovering a dormant flower sets it turning. Blooming, the bud shrinks back
- * to a face, the petals slowly push out from behind it one after another,
- * untwisting into place with a little overshoot, and then the eyes open.
- * Closing runs the same way back, quicker. While the turn is live the ring
- * keeps turning and the eyes blink.
+ * Live, the bud shrinks back to a face and the flower blooms on a loop: the
+ * petals come out from under the face one at a time, it holds, and all eight
+ * fold back under together. The eyes open and blink. When the turn ends the
+ * loop is caught where it is and eased into the bud (see AgentFlower.jsx).
+ * The logo blooms the same way while hovered.
+ *
+ * The bloom's keyframes are generated from a millisecond timeline in
+ * lib/drawkit.js rather than written here: eight petals each open at their
+ * own moment but close at the same one, which is eight sets of keyframes that
+ * would all have to be re-derived whenever one duration changed.
  *
  * Every colour is an accent token, so it re-themes with the conversation. The
  * global reduced-motion rule turns the movement off and leaves the two states. */
@@ -2364,7 +2369,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 
 /* As the logo: the open flower, `--mark` pixels across, in the normal flow.
-   27 is the open flower's own span at scale 1 (tip radius 13.5). It turns
+   27 is the open flower's own span at scale 1 (tip radius 13.5). It blooms
    only while hovered, however long it has been open. */
 .flower-mark {
   display: inline-grid;
@@ -2378,30 +2383,14 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
      so this makes the span exactly --mark px, crisp at any --mark. */
   font-size: calc(var(--mark) * 22 / 27 * 1px);
 }
-.flower-mark > .flower[data-open] .flower-petals {
-  animation-play-state: paused;
-}
-.flower-mark:hover > .flower .flower-petals {
-  animation-play-state: running;
-}
 
-/* A zero-size point at the centre that the petals hang from.
- *
- * The turn is always attached and only paused or played. Adding and removing
- * the animation instead would snap the ring back to 0deg every time the
- * pointer left, which reads as a twitch rather than a flower settling. */
+/* A zero-size point at the centre that the petals hang from. */
 .flower-petals {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 0;
   height: 0;
-  animation: flower-turn 16s linear infinite;
-  animation-play-state: paused;
-}
-.flower:hover .flower-petals,
-.flower[data-open] .flower-petals {
-  animation-play-state: running;
 }
 
 /* The arm: pinned to the centre, rotated to its 45deg slot. Dormant it is
@@ -2507,9 +2496,6 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   animation: flower-blink 4.6s ease-in-out 1.2s infinite;
 }
 
-@keyframes flower-turn {
-  to { transform: rotate(360deg); }
-}
 @keyframes flower-blink {
   0%, 92%, 100% { transform: scaleY(1); }
   95% { transform: scaleY(0.15); }
@@ -2696,15 +2682,33 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .sources .stack i + i { background: #dfe9e3; margin-left: -5px; }
 
 /* An answer still arriving. */
+/* The working label (Decode.jsx): noise in the faint label colour, and each
+   letter taking the accent as it settles -- so the word reads as arriving in
+   the agent's colour, and a half-settled word shows how far along it is. */
+.decode { display: inline-block; }
 .working {
   display: inline-block;
   font: 500 var(--t-micro)/1 var(--font);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+  white-space: pre;
   color: var(--text-faint);
-  animation: pulse 1.4s ease-in-out infinite;
 }
-@keyframes pulse { 50% { opacity: 0.35; } }
+.working i { font-style: normal; }
+.working i[data-settled] { color: var(--accent); }
+
+/* Text for a screen reader and nothing else. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 @keyframes composer-pop {
   0% {
@@ -4379,6 +4383,63 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   padding-left: 11px;
   border-left: 2px solid var(--line);
 }
+
+/* -- the canvas board (CanvasBoard.jsx) ------------------------------------
+ *
+ * What a write_canvas card shows while it runs: a marker drawing on a board.
+ * These are the parts' looks; their timelines are generated in lib/drawkit.
+ *
+ * Every resting value here is the finished drawing -- strokes drawn, marker
+ * and eraser gone -- because that is what the global reduced-motion rule
+ * leaves on screen when it turns the animations off. The keyframes do the
+ * hiding. The dash is 100 on and 104 off against a pathLength of 100, so a
+ * hidden stroke leaves no round cap sitting on its first point. */
+.board {
+  position: relative;
+  display: block;
+  flex: none;
+  margin: 2px 0;
+}
+/* The global `svg` rule sizes every icon to 18px and strokes it in the text
+   colour. The board is not an icon: it takes its box's size, and nothing in it
+   is stroked unless its own class says so. */
+.board > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  stroke: none;
+}
+.board-frame { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.4; }
+.board-ledge { fill: none; stroke: var(--line-strong); stroke-width: 2.4; stroke-linecap: round; }
+.board-stroke {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 100 104;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.board-nib {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  /* The tip, not the box's middle, rides the path. */
+  offset-anchor: 3% 97%;
+  offset-rotate: 0deg;
+  opacity: 0;
+  pointer-events: none;
+}
+.board-nib svg { display: block; overflow: visible; stroke: none; }
+.board-nib-tip { fill: var(--accent); }
+.board-nib-collar { fill: var(--text-dim); }
+.board-nib-body { fill: var(--surface); stroke: var(--text-dim); stroke-width: 1.1; stroke-linejoin: round; }
+.board-nib-band { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; }
+.board-eraser { opacity: 0; }
+.board-eraser-block { fill: var(--surface); stroke: var(--text-dim); stroke-width: 1.1; }
+.board-eraser-felt { fill: var(--line-strong); }
 
 /* Dialogs -- see components/Dialog.jsx.
  *

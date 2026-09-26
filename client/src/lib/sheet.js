@@ -16,6 +16,8 @@
  * a crash, and a formula that refers to itself is `#CYCLE!`.
  */
 
+import { lineText } from "./plainText.js";
+
 export const FORMATS = ["text", "number", "integer", "currency", "percent", "date"];
 
 /** 0 -> A, 25 -> Z, 26 -> AA. */
@@ -48,16 +50,29 @@ export function parseSheet(content) {
     return null;
   }
   if (!data || typeof data !== "object" || !Array.isArray(data.columns)) return null;
-  const columns = data.columns.map((c) => String(c ?? ""));
+  const columns = data.columns.map(lineText);
   const width = columns.length;
   const rows = (Array.isArray(data.rows) ? data.rows : []).map((row) => {
-    const cells = Array.isArray(row) ? row.slice(0, width) : [];
+    const cells = Array.isArray(row) ? row.slice(0, width).map(cleanCell) : [];
     while (cells.length < width) cells.push("");
     return cells;
   });
   const formats = columns.map((_, i) => normalizeFormat(data.formats?.[i]));
   const theme = data.theme && typeof data.theme === "object" ? data.theme : {};
   return { version: 1, columns, formats, rows, theme };
+}
+
+/** A stored cell as a number or a string -- never an object, and never the
+ *  printed form of one. Formulas are left exactly as written. */
+function cleanCell(cell) {
+  if (typeof cell === "number" || cell === "" || cell == null) return cell ?? "";
+  if (typeof cell === "boolean") return cell ? "TRUE" : "FALSE";
+  if (typeof cell === "string" && (cell.startsWith("=") || !/^[[{]/.test(cell.trim()))) return cell;
+  if (cell && typeof cell === "object" && !Array.isArray(cell) && typeof cell.value === "number") {
+    return cell.value;
+  }
+  const text = lineText(cell);
+  return /^-?\d+(\.\d+)?$/.test(text) ? Number(text) : text;
 }
 
 export function serializeSheet(sheet) {

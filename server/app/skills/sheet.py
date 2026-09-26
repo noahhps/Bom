@@ -25,6 +25,7 @@ import re
 
 from ..design_presets import clean_theme
 from ..store import Store
+from .args import as_dict, plain_text
 from .skill import Skill
 from .slides import THEME_SCHEMA, save_canvas
 
@@ -83,7 +84,14 @@ def _coerce(cell, fmt: str = "text"):
         return "TRUE" if cell else "FALSE"
     if isinstance(cell, (int, float)):
         return cell
-    text = str(cell).strip()
+    # A cell wrapped in an object or a list -- {"value": 1200} -- is its value.
+    text = plain_text(cell).replace("\n", " ") if isinstance(cell, (dict, list)) else str(cell).strip()
+    if isinstance(cell, str):
+        text = plain_text(cell) if text[:1] in "{[" else text
+    if isinstance(cell, dict):
+        inner = next((cell[k] for k in ("value", "v") if k in cell), None)
+        if isinstance(inner, (int, float)) and not isinstance(inner, bool):
+            return inner
     if not text or text.startswith("="):
         return text
     if _NUMBER.match(text):
@@ -145,12 +153,12 @@ def _rows_from(value) -> list[list]:
 def normalize_sheet(columns=None, rows=None, formats=None, theme=None, csv_text=None,
                     defaults: dict | None = None, override: dict | None = None) -> dict:
     """The stored document: columns, a format each, the rows, a theme."""
-    header = [str(c).strip() for c in _list_arg(columns)]
+    header = [plain_text(c).replace("\n", " ") for c in _list_arg(columns)]
     body = _rows_from(rows)
     if not header and csv_text:
         parsed = _rows_from(str(csv_text))
         if parsed:
-            header, body = [str(c).strip() for c in parsed[0]], parsed[1:] + body
+            header, body = [plain_text(c) for c in parsed[0]], parsed[1:] + body
     if not header and body:
         width = max(len(r) for r in body)
         header = [f"Column {column_letter(i)}" for i in range(width)]
@@ -161,7 +169,7 @@ def normalize_sheet(columns=None, rows=None, formats=None, theme=None, csv_text=
     header += [f"Column {column_letter(i)}" for i in range(len(header), width)]
 
     listed = _list_arg(formats)
-    fmts = [_format(listed[i] if i < len(listed) else "") for i in range(width)]
+    fmts = [_format(plain_text(listed[i]) if i < len(listed) else "") for i in range(width)]
 
     grid = []
     for row in body[:MAX_ROWS]:
@@ -283,7 +291,7 @@ class WriteSheet(Skill):
     async def use(
         self,
         session: str,
-        title: str,
+        title=None,
         columns=None,
         rows=None,
         formats=None,
@@ -291,10 +299,15 @@ class WriteSheet(Skill):
         csv: str | None = None,
         design_defaults: dict | None = None,
         theme_override: dict | None = None,
+        **extra,
     ) -> str:
-        name = (title or "").strip()
-        if not name:
-            return "Give the sheet a title so it can be found and updated later."
+        # Columns under another name, or the whole table as one object.
+        if columns is None:
+            columns = next((extra[k] for k in ("headers", "header", "cols") if k in extra), None)
+        if rows is None:
+            rows = next((extra[k] for k in ("data", "values", "cells") if k in extra), None)
+        # A missing title is not worth a failed call; it can be renamed later.
+        name = (plain_text(title or extra.get("name")) or "Untitled sheet")[:200]
         sheet = normalize_sheet(columns, rows, formats, theme, csv, design_defaults, theme_override)
         if not sheet["columns"]:
             return "That sheet had no columns. Pass `columns` (the header row) and `rows`."
@@ -356,13 +369,18 @@ class EditSheet(Skill):
     async def use(
         self,
         session: str,
-        title: str,
+        title=None,
         cells=None,
         append_rows=None,
         delete_rows=None,
+        **extra,
     ) -> str:
-        name = (title or "").strip()
+        name = plain_text(title)
         canvas = self.store.find_canvas_by_title(session, name) if name else None
+        if canvas is None and not name:
+            # No title, and only one sheet it could mean: that one.
+            only = [c for c in self.store.session_canvases(session) if c.kind == KIND]
+            canvas = only[0] if len(only) == 1 else None
         if canvas is None:
             sheets = [c.title for c in self.store.session_canvases(session) if c.kind == KIND]
             listed = ", ".join(repr(t) for t in sheets) or "none yet"
@@ -371,11 +389,11 @@ class EditSheet(Skill):
         if sheet is None:
             return f"{canvas.title!r} is not a sheet, so it cannot be edited cell by cell."
 
-        if isinstance(cells, str):
-            try:
-                cells = json.loads(cells)
-            except ValueError:
-                cells = {}
+        cells = as_dict(cells) if cells is not None else None
+        # A list of {"cell": "B3", "value": 5} is the other shape models use.
+        if cells is None and isinstance(extra.get("updates"), list):
+            cells = {plain_text(u.get("cell") or u.get("ref")): u.get("value")
+                     for u in extra["updates"] if isinstance(u, dict)}
         changed = 0
         problems: list[str] = []
         columns, formats, rows = sheet["columns"], sheet["formats"], sheet["rows"]

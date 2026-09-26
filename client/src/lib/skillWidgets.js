@@ -1,3 +1,5 @@
+import { lineText } from "./plainText.js";
+
 /* What a finished tool call looks like as a card.
  *
  * The trace used to be one monospace line per call -- the tool's name and its
@@ -18,16 +20,11 @@
 
 const PREVIEW_CHARS = 240;
 
-/** One value as a line of text, whatever the model put in the argument. */
+/** One value as a line of text, whatever the model put in the argument --
+ *  including an object wrapping the text, which is unwrapped rather than
+ *  printed as JSON. See lib/plainText. */
 function asText(value) {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
+  return lineText(value);
 }
 
 function clip(text, limit = PREVIEW_CHARS) {

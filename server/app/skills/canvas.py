@@ -26,6 +26,7 @@ import re
 
 from ..store import Store
 from . import sheet as sheets
+from .args import plain_text
 from . import slides as decks
 from .skill import Skill
 
@@ -211,14 +212,25 @@ class WriteCanvas(Skill):
     async def use(
         self,
         session: str,
-        title: str,
-        content: str,
+        title=None,
+        content="",
         kind: str | None = None,
         language: str | None = None,
+        **extra,
     ) -> str:
-        name = (title or "").strip()
+        # Unwrapped if it came as an object; refused, with a sentence rather
+        # than a TypeError, if it did not come at all.
+        name = plain_text(title or extra.get("name"))[:200]
         if not name:
             return "Give the canvas a title so it can be found and updated later."
+        # The body under another name, or as something other than text: an
+        # object or a list would otherwise be stored as its Python repr.
+        if not content:
+            content = next((extra[k] for k in ("text", "body", "html", "markdown", "code") if k in extra), "")
+        if not isinstance(content, str):
+            content = plain_text(content)
+        kind = plain_text(kind) or None
+        language = plain_text(language) or None
         # The two structured kinds have their own tools, which take structure
         # rather than text. Content written here for them would be a document
         # the panel cannot draw.
@@ -316,7 +328,7 @@ class ReadCanvas(Skill):
         )
         self.store = store
 
-    async def use(self, session: str, title: str | None = None) -> str:
+    async def use(self, session: str, title=None, **extra) -> str:
         canvases = self.store.session_canvases(session)
         if not canvases:
             return (
@@ -324,7 +336,7 @@ class ReadCanvas(Skill):
                 "write_canvas."
             )
 
-        name = (title or "").strip()
+        name = plain_text(title)
         if not name:
             listed = "\n".join(
                 f"- {c.title} ({c.kind}"

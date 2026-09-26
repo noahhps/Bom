@@ -28,6 +28,7 @@ import json
 import re
 
 from ..design_presets import clean_theme
+from .args import _parse_wrapped, as_dict, plain_text
 from ..store import Store
 from .skill import Skill
 
@@ -60,35 +61,91 @@ _TEXT_FIELDS = (
     "kicker", "title", "subtitle", "body", "left_title", "left",
     "right_title", "right", "quote", "attribution", "caption", "notes",
 )
+_MARKDOWN_FIELDS = {"body", "left", "right", "notes"}
 _SVG = re.compile(r"^\s*<svg[\s>]", re.IGNORECASE)
 _REMOTE = re.compile(r"""(?:href|src)\s*=\s*["']?\s*(?:https?:)?//""", re.IGNORECASE)
 
 
 def _as_list(value) -> list:
-    """A list argument, however it arrived: a list, JSON text, or lines."""
+    """A list argument, however it arrived: a list, JSON or repr text, lines,
+    or an object wrapping a list (`{"items": [...]}`)."""
     if value is None or value == "":
         return []
     if isinstance(value, list):
         return value
+    if isinstance(value, dict):
+        inner = next((v for v in value.values() if isinstance(v, list)), None)
+        return inner if inner is not None else [value]
     if isinstance(value, str):
         text = value.strip()
-        if text.startswith("["):
+        if text[:1] in "[{":
+            parsed = as_dict(text)
+            if parsed is not None:
+                return _as_list(parsed)
             try:
-                parsed = json.loads(text)
-                if isinstance(parsed, list):
-                    return parsed
+                listed = json.loads(text)
             except ValueError:
-                pass
+                listed = None
+            if isinstance(listed, list):
+                return listed
+            listed = _parse_wrapped(text)  # the Python repr form, ['a', 'b']
+            if isinstance(listed, list):
+                return listed
         return [line.strip(" -*•\t") for line in text.splitlines() if line.strip(" -*•\t")]
     return [value]
 
 
 def _text(value) -> str:
-    if value is None:
-        return ""
+    """A field's text. A list becomes markdown bullet lines, which is what the
+    two-column and body fields render; anything wrapped is unwrapped."""
     if isinstance(value, list):
-        return "\n".join(f"- {_text(v)}" for v in value if _text(v))
-    return str(value).strip()
+        lines = [plain_text(v) for v in value]
+        return "\n".join(f"- {line}" for line in lines if line)
+    return plain_text(value)
+
+
+def _bullet(value) -> str:
+    """One bullet. A `{title, text}` pair keeps both halves, as "Title: text",
+    rather than losing whichever key the unwrapper did not reach first."""
+    item = as_dict(value) if not isinstance(value, dict) else value
+    if isinstance(item, dict):
+        head = plain_text(item.get("title") or item.get("label") or item.get("heading") or item.get("name"))
+        body = plain_text(item.get("text") or item.get("body") or item.get("value")
+                          or item.get("description") or item.get("content"))
+        if head and body:
+            return f"{head}: {body}"
+        return head or body or plain_text(item)
+    return plain_text(value)
+
+
+# What models call the fields when they do not use our names.
+_ALIASES = {
+    "heading": "title", "header": "title", "headline": "title", "name": "title",
+    "subheading": "subtitle", "subheader": "subtitle", "tagline": "subtitle",
+    "text": "body", "paragraph": "body", "description": "body",
+    "points": "bullets", "items": "bullets", "list": "bullets",
+    "speaker_notes": "notes", "note": "notes",
+    "author": "attribution", "source": "attribution",
+    "eyebrow": "kicker", "label_top": "kicker",
+}
+# Containers a model sometimes nests a slide's fields inside.
+_NESTS = ("content", "fields", "data", "slide", "properties", "props")
+
+
+def _flatten(raw: dict) -> dict:
+    """A slide's fields at the top level, under our names."""
+    flat: dict = {}
+    for key in _NESTS:
+        nested = as_dict(raw.get(key))
+        if nested is not None:
+            flat.update(_flatten(nested))
+    for key, value in raw.items():
+        if key in _NESTS and as_dict(value) is not None:
+            continue
+        name = _ALIASES.get(key, key)
+        if name not in flat or key == name:
+            flat[name] = value
+    return flat
 
 
 def _layout_for(raw: dict, index: int) -> str:
@@ -126,25 +183,29 @@ def _layout_for(raw: dict, index: int) -> str:
 def normalize_slide(raw, index: int) -> dict | None:
     """One slide as it is stored, or None if there is nothing on it."""
     if isinstance(raw, str):
-        raw = {"title": raw}
+        raw = as_dict(raw) or {"title": raw}
     if not isinstance(raw, dict):
         return None
+    raw = _flatten(raw)
     slide: dict = {"layout": _layout_for(raw, index)}
     for key in _TEXT_FIELDS:
-        text = _text(raw.get(key))
+        # Only the fields drawn as markdown may become a list of lines; a title
+        # that arrived as ["Numbers"] is the word, not a bullet.
+        text = _text(raw.get(key)) if key in _MARKDOWN_FIELDS else plain_text(raw.get(key)).replace("\n", " ")
         if text:
             slide[key] = text
 
-    bullets = [_text(b) for b in _as_list(raw.get("bullets") or raw.get("points"))]
+    bullets = [_bullet(b) for b in _as_list(raw.get("bullets"))]
     bullets = [b for b in bullets if b][:MAX_BULLETS]
     if bullets:
         slide["bullets"] = bullets
 
     stats = []
     for item in _as_list(raw.get("stats")):
+        item = as_dict(item) or item
         if isinstance(item, dict):
-            value = _text(item.get("value") or item.get("stat"))
-            label = _text(item.get("label"))
+            value = plain_text(item.get("value") or item.get("stat") or item.get("number"))
+            label = plain_text(item.get("label") or item.get("text") or item.get("description"))
         else:
             value, label = _text(item), ""
         if value:
@@ -154,13 +215,16 @@ def normalize_slide(raw, index: int) -> dict | None:
     if stats:
         slide["stats"] = stats[:4]
 
-    columns = [_text(c) for c in _as_list(raw.get("columns"))]
+    columns = [plain_text(c) for c in _as_list(raw.get("columns"))]
     if columns:
         slide["columns"] = columns[:8]
         rows = []
         for row in _as_list(raw.get("rows"))[:14]:
-            cells = row if isinstance(row, list) else _as_list(row)
-            rows.append([_text(c) for c in cells][: len(columns)])
+            if isinstance(row, dict):
+                cells = [row.get(c, "") for c in columns] if any(c in row for c in columns) else list(row.values())
+            else:
+                cells = row if isinstance(row, list) else _as_list(row)
+            rows.append([plain_text(c) for c in cells][: len(columns)])
         slide["rows"] = rows
 
     visual = raw.get("visual") or raw.get("svg")
@@ -381,16 +445,23 @@ class WriteSlides(Skill):
     async def use(
         self,
         session: str,
-        title: str,
+        title=None,
         slides=None,
         theme=None,
         design_defaults: dict | None = None,
         theme_override: dict | None = None,
+        **extra,
     ) -> str:
-        name = (title or "").strip()
-        if not name:
-            return "Give the deck a title so it can be found and updated later."
+        # The deck under another name, which a model sends as often as not.
+        if slides is None:
+            slides = next((extra[k] for k in ("deck", "pages", "content", "items") if k in extra), None)
         deck = normalize_deck(slides, theme, design_defaults, theme_override)
+        # A missing title is not worth a failed call: the first slide's title
+        # names the deck, and it can be renamed in the panel.
+        name = plain_text(title or extra.get("name")) or (
+            deck["slides"][0].get("title") if deck["slides"] else ""
+        ) or "Untitled deck"
+        name = name[:200]
         if not deck["slides"]:
             return (
                 "That deck had no slides with anything on them. Pass `slides` as "

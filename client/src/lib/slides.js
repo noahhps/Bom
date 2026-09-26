@@ -16,6 +16,8 @@
  * are designed at 1280 wide, where 1cqw is 12.8px.
  */
 
+import { lineText, plainText } from "./plainText.js";
+
 export const LAYOUTS = [
   "title", "section", "bullets", "content", "two_column",
   "stat", "quote", "image", "table", "closing",
@@ -111,10 +113,48 @@ export function parseDeck(content) {
     return null;
   }
   if (!data || typeof data !== "object" || !Array.isArray(data.slides)) return null;
-  const slides = data.slides
-    .filter((s) => s && typeof s === "object")
-    .map((s) => ({ ...s, layout: LAYOUTS.includes(s.layout) ? s.layout : "bullets" }));
+  const slides = data.slides.filter((s) => s && typeof s === "object").map(cleanSlide);
   return { version: 1, theme: data.theme && typeof data.theme === "object" ? data.theme : {}, slides };
+}
+
+// Drawn as markdown, so a list may stand as its lines; everything else is one.
+const MARKDOWN = new Set(["body", "left", "right", "notes"]);
+const TEXT = [
+  "kicker", "title", "subtitle", "body", "left_title", "left",
+  "right_title", "right", "quote", "attribution", "caption", "notes",
+];
+
+/** A stored slide with every field as the text it means -- see plainText. */
+function cleanSlide(raw) {
+  const slide = { ...raw, layout: LAYOUTS.includes(raw.layout) ? raw.layout : "bullets" };
+  for (const key of TEXT) {
+    if (!(key in raw)) continue;
+    const text = MARKDOWN.has(key) ? plainText(raw[key]) : lineText(raw[key]);
+    if (text) slide[key] = text;
+    else delete slide[key];
+  }
+  if ("bullets" in raw) {
+    slide.bullets = (Array.isArray(raw.bullets) ? raw.bullets : [raw.bullets])
+      .map(lineText)
+      .filter(Boolean);
+  }
+  if ("stats" in raw) {
+    slide.stats = (Array.isArray(raw.stats) ? raw.stats : [])
+      .map((s) =>
+        s && typeof s === "object"
+          ? { value: lineText(s.value ?? s.stat), label: lineText(s.label) }
+          : { value: lineText(s), label: "" },
+      )
+      .filter((s) => s.value);
+  }
+  if ("columns" in raw) slide.columns = (Array.isArray(raw.columns) ? raw.columns : []).map(lineText);
+  if ("rows" in raw) {
+    slide.rows = (Array.isArray(raw.rows) ? raw.rows : []).map((row) =>
+      (Array.isArray(row) ? row : [row]).map(lineText),
+    );
+  }
+  if ("visual" in raw && typeof raw.visual !== "string") delete slide.visual;
+  return slide;
 }
 
 export function serializeDeck(deck) {

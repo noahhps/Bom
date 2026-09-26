@@ -47,6 +47,7 @@ from .skills.design import (
     options as design_options,
     resolve as design_resolve,
 )
+from .skills.args import plain_text
 from .skills.registry import Registry
 from .store import Store, StoredAttachment, StoredMessage
 
@@ -599,7 +600,7 @@ class Orchestrator:
                         # answered the question before it was put; putting it
                         # anyway is the second prompt this whole path exists to
                         # avoid.
-                        named = str(call.arguments.get("name") or "").strip()
+                        named = plain_text(call.arguments.get("name"))
                         picked = design_match(self.store, named) if named else None
                         # A conversation that already settled on a look keeps
                         # it: asking again on every deck is how a chooser gets

@@ -449,3 +449,84 @@ def test_presets_ship_their_tokens(client: TestClient):
 def test_the_work_tools_are_registered(client: TestClient):
     names = {s["name"] for s in client.get("/api/skills").json()["skills"]}
     assert {"write_slides", "write_sheet", "edit_sheet"} <= names
+
+
+# -- arguments as models actually send them -------------------------------------
+#
+# The bug: a model passed `"title": {"title": "Aesthetic Summary"}` and the deck
+# showed `{'title': 'Aesthetic Summary'}` in 60px type. Every tool that writes
+# something the reader sees has to read wrapped text as the text it wraps.
+
+
+def test_plain_text_unwraps_what_models_send():
+    from app.skills.args import plain_text
+
+    assert plain_text({"title": "Aesthetic Summary"}) == "Aesthetic Summary"
+    assert plain_text("{'title': 'Aesthetic Summary'}") == "Aesthetic Summary"
+    assert plain_text('{"text": "Hi"}') == "Hi"
+    assert plain_text(["a", {"label": "b"}]) == "a\nb"
+    assert plain_text(12.5) == "12.5"
+    assert plain_text("just {braces} inside") == "just {braces} inside"
+    assert plain_text(None) == ""
+
+
+def test_a_deck_with_wrapped_fields_stores_the_words():
+    deck = normalize_deck([
+        {"layout": "bullets", "title": {"title": "Aesthetic Summary"},
+         "bullets": [{"title": "Colour", "text": "Fluoro pink"}, "{'text': 'Layout'}"]},
+        {"content": {"heading": "Overview", "points": ["a", "b"]}},
+        "{'title': 'Nightlife', 'bullets': ['Jazz bars']}",
+        {"layout": "stat", "title": ["Numbers"], "stats": '[{"value": 12, "label": {"text": "km"}}]'},
+        {"layout": "two_column", "title": "x", "left": ["one", "two"], "right": {"text": "r"}},
+    ])
+    slides = deck["slides"]
+    assert slides[0]["title"] == "Aesthetic Summary"
+    assert slides[0]["bullets"] == ["Colour: Fluoro pink", "Layout"]
+    assert slides[1]["title"] == "Overview" and slides[1]["bullets"] == ["a", "b"]
+    assert slides[2]["title"] == "Nightlife" and slides[2]["bullets"] == ["Jazz bars"]
+    assert slides[3]["title"] == "Numbers"
+    assert slides[3]["stats"] == [{"value": "12", "label": "km"}]
+    assert slides[4]["left"] == "- one\n- two" and slides[4]["right"] == "r"
+    # Nothing anywhere carries a printed dict.
+    assert "{'" not in json.dumps(deck) and '{\\"' not in json.dumps(deck)
+
+
+@pytest.mark.asyncio
+async def test_tools_survive_a_missing_or_wrapped_title(store: Store):
+    sid = store.create_session()["id"]
+    said = await WriteSlides(store).use(session=sid, slides=[{"title": "Opening"}])
+    assert "'Opening'" in said
+    said = await WriteSheet(store).use(
+        session=sid, title={"title": "Budget"},
+        columns=[{"name": "Item"}, {"name": "Cost"}],
+        rows=[[{"value": "Rent"}, {"value": 1200}], ["{'text': 'Food'}", "300"]],
+        formats=["text", {"format": "currency"}],
+    )
+    assert "'Budget'" in said
+    sheet = json.loads(store.find_canvas_by_title(sid, "Budget").content)
+    assert sheet["columns"] == ["Item", "Cost"]
+    assert sheet["rows"] == [["Rent", 1200], ["Food", 300]]
+    assert sheet["formats"] == ["text", "currency"]
+
+    # No title, one sheet: that one.
+    assert "Edited" in await EditSheet(store).use(session=sid, cells='{"B3": {"value": 5}}')
+    assert json.loads(store.find_canvas_by_title(sid, "Budget").content)["rows"][1][1] == 5
+
+    # write_canvas keeps its contract -- no title, no canvas -- but says so
+    # instead of failing on a missing argument.
+    assert "title" in (await WriteCanvas(store).use(session=sid, content="x")).lower()
+    said = await WriteCanvas(store).use(
+        session=sid, title={"title": "Notes"}, content={"text": "# Notes"}, kind={"value": "markdown"},
+    )
+    assert "'Notes'" in said
+    assert store.find_canvas_by_title(sid, "Notes").content == "# Notes"
+    assert "# Notes" in await ReadCanvas(store).use(session=sid, title={"title": "Notes"})
+
+
+@pytest.mark.asyncio
+async def test_a_wrapped_standard_name_still_matches(store: Store):
+    orch = _orchestrator(store, [("ask_for_design", {"name": {"name": "Zine"}})])
+    sid = store.create_session()["id"]
+    _, asked = await _run(orch, sid, "Use the zine one")
+    assert asked == []
+    assert store.session_design(sid) == "zine"

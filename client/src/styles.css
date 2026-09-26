@@ -5420,3 +5420,36 @@ tr[data-total] .sheet-cell {
 /* The toolbar wraps rather than pushing Present off the edge when a narrow
    panel also has to fit the Picture button. */
 .deck-toolbar { flex-wrap: wrap; row-gap: 6px; }
+
+/* -- generating a picture ------------------------------------------------------ */
+.deck-picker-item { position: relative; }
+.deck-picker-badge {
+  position: absolute; top: 4px; right: 4px;
+  padding: 1px 5px; border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55); color: #fff;
+  font: 600 9px/1.4 var(--font-mono); letter-spacing: 0.06em;
+}
+.deck-picker-gen { display: flex; flex-direction: column; gap: 6px; }
+.deck-picker-gen textarea {
+  resize: vertical;
+  min-height: 44px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 var(--t-sm)/1.45 var(--font);
+}
+.deck-picker-gen textarea:focus { outline: none; border-color: var(--accent); }
+.deck-picker-gen-row { display: flex; align-items: center; gap: 8px; }
+.deck-picker-gen-row select {
+  font: 400 var(--t-sm)/1 var(--font);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 5px 6px;
+}
+.deck-picker-gen-where { flex: 1; color: var(--text-faint); }
+.deck-picker-gen-row .deck-present-btn { margin-left: 0; }
+.deck-picker-gen-row .deck-present-btn:disabled { opacity: 0.45; cursor: default; }

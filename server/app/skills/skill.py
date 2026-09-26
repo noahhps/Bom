@@ -70,6 +70,17 @@ class Skill(ABC):
         self.enabled = True
         self.requires = requires
 
+    @property
+    def must_ask(self) -> bool:
+        """Whether every call needs the user's say-so, whatever the switch says.
+
+        For a skill that sends something off this machine -- the approval
+        prompt is how the user sees that it is about to happen. A standing
+        "always" or "this conversation" grant still counts: that is the user
+        having said so.
+        """
+        return False
+
     def wants_design(self, arguments: dict) -> bool:
         """Whether this particular call makes something whose look matters.
 

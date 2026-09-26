@@ -281,14 +281,24 @@ def _image_ref(value) -> dict | None:
     return picture
 
 
-def check_images(deck: dict, known: set[str]) -> list[str]:
-    """Drop pictures that are not in the library; say which, for the model."""
+def check_images(deck: dict, known: set[str], generated: set[str] = frozenset()) -> list[str]:
+    """Drop pictures that are not in the library; say which, for the model.
+
+    A generated picture is marked so on the slide, which is what draws its
+    "AI-generated" credit -- decided here from the library, never taken from
+    what the model claims.
+    """
     missing: list[str] = []
     for number, slide in enumerate(deck["slides"], start=1):
         picture = slide.get("image")
-        if picture and picture["id"] not in known:
+        if not picture:
+            continue
+        picture.pop("generated", None)
+        if picture["id"] not in known:
             missing.append(f"slide {number} ({picture['id']})")
             del slide["image"]
+        elif picture["id"] in generated:
+            picture["generated"] = True
     return missing
 
 
@@ -447,7 +457,8 @@ class WriteSlides(Skill):
                 "with the words over it; split {image, title, bullets[] or body} "
                 "-- a picture beside the text. `image` is the id of one of the "
                 "user's pictures from list_images, or {id, fit: 'cover' or "
-                "'contain', side: 'left' or 'right', alt}; never a web address. "
+                "'contain', side: 'left' or 'right', alt}, or one made with "
+                "generate_image; never a web address. "
                 "Any slide may carry `notes` -- what the speaker says. "
                 "Write a deck a designer would: open with a title slide, one idea "
                 "per slide, titles that state the point, at most five short "
@@ -536,9 +547,9 @@ class WriteSlides(Skill):
                 "That deck had no slides with anything on them. Pass `slides` as "
                 "a list of objects, each with a layout and a title."
             )
-        from .images import known_ids  # local: images imports nothing of ours back
+        from .images import generated_ids, known_ids  # local: avoids an import cycle
 
-        missing = check_images(deck, known_ids(self.store, session))
+        missing = check_images(deck, known_ids(self.store, session), generated_ids(self.store, session))
         content = json.dumps(deck, ensure_ascii=False, indent=1)
         verb = save_canvas(self.store, session, name, content, KIND)
         count = len(deck["slides"])

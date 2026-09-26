@@ -152,6 +152,23 @@ class Settings:
     )
     search_endpoint: str = field(default_factory=lambda: _env("SEARCH_ENDPOINT", ""))
 
+    # --- image generation ------------------------------------------------
+    # Off unless IMAGE_GEN_URL names a generator. Two shapes are spoken:
+    #   "a1111"  -- the Stable Diffusion WebUI API (AUTOMATIC1111, Forge,
+    #               SD.Next): POST /sdapi/v1/txt2img. Runs on your own GPU.
+    #   "openai" -- an OpenAI-compatible POST /v1/images/generations. LocalAI
+    #               and friends serve this locally; pointed at a cloud service
+    #               it sends prompts off the machine, and every call is asked
+    #               about first (see imagegen.py).
+    # The address is set here and only here -- never by the model -- so the
+    # generator cannot be turned into a way to reach other hosts.
+    image_gen_url: str = field(default_factory=lambda: _env("IMAGE_GEN_URL", ""))
+    image_gen_backend: str = field(default_factory=lambda: _env("IMAGE_GEN_BACKEND", "a1111"))
+    image_gen_model: str = field(default_factory=lambda: _env("IMAGE_GEN_MODEL", ""))
+    image_gen_key: str = field(default_factory=lambda: _env("IMAGE_GEN_API_KEY", ""))
+    # Generous: a diffusion model sharing a GPU with the chat model is slow.
+    image_gen_timeout: int = field(default_factory=lambda: _env_int("IMAGE_GEN_TIMEOUT", 240))
+
     # --- openrouter ------------------------------------------------------
     # The second thing that leaves the machine, and the first that answers
     # with a model. Empty by default: unconfigured, it is listed in the picker

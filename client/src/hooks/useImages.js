@@ -61,6 +61,29 @@ export function useSessionImages(sessionId) {
     [api, sessionId, refresh],
   );
 
+  // What the generator is, fetched once per picker: whether there is one, and
+  // whether a prompt sent to it leaves this machine.
+  const [generator, setGenerator] = useState(null);
+  useEffect(() => {
+    if (!api) return;
+    api.imageGenerator().then(setGenerator, () => setGenerator({ available: false }));
+  }, [api]);
+
+  const generate = useCallback(
+    async (prompt, shape = "landscape") => {
+      setError("");
+      try {
+        const image = await api.generateImage(sessionId, { prompt, shape });
+        await refresh();
+        return image;
+      } catch (problem) {
+        setError(problem.message || "Could not generate that picture.");
+        return null;
+      }
+    },
+    [api, sessionId, refresh],
+  );
+
   const relabel = useCallback(
     async (id, alt) => {
       await api.updateImage(id, { alt });
@@ -69,5 +92,5 @@ export function useSessionImages(sessionId) {
     [api, refresh],
   );
 
-  return { images, error, refresh, upload, relabel };
+  return { images, error, refresh, upload, relabel, generator, generate };
 }

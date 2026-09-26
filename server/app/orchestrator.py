@@ -862,12 +862,18 @@ class Orchestrator:
         this conversation's own grants -- because each is cheaper than the one
         after it and the first hit ends the question.
         """
-        if not self.store.get_settings(APPROVAL_DEFAULTS)["skills.ask_first"]:
-            return ALLOW_ONCE
         if name in read_auto_approved(self.store):
             return ALLOW_ALWAYS
         if session_id and name in self._session_grants.get(session_id, ()):
             return ALLOW_SESSION
+        # A skill that sends something off the machine is asked about even
+        # with the switch off -- the grants above still stand, since those are
+        # the user having already said yes.
+        skill = self.registry.get(name) if self.registry else None
+        if skill is not None and skill.must_ask:
+            return None
+        if not self.store.get_settings(APPROVAL_DEFAULTS)["skills.ask_first"]:
+            return ALLOW_ONCE
         return None
 
     def _remember_decision(self, name: str, session_id: str | None, decision: str) -> None:

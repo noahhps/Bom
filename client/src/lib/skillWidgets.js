@@ -87,6 +87,7 @@ const SOURCES = {
   edit_sheet: { source: "Sheet", icon: "sheet" },
   ask_for_design: { source: "Design", icon: "design" },
   list_images: { source: "Images", icon: "image" },
+  generate_image: { source: "Images", icon: "image" },
   run_python: { source: "Sandbox", icon: "code" },
   run_shell: { source: "Sandbox", icon: "code" },
 };
@@ -106,6 +107,7 @@ const TITLE_KEYS = {
   find_events: ["query"],
   list_events: [],
   write_canvas: ["title"],
+  generate_image: ["prompt"],
   read_canvas: ["title"],
   write_slides: ["title"],
   write_sheet: ["title"],
@@ -121,6 +123,7 @@ const ROW_KEYS = {
   update_event: [["starts_at", "Starts"], ["ends_at", "Ends"], ["on", "On"]],
   list_events: [["days", "Days ahead"]],
   write_canvas: [["kind", "Kind"], ["language", "Language"]],
+  generate_image: [["shape", "Shape"]],
   read_file: [["offset", "From line"]],
   web_search: [["count", "Results"]],
 };
@@ -202,6 +205,7 @@ const DOING = {
   edit_sheet: "Editing sheet",
   ask_for_design: "Choosing a look",
   list_images: "Finding images",
+  generate_image: "Drawing image",
   add_event: "Scheduling",
   update_event: "Scheduling",
   list_events: "Checking dates",

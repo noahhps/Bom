@@ -39,6 +39,16 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
    The Tauri window will launch and you can start chatting.
 
 
+### Optional: image generation
+Decks and pages can use generated pictures if you point Bom at an image generator. It is off until you do:
+```
+IMAGE_GEN_URL=http://127.0.0.1:7860      # Stable Diffusion WebUI / Forge / SD.Next (--api)
+IMAGE_GEN_BACKEND=a1111                  # or "openai" for an OpenAI-compatible /v1/images/generations
+IMAGE_GEN_MODEL=                         # optional checkpoint / model name
+IMAGE_GEN_API_KEY=                       # only for a backend that needs one
+```
+A generator on this machine or your local network runs without asking. One anywhere else is sent your prompt, so Bom asks before every request. Generated pictures are labelled "AI-generated" wherever they appear.
+
 All interactions stay on‑device; nothing is sent to external services (unless you want it to).
 
 ## 🤝 Contributing

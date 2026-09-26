@@ -313,6 +313,14 @@ class ImageIn(BaseModel):
     alt: str | None = Field(default=None, max_length=300)
 
 
+class ImageGenerate(BaseModel):
+    """A picture asked for from the panel's picker."""
+
+    prompt: str = Field(min_length=1, max_length=1000)
+    shape: str = Field(default="landscape", pattern="^(landscape|portrait|square)$")
+    match_style: bool = True
+
+
 class ImagePatch(BaseModel):
     alt: str | None = Field(default=None, max_length=300)
 
@@ -676,6 +684,38 @@ def build_router(
             data=ready.data,
             alt=(body.alt or "").strip() or None,
         )
+        return image.to_dict()
+
+    def _generator():
+        skill = registry.get("generate_image")
+        return getattr(skill, "generator", None)
+
+    # Declared before /images/{image_id} so "generator" is not read as an id.
+    @router.get("/images/generator")
+    def image_generator() -> dict:
+        """Whether pictures can be generated here, and whether that leaves the
+        machine -- the picker says so before it sends anything."""
+        generator = _generator()
+        return generator.describe() if generator else {"available": False, "remote": False}
+
+    @router.post("/sessions/{session_id}/images/generate")
+    async def generate_image(session_id: str, body: ImageGenerate) -> dict:
+        """Asked for by the person, from the picker: their click is the consent,
+        so no approval prompt -- the picker confirms first for a remote one."""
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        generator = _generator()
+        if generator is None or not generator.configured:
+            raise HTTPException(400, "no image generator is set up (IMAGE_GEN_URL)")
+        from .imagegen import GenerationError, create
+
+        try:
+            image = await create(
+                store, generator, session_id, body.prompt,
+                shape=body.shape, match_style=body.match_style,
+            )
+        except GenerationError as exc:
+            raise HTTPException(400, str(exc)) from exc
         return image.to_dict()
 
     @router.get("/images/{image_id}")

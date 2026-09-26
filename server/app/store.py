@@ -292,9 +292,15 @@ class StoredImage:
     size: int
     alt: str | None
     created_at: int
+    source: str | None = None   # upload | chat | generated
+    prompt: str | None = None   # what a generated picture was made from
     # Left out of listings: a library is megabytes, and the UI fetches the
     # bytes one image at a time, by id.
     data: bytes | None = None
+
+    @property
+    def generated(self) -> bool:
+        return self.source == "generated"
 
     @property
     def orientation(self) -> str:
@@ -316,12 +322,16 @@ class StoredImage:
             "alt": self.alt,
             "orientation": self.orientation,
             "from_chat": self.attachment_id is not None,
+            "source": self.source,
+            "generated": self.generated,
+            "prompt": self.prompt,
             "created_at": self.created_at,
         }
 
 
 _IMAGE_META = (
-    "id, session_id, attachment_id, name, mime, width, height, size, alt, created_at"
+    "id, session_id, attachment_id, name, mime, width, height, size, alt, created_at, "
+    "source, prompt"
 )
 
 
@@ -1470,6 +1480,8 @@ class Store:
         data: bytes,
         alt: str | None = None,
         attachment_id: str | None = None,
+        source: str | None = None,
+        prompt: str | None = None,
     ) -> StoredImage:
         image = StoredImage(
             id=_new_id("img"),
@@ -1482,11 +1494,14 @@ class Store:
             size=len(data),
             alt=alt,
             created_at=_now(),
+            source=source or ("chat" if attachment_id else "upload"),
+            prompt=prompt,
         )
         self.db.execute(
-            f"INSERT INTO images ({_IMAGE_META}, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            f"INSERT INTO images ({_IMAGE_META}, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (image.id, image.session_id, image.attachment_id, image.name, image.mime,
-             image.width, image.height, image.size, image.alt, image.created_at, data),
+             image.width, image.height, image.size, image.alt, image.created_at,
+             image.source, image.prompt, data),
         )
         return image
 

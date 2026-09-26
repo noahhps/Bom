@@ -536,6 +536,18 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_images_session ON images(session_id, created_at);
     CREATE INDEX idx_images_attachment ON images(attachment_id);
     """,
+    # 19 -- where a picture came from, and for a generated one, what made it.
+    #
+    # `source` is 'upload', 'chat' or 'generated'. A generated picture is
+    # labelled as such wherever it is shown -- in the picker, to the model,
+    # and on the slide -- so it is not mistaken for a photograph of something
+    # real. `prompt` keeps what it was generated from, for regenerating a
+    # variant and for knowing afterwards what was asked for.
+    """
+    ALTER TABLE images ADD COLUMN source TEXT;
+    ALTER TABLE images ADD COLUMN prompt TEXT;
+    UPDATE images SET source = CASE WHEN attachment_id IS NULL THEN 'upload' ELSE 'chat' END;
+    """,
 ]
 
 

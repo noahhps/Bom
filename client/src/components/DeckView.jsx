@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useDialog } from "./Dialog";
 import { useImageUrls, useSessionImages } from "../hooks/useImages";
 import { deckImageIds, imageData, resolveAll } from "../lib/images";
 import { renderMarkdown } from "../lib/markdown";
@@ -117,7 +118,14 @@ export function Slide({ slide, number, total, edit = false, onEdit, images = {} 
     const ref = slide.image;
     const url = ref ? images[ref.id] : null;
     if (url) {
-      return <img className="deck-pic" data-fit={ref.fit} src={url} alt={ref.alt || slide.title || ""} />;
+      return (
+        <>
+          <img className="deck-pic" data-fit={ref.fit} src={url} alt={ref.alt || slide.title || ""} />
+          {/* Said on the picture, so a generated scene is never taken for a
+              photograph of something real -- in the app and in every export. */}
+          {ref.generated ? <span className="deck-pic-credit">AI-generated</span> : null}
+        </>
+      );
     }
     return (
       <div className="deck-pic-empty">
@@ -353,7 +361,11 @@ const MAX_UPLOAD = 25 * 1024 * 1024;
  * frame, which side it sits on in a split, and its alt text.
  */
 function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
-  const { images, error, upload } = useSessionImages(sessionId);
+  const { images, error, upload, generator, generate } = useSessionImages(sessionId);
+  const { confirm } = useDialog();
+  const [prompt, setPrompt] = useState("");
+  const [shape, setShape] = useState(layout === "split" ? "portrait" : "landscape");
+  const [making, setMaking] = useState(false);
   const urls = useImageUrls(images.map((i) => i.id));
   const [tooBig, setTooBig] = useState("");
   const [busy, setBusy] = useState(false);
@@ -365,7 +377,30 @@ function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
       fit: value?.fit || "cover",
       ...(value?.side ? { side: value.side } : null),
       ...(value?.alt || image.alt ? { alt: value?.alt || image.alt } : null),
+      ...(image.generated ? { generated: true } : null),
     });
+
+  // Generating is the person's own request, so no approval prompt -- except
+  // that a generator off this machine is told what they are working on, and
+  // they are asked before that happens.
+  const make = async () => {
+    const text = prompt.trim();
+    if (!text || making) return;
+    if (generator?.remote) {
+      const yes = await confirm(
+        `This sends your description to ${generator.host}, outside this machine, to make the picture.`,
+        { title: "Send to the image generator?", confirmLabel: "Send" },
+      );
+      if (!yes) return;
+    }
+    setMaking(true);
+    const image = await generate(text, shape);
+    setMaking(false);
+    if (image) {
+      setPrompt("");
+      choose(image);
+    }
+  };
 
   return (
     <div className="deck-picker" role="dialog" aria-label="Choose a picture">
@@ -384,6 +419,7 @@ function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
             onClick={() => choose(image)}
           >
             {urls[image.id] ? <img src={urls[image.id]} alt={image.alt || image.name} /> : null}
+            {image.generated ? <span className="deck-picker-badge" title="AI-generated">AI</span> : null}
           </button>
         ))}
         <button
@@ -400,6 +436,36 @@ function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
           No pictures yet. Upload one here, or attach it in the chat — either way
           it is cleaned (location data removed) and kept only in this conversation.
         </p>
+      ) : null}
+      {generator?.available ? (
+        <div className="deck-picker-gen">
+          <textarea
+            value={prompt}
+            rows={2}
+            placeholder="Or describe a picture to generate — subject, composition, mood. No text in it."
+            aria-label="Describe a picture to generate"
+            onChange={(event) => setPrompt(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                make();
+              }
+            }}
+          />
+          <div className="deck-picker-gen-row">
+            <select value={shape} aria-label="Shape" onChange={(event) => setShape(event.target.value)}>
+              <option value="landscape">Landscape</option>
+              <option value="portrait">Portrait</option>
+              <option value="square">Square</option>
+            </select>
+            <span className="deck-picker-gen-where mi">
+              {generator.remote ? `Sent to ${generator.host}` : "On your machine"}
+            </span>
+            <button type="button" className="deck-present-btn" disabled={!prompt.trim() || making} onClick={make}>
+              {making ? "Generating…" : "Generate"}
+            </button>
+          </div>
+        </div>
       ) : null}
       {tooBig || error ? <p className="deck-picker-note" data-error="">{tooBig || error}</p> : null}
 

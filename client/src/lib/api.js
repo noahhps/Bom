@@ -332,6 +332,14 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "POST",
         body: JSON.stringify(body),
       }),
+    // Whether pictures can be generated here, and whether that leaves the
+    // machine -- asked before the picker offers to.
+    imageGenerator: () => json("/images/generator"),
+    generateImage: (sessionId, body) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images/generate", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
     imageBlob: async (id) => (await request("/images/" + encodeURIComponent(id))).blob(),
     updateImage: (id, patch) =>
       json("/images/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(patch) }),

@@ -24,7 +24,8 @@ from .orchestrator import Orchestrator
 from .providers import OAuthFlows, ProviderError, ProviderRouter, model_setting_key
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import ReadCanvas, WriteCanvas
-from .skills.images import ListImages
+from .imagegen import Generator
+from .skills.images import GenerateImage, ListImages
 from .skills.sheet import EditSheet, WriteSheet
 from .skills.slides import WriteSlides
 from .skills.design import AskForDesign
@@ -178,6 +179,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry.register(EditSheet(store))
     # The user's own pictures, by id, for those tools to place.
     registry.register(ListImages(store))
+    # Pictures made on a generator the operator points at (IMAGE_GEN_URL).
+    # Registered always so the Skills page can say what it needs; offered to
+    # the model only once one is configured.
+    image_generator = Generator.from_settings(settings)
+    registry.register(GenerateImage(store, image_generator))
     # Which design standard a result should follow. The turn stops on this one
     # and asks the reader -- see skills/design.py and the turn loop.
     registry.register(AskForDesign(store))

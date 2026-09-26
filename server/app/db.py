@@ -506,6 +506,36 @@ MIGRATIONS: list[str] = [
     ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
     ALTER TABLE sessions ADD COLUMN design TEXT;
     """,
+    # 18 -- a conversation's image library.
+    #
+    # The pictures a deck or a page can use: the reader's own, uploaded in the
+    # canvas panel or attached in the chat. Stored here rather than pointed at
+    # in `attachments` because they are cleaned on the way in -- re-encoded,
+    # metadata (including GPS) stripped, scaled to a sane size -- and a deck
+    # exported next week must not carry where the photo was taken.
+    #
+    # Scoped to a conversation and deleted with it, like a canvas: the images
+    # are part of the work, not a standing collection. `attachment_id` marks a
+    # picture imported from the chat so it is imported once; SET NULL so
+    # deleting the message does not take the picture out of a deck using it.
+    """
+    CREATE TABLE images (
+      id             TEXT PRIMARY KEY,
+      session_id     TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      attachment_id  TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+      name           TEXT NOT NULL,
+      mime           TEXT NOT NULL,
+      width          INTEGER NOT NULL,
+      height         INTEGER NOT NULL,
+      size           INTEGER NOT NULL,
+      data           BLOB NOT NULL,
+      alt            TEXT,
+      created_at     INTEGER NOT NULL
+    );
+
+    CREATE INDEX idx_images_session ON images(session_id, created_at);
+    CREATE INDEX idx_images_attachment ON images(attachment_id);
+    """,
 ]
 
 

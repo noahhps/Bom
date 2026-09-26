@@ -45,6 +45,7 @@ from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
 from .design_mode import normalize as normalize_mode
+from .images import ImageError, prepare as prepare_image, sync_from_chat
 from .design_presets import PRESETS as DESIGN_PRESETS
 from .skills.design import NO_DESIGN, resolve as resolve_design
 
@@ -302,6 +303,18 @@ class DesignPatch(BaseModel):
 class DesignChoice(BaseModel):
     # A preset id, a stored design's id, or "none" to decline a standard.
     choice: str = Field(min_length=1, max_length=120)
+
+
+class ImageIn(BaseModel):
+    """A picture uploaded to a conversation's library, from the canvas panel."""
+
+    name: str = Field(min_length=1, max_length=300)
+    data: str  # base64, without the data: URL prefix
+    alt: str | None = Field(default=None, max_length=300)
+
+
+class ImagePatch(BaseModel):
+    alt: str | None = Field(default=None, max_length=300)
 
 
 class SessionDesign(BaseModel):
@@ -626,6 +639,72 @@ def build_router(
     def delete_canvas(canvas_id: str) -> dict:
         if not store.delete_canvas(canvas_id):
             raise HTTPException(404, "no such canvas")
+        return {"ok": True}
+
+    # -- images -----------------------------------------------------------
+    #
+    # A conversation's picture library: what a deck or a page may show. Every
+    # image is cleaned on the way in (images.py), and the chat's own image
+    # attachments are brought in on first listing, so the panel's picker and
+    # the model's list_images see the same set.
+
+    @router.get("/sessions/{session_id}/images")
+    def list_images(session_id: str) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        sync_from_chat(store, session_id)
+        return {"images": [i.to_dict() for i in store.session_images(session_id)]}
+
+    @router.post("/sessions/{session_id}/images")
+    def upload_image(session_id: str, body: ImageIn) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        try:
+            raw = base64.b64decode(body.data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(400, "that image did not arrive intact") from exc
+        try:
+            ready = prepare_image(body.name.strip(), raw)
+        except ImageError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        image = store.add_image(
+            session_id,
+            name=ready.name,
+            mime=ready.mime,
+            width=ready.width,
+            height=ready.height,
+            data=ready.data,
+            alt=(body.alt or "").strip() or None,
+        )
+        return image.to_dict()
+
+    @router.get("/images/{image_id}")
+    def get_image(image_id: str) -> Response:
+        image = store.get_image(image_id, with_data=True)
+        if not image:
+            raise HTTPException(404, "no such image")
+        return Response(
+            content=image.data,
+            media_type=image.mime,
+            headers={
+                # The bytes of an id never change; see get_attachment.
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+            },
+        )
+
+    @router.patch("/images/{image_id}")
+    def update_image(image_id: str, body: ImagePatch) -> dict:
+        updated = store.set_image_alt(image_id, (body.alt or "").strip() or None)
+        if updated is None:
+            raise HTTPException(404, "no such image")
+        return updated.to_dict()
+
+    @router.delete("/images/{image_id}")
+    def delete_image(image_id: str) -> dict:
+        if not store.delete_image(image_id):
+            raise HTTPException(404, "no such image")
         return {"ok": True}
 
     # -- agents -----------------------------------------------------------

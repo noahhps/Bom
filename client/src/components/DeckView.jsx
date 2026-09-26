@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useImageUrls, useSessionImages } from "../hooks/useImages";
+import { deckImageIds, imageData, resolveAll } from "../lib/images";
 import { renderMarkdown } from "../lib/markdown";
 import {
+  IMAGE_LAYOUTS,
   LAYOUTS,
   SLIDE_CSS,
   deckDocument,
@@ -29,9 +32,11 @@ const LAYOUT_NAMES = {
   two_column: "Two columns",
   stat: "Big numbers",
   quote: "Quote",
-  image: "Visual",
+  image: "Picture with caption",
   table: "Table",
   closing: "Closing",
+  photo: "Full-bleed photo",
+  split: "Photo beside text",
 };
 
 /**
@@ -89,7 +94,7 @@ const looksNumeric = (text) => /^[-+]?[$€£¥]?\d[\d,.]*%?$/.test(String(text)
  * One slide, drawn from its data. Exported for the HTML export, which renders
  * these to static markup.
  */
-export function Slide({ slide, number, total, edit = false, onEdit }) {
+export function Slide({ slide, number, total, edit = false, onEdit, images = {} }) {
   const put = (field) => (text) => onEdit?.({ ...slide, [field]: text });
   const text = (field, props = {}) => (
     <Text
@@ -104,6 +109,36 @@ export function Slide({ slide, number, total, edit = false, onEdit }) {
   const numbered = !["title", "section", "closing"].includes(layout);
   const heading = (props = {}) =>
     text("title", { as: "h2", className: "deck-h deck-title-top", placeholder: "Title", ...props });
+
+  // The slide's picture: one of the user's images, by id, drawn from an
+  // address the caller resolved -- a blob: URL in the app, a data: URI in an
+  // export. Nothing here ever names a web address.
+  const picture = () => {
+    const ref = slide.image;
+    const url = ref ? images[ref.id] : null;
+    if (url) {
+      return <img className="deck-pic" data-fit={ref.fit} src={url} alt={ref.alt || slide.title || ""} />;
+    }
+    return (
+      <div className="deck-pic-empty">
+        {edit ? (ref ? "Loading image…" : "No picture yet — choose one with Picture above") : null}
+      </div>
+    );
+  };
+
+  const bullets = slide.bullets || [];
+  const putBullet = (i) => (value) => {
+    const next = value ? bullets.map((b, n) => (n === i ? value : b)) : bullets.filter((_, n) => n !== i);
+    onEdit?.({ ...slide, bullets: next });
+  };
+  const bulletList = () =>
+    bullets.length ? (
+      <ul className="deck-bullets">
+        {bullets.map((b, i) => (
+          <Text key={`${i}:${b}`} as="li" value={b} edit={edit} onCommit={putBullet(i)} />
+        ))}
+      </ul>
+    ) : null;
 
   let body = null;
   switch (layout) {
@@ -182,16 +217,43 @@ export function Slide({ slide, number, total, edit = false, onEdit }) {
       );
       break;
     case "image": {
+      // A user's picture when it has one, otherwise the SVG the model drew.
       const src = svgSource(slide.visual);
       body = (
         <>
           {heading()}
-          <div className="deck-visual">{src ? <img src={src} alt={slide.caption || slide.title || ""} /> : null}</div>
+          <div className="deck-visual">
+            {slide.image || !src ? picture() : <img src={src} alt={slide.caption || slide.title || ""} />}
+          </div>
           {text("caption", { className: "deck-caption", placeholder: "Caption" })}
         </>
       );
       break;
     }
+    case "photo":
+      body = (
+        <>
+          <div className="deck-photo">{picture()}</div>
+          <div className="deck-photo-copy">
+            {text("kicker", { className: "deck-kicker", placeholder: "Kicker" })}
+            {text("title", { as: "h2", className: "deck-h", placeholder: "Title" })}
+            {text("subtitle", { className: "deck-sub", placeholder: "Subtitle", multiline: true })}
+          </div>
+        </>
+      );
+      break;
+    case "split":
+      body = (
+        <>
+          <div className="deck-split-pic">{picture()}</div>
+          <div className="deck-split-copy">
+            {heading()}
+            {bulletList()}
+            {slide.body ? <Markdown className="deck-body" value={slide.body} /> : null}
+          </div>
+        </>
+      );
+      break;
     case "table":
       body = (
         <>
@@ -226,28 +288,18 @@ export function Slide({ slide, number, total, edit = false, onEdit }) {
         </>
       );
       break;
-    default: {
-      const bullets = slide.bullets || [];
-      const putBullet = (i) => (value) => {
-        const next = value ? bullets.map((b, n) => (n === i ? value : b)) : bullets.filter((_, n) => n !== i);
-        onEdit?.({ ...slide, bullets: next });
-      };
+    default:
       body = (
         <>
           {heading()}
-          <ul className="deck-bullets">
-            {bullets.map((b, i) => (
-              <Text key={`${i}:${b}`} as="li" value={b} edit={edit} onCommit={putBullet(i)} />
-            ))}
-          </ul>
+          {bulletList() || <ul className="deck-bullets" />}
           {slide.body ? <Markdown className="deck-body" value={slide.body} /> : null}
         </>
       );
-    }
   }
 
   return (
-    <div className="deck-slide" data-layout={layout}>
+    <div className="deck-slide" data-layout={layout} data-side={slide.image?.side || undefined}>
       {body}
       {numbered ? (
         <>
@@ -271,7 +323,9 @@ function starterSlide(layout) {
       return { layout, title: "Title", left_title: "Before", left: "- One\n- Two", right_title: "After", right: "- One\n- Two" };
     case "stat": return { layout, title: "Title", stats: [{ value: "42%", label: "What it measures" }] };
     case "quote": return { layout, quote: "The quote goes here.", attribution: "Who said it" };
-    case "image": return { layout, title: "Title", caption: "Ask for a drawing to go here." };
+    case "image": return { layout, title: "Title", caption: "Caption" };
+    case "photo": return { layout, kicker: "Kicker", title: "Title", subtitle: "Subtitle" };
+    case "split": return { layout, title: "Title", bullets: ["First point", "Second point"] };
     case "table": return { layout, title: "Title", columns: ["Option", "Cost", "Time"], rows: [["A", "$10", "2 wk"], ["B", "$25", "1 wk"]] };
     case "closing": return { layout, title: "Thank you", subtitle: "Questions?" };
     default: return { layout: "bullets", title: "Title", bullets: ["First point", "Second point", "Third point"] };
@@ -288,8 +342,126 @@ function relayout(slide, layout) {
   return next;
 }
 
+/** The larger an upload may be before it is refused here rather than after
+ *  the whole thing has crossed the wire. Matches the server's limit. */
+const MAX_UPLOAD = 25 * 1024 * 1024;
+
+/**
+ * Choosing the current slide's picture: the conversation's own images --
+ * uploaded here or attached in the chat -- plus an upload button, and the
+ * three things worth setting about a picture on a slide: how it fills its
+ * frame, which side it sits on in a split, and its alt text.
+ */
+function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
+  const { images, error, upload } = useSessionImages(sessionId);
+  const urls = useImageUrls(images.map((i) => i.id));
+  const [tooBig, setTooBig] = useState("");
+  const [busy, setBusy] = useState(false);
+  const file = useRef(null);
+
+  const choose = (image) =>
+    onChange({
+      id: image.id,
+      fit: value?.fit || "cover",
+      ...(value?.side ? { side: value.side } : null),
+      ...(value?.alt || image.alt ? { alt: value?.alt || image.alt } : null),
+    });
+
+  return (
+    <div className="deck-picker" role="dialog" aria-label="Choose a picture">
+      <div className="deck-picker-head">
+        <span className="mi">Pictures in this conversation</span>
+        <button type="button" className="deck-tool" aria-label="Close" onClick={onClose}>✕</button>
+      </div>
+      <div className="deck-picker-grid">
+        {images.map((image) => (
+          <button
+            key={image.id}
+            type="button"
+            className="deck-picker-item"
+            data-on={value?.id === image.id ? "" : undefined}
+            title={image.alt || image.name}
+            onClick={() => choose(image)}
+          >
+            {urls[image.id] ? <img src={urls[image.id]} alt={image.alt || image.name} /> : null}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="deck-picker-upload"
+          disabled={busy}
+          onClick={() => file.current?.click()}
+        >
+          {busy ? "Adding…" : "+ Upload"}
+        </button>
+      </div>
+      {!images.length ? (
+        <p className="deck-picker-note">
+          No pictures yet. Upload one here, or attach it in the chat — either way
+          it is cleaned (location data removed) and kept only in this conversation.
+        </p>
+      ) : null}
+      {tooBig || error ? <p className="deck-picker-note" data-error="">{tooBig || error}</p> : null}
+
+      {value ? (
+        <div className="deck-picker-opts">
+          <div className="canvas-modes" role="group" aria-label="Fit">
+            {[["cover", "Fill"], ["contain", "Fit"]].map(([fit, label]) => (
+              <button key={fit} type="button" className="canvas-mode"
+                data-on={value.fit === fit ? "" : undefined}
+                onClick={() => onChange({ ...value, fit })}>{label}</button>
+            ))}
+          </div>
+          {layout === "split" ? (
+            <div className="canvas-modes" role="group" aria-label="Side">
+              {[["left", "Left"], ["right", "Right"]].map(([side, label]) => (
+                <button key={side} type="button" className="canvas-mode"
+                  data-on={(value.side || "left") === side ? "" : undefined}
+                  onClick={() => onChange({ ...value, side })}>{label}</button>
+              ))}
+            </div>
+          ) : null}
+          <input
+            key={value.id}
+            className="deck-picker-alt"
+            defaultValue={value.alt || ""}
+            placeholder="Alt text — what the picture shows"
+            aria-label="Alt text"
+            onBlur={(event) => {
+              const alt = event.target.value.trim();
+              if (alt !== (value.alt || "")) onChange({ ...value, alt: alt || undefined });
+            }}
+          />
+          <button type="button" className="deck-tool" onClick={() => onChange(null)}>Remove</button>
+        </div>
+      ) : null}
+
+      <input
+        ref={file}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        hidden
+        onChange={async (event) => {
+          const picked = event.target.files?.[0];
+          event.target.value = "";
+          if (!picked) return;
+          if (picked.size > MAX_UPLOAD) {
+            setTooBig(`${picked.name} is larger than 25 MB.`);
+            return;
+          }
+          setTooBig("");
+          setBusy(true);
+          const image = await upload(picked);
+          setBusy(false);
+          if (image) choose(image);
+        }}
+      />
+    </div>
+  );
+}
+
 /** Full screen, one slide at a time. Arrows, space and a click move; Esc ends. */
-function Presenter({ deck, start, style, onClose }) {
+function Presenter({ deck, start, style, images, onClose }) {
   const [at, setAt] = useState(start);
   const node = useRef(null);
   const total = deck.slides.length;
@@ -332,7 +504,7 @@ function Presenter({ deck, start, style, onClose }) {
     >
       <div className="deck-present-stage">
         <div className="deck-frame">
-          <Slide slide={deck.slides[at]} number={at + 1} total={total} />
+          <Slide slide={deck.slides[at]} number={at + 1} total={total} images={images} />
         </div>
       </div>
       <div className="deck-present-count mi">
@@ -344,15 +516,17 @@ function Presenter({ deck, start, style, onClose }) {
 
 /** The deck as a standalone HTML file: every slide, the stylesheet, a present
  *  mode. Rendered with the same component the panel draws with. */
-export async function exportDeck(deck, fallbackTheme, title) {
+export async function exportDeck(deck, fallbackTheme, title, api) {
   const { renderToStaticMarkup } = await import("react-dom/server");
+  // Pictures go inside the file, so the deck stands on its own anywhere.
+  const images = api ? await resolveAll(deckImageIds(deck), (id) => imageData(api, id)) : {};
   const style = themeVars(resolveTheme(deck.theme, fallbackTheme));
   const total = deck.slides.length;
   const frames = deck.slides
     .map((slide, i) =>
       renderToStaticMarkup(
         <div className="deck-frame" style={style}>
-          <Slide slide={slide} number={i + 1} total={total} />
+          <Slide slide={slide} number={i + 1} total={total} images={images} />
         </div>,
       ),
     )
@@ -367,10 +541,12 @@ export async function exportDeck(deck, fallbackTheme, title) {
  * Edits go back up as a whole new deck through `onChange`; the panel owns
  * saving, the same debounce the text editor uses.
  */
-export function DeckView({ deck, fallbackTheme, onChange }) {
+export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
   ensureDeckCss();
   const [at, setAt] = useState(0);
   const [presenting, setPresenting] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const images = useImageUrls(deckImageIds(deck));
   const strip = useRef(null);
   const total = deck.slides.length;
   const current = Math.min(at, Math.max(0, total - 1));
@@ -457,6 +633,17 @@ export function DeckView({ deck, fallbackTheme, onChange }) {
             <option key={l} value={l}>{LAYOUT_NAMES[l]}</option>
           ))}
         </select>
+        {IMAGE_LAYOUTS.has(slide.layout) && sessionId ? (
+          <button
+            type="button"
+            className="deck-tool deck-picture-btn"
+            aria-expanded={picking}
+            data-on={picking ? "" : undefined}
+            onClick={() => setPicking((was) => !was)}
+          >
+            Picture
+          </button>
+        ) : null}
         <div className="spacer" />
         <button type="button" className="deck-tool" title="Move left" aria-label="Move slide earlier"
           disabled={current === 0} onClick={() => move(-1)}>←</button>
@@ -471,6 +658,21 @@ export function DeckView({ deck, fallbackTheme, onChange }) {
         </button>
       </div>
 
+      {picking && IMAGE_LAYOUTS.has(slide.layout) && sessionId ? (
+        <ImagePicker
+          sessionId={sessionId}
+          layout={slide.layout}
+          value={slide.image || null}
+          onChange={(ref) => {
+            const next = { ...slide };
+            if (ref) next.image = ref;
+            else delete next.image;
+            replace(current, next);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      ) : null}
+
       <div className="deck-stage" style={style}>
         <div className="deck-frame">
           <Slide
@@ -479,6 +681,7 @@ export function DeckView({ deck, fallbackTheme, onChange }) {
             total={total}
             edit
             onEdit={(next) => replace(current, next)}
+            images={images}
           />
         </div>
       </div>
@@ -515,7 +718,7 @@ export function DeckView({ deck, fallbackTheme, onChange }) {
             }}
           >
             <div className="deck-frame" aria-hidden="true">
-              <Slide slide={s} number={i + 1} total={total} />
+              <Slide slide={s} number={i + 1} total={total} images={images} />
             </div>
           </div>
         ))}
@@ -537,7 +740,7 @@ export function DeckView({ deck, fallbackTheme, onChange }) {
       </div>
 
       {presenting ? (
-        <Presenter deck={deck} start={current} style={style} onClose={closePresenter} />
+        <Presenter deck={deck} start={current} style={style} images={images} onClose={closePresenter} />
       ) : null}
     </div>
   );

@@ -20,8 +20,11 @@ import { lineText, plainText } from "./plainText.js";
 
 export const LAYOUTS = [
   "title", "section", "bullets", "content", "two_column",
-  "stat", "quote", "image", "table", "closing",
+  "stat", "quote", "image", "table", "closing", "photo", "split",
 ];
+
+/** The layouts that show one of the user's pictures. */
+export const IMAGE_LAYOUTS = new Set(["photo", "split", "image"]);
 
 /* What a deck with no theme -- and no standard behind it -- looks like. Quiet
    and legible: white, near-black ink, the app's own cobalt, one sans. */
@@ -154,6 +157,20 @@ function cleanSlide(raw) {
     );
   }
   if ("visual" in raw && typeof raw.visual !== "string") delete slide.visual;
+  // A picture is an id from the library and nothing else: an address that is
+  // not one -- a web URL a model slipped in -- is dropped, never fetched.
+  if ("image" in raw) {
+    const item = raw.image && typeof raw.image === "object" ? raw.image : { id: raw.image };
+    const id = lineText(item.id);
+    if (/^img_[A-Za-z0-9]+$/.test(id)) {
+      slide.image = { id, fit: item.fit === "contain" ? "contain" : "cover" };
+      if (item.side === "left" || item.side === "right") slide.image.side = item.side;
+      const alt = lineText(item.alt);
+      if (alt) slide.image.alt = alt;
+    } else {
+      delete slide.image;
+    }
+  }
   return slide;
 }
 
@@ -279,6 +296,40 @@ export const SLIDE_CSS = `
 }
 .deck-table td { padding: 1.15cqw 1.4cqw 1.15cqw 0; border-bottom: 0.12cqw solid var(--d-line); }
 .deck-table [data-num] { text-align: right; }
+
+.deck-pic { display: block; width: 100%; height: 100%; object-fit: cover; }
+.deck-pic[data-fit="contain"] { object-fit: contain; }
+.deck-pic-empty {
+  width: 100%; height: 100%; display: grid; place-items: center; box-sizing: border-box;
+  background: var(--d-surface); color: var(--d-muted); font-size: 1.5cqw;
+  border: 0.15cqw dashed var(--d-line);
+}
+
+.deck-slide[data-layout="photo"] { padding: 0; justify-content: flex-end; color: #fff; }
+.deck-slide[data-layout="photo"] .deck-photo { position: absolute; inset: 0; }
+.deck-slide[data-layout="photo"] .deck-photo-copy {
+  position: relative; padding: 14cqw 7cqw 6.5cqw;
+  background: linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,.35) 55%, transparent);
+}
+.deck-slide[data-layout="photo"] .deck-h { font-size: 5.4cqw; max-width: 82%; color: #fff; }
+.deck-slide[data-layout="photo"] .deck-sub { color: rgba(255,255,255,.86); }
+.deck-slide[data-layout="photo"] .deck-kicker { color: #fff; opacity: .9; }
+.deck-slide[data-layout="photo"] .deck-num { color: rgba(255,255,255,.75); z-index: 1; }
+.deck-slide[data-layout="photo"] .deck-pic-empty { border: none; }
+
+.deck-slide[data-layout="split"] {
+  padding: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr);
+}
+.deck-slide[data-layout="split"][data-side="right"] .deck-split-pic { order: 2; }
+.deck-split-pic { position: relative; min-height: 0; overflow: hidden; }
+.deck-split-pic > * { position: absolute; inset: 0; }
+.deck-split-copy { padding: 6cqw 5.5cqw; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.deck-split-copy .deck-title-top { font-size: 3.4cqw; max-width: none; }
+.deck-split-copy .deck-bullets { max-width: none; }
+.deck-split-copy .deck-bullets li { font-size: 2cqw; }
+.deck-split-copy .deck-body { max-width: none; font-size: 2cqw; }
+
+.deck-slide[data-layout="image"] .deck-visual .deck-pic { max-height: 100%; object-fit: contain; }
 
 .deck-slide[data-layout="closing"] { align-items: center; justify-content: center; text-align: center; }
 .deck-slide[data-layout="closing"] .deck-rule { margin-bottom: 3cqw; }

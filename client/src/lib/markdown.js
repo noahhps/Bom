@@ -48,9 +48,15 @@ function inline(text) {
   out = escapeHtml(out);
 
   out = out
-    .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) =>
-      isSafeUrl(src) ? '<img src="' + src + '" alt="' + alt + '" />' : alt,
-    )
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) => {
+      const own = /^bom-image:(img_[A-Za-z0-9]+)$/.exec(src);
+      if (own) {
+        const url = imageUrl?.(own[1]);
+        // Only ever a blob: address this client made itself.
+        return url && url.startsWith("blob:") ? '<img src="' + url + '" alt="' + alt + '" />' : alt;
+      }
+      return isSafeUrl(src) ? '<img src="' + src + '" alt="' + alt + '" />' : alt;
+    })
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, href) =>
       isSafeUrl(href)
         ? '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' +
@@ -191,7 +197,23 @@ function renderTable(rows) {
   );
 }
 
-export function renderMarkdown(source) {
+/* How `bom-image:ID` -- one of the conversation's own pictures -- becomes an
+   address, during one call of renderMarkdown. Module-level rather than an
+   argument threaded through every helper: rendering is synchronous, so it is
+   set and cleared around a single call and nothing else can see it. Without a
+   resolver, such an image renders as its alt text, as any unsafe one does. */
+let imageUrl = null;
+
+export function renderMarkdown(source, options = {}) {
+  imageUrl = options.imageUrl || null;
+  try {
+    return renderBlocks(source);
+  } finally {
+    imageUrl = null;
+  }
+}
+
+function renderBlocks(source) {
   const lines = String(source == null ? "" : source)
     .replace(/\r\n?/g, "\n")
     .split("\n");

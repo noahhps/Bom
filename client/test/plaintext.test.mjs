@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import { lineText, plainText } from "../src/lib/plainText.js";
 import { parseSheet } from "../src/lib/sheet.js";
 import { describeSkill } from "../src/lib/skillWidgets.js";
+import { renderMarkdown } from "../src/lib/markdown.js";
+import { textImageIds } from "../src/lib/images.js";
 import { parseDeck } from "../src/lib/slides.js";
 
 let passed = 0;
@@ -78,6 +80,25 @@ test("a tool card names wrapped arguments by their text", () => {
   assert.equal(card.title, "Poster");
   assert.deepEqual(card.rows, [{ label: "Kind", value: "html" }]);
   assert.equal(describeSkill({ name: "mcp_tool", arguments: { q: { text: "find" } } }).title, "find");
+});
+
+test("a slide keeps library pictures and drops web addresses", () => {
+  const deck = parseDeck(JSON.stringify({ slides: [
+    { layout: "photo", title: "A", image: "img_ab12" },
+    { layout: "split", title: "B", image: { id: "img_cd34", fit: "contain", side: "right", alt: { text: "sea" } } },
+    { layout: "photo", title: "C", image: "https://example.com/a.jpg" },
+  ] }));
+  assert.deepEqual(deck.slides[0].image, { id: "img_ab12", fit: "cover" });
+  assert.deepEqual(deck.slides[1].image, { id: "img_cd34", fit: "contain", side: "right", alt: "sea" });
+  assert.equal("image" in deck.slides[2], false);
+});
+
+test("markdown draws a library picture only through a blob: address", () => {
+  const md = "![sea](bom-image:img_ab12)";
+  assert.deepEqual(textImageIds(md + " <img src=\"bom-image:img_x9\">"), ["img_ab12", "img_x9"]);
+  assert.match(renderMarkdown(md, { imageUrl: () => "blob:http://x/1" }), /<img src="blob:http:\/\/x\/1" alt="sea"/);
+  assert.doesNotMatch(renderMarkdown(md, { imageUrl: () => "javascript:alert(1)" }), /<img/);
+  assert.doesNotMatch(renderMarkdown(md), /<img/, "no resolver, no picture -- just the alt text");
 });
 
 console.log(`\n${passed} passed`);

@@ -5363,3 +5363,60 @@ tr[data-total] .sheet-cell {
 .app[data-canvas] .topbar-project select { max-width: 110px; }
 .app[data-canvas] .topbar-mode { padding: 5px 7px; margin-right: 0; }
 .app[data-canvas] .topbar-mode-label { display: none; }
+
+/* -- choosing a slide's picture ------------------------------------------------ */
+.deck-picture-btn { border-color: var(--line); margin-left: 6px; }
+.deck-picture-btn[data-on] { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+.deck-picker {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 18px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.deck-picker-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-faint); }
+.deck-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+.deck-picker-item,
+.deck-picker-upload {
+  aspect-ratio: 4 / 3;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--accent-wash);
+}
+.deck-picker-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.deck-picker-item:hover { border-color: var(--line-strong); }
+.deck-picker-item[data-on] { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
+.deck-picker-upload {
+  border-style: dashed;
+  background: none;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--accent);
+}
+.deck-picker-upload:hover:not(:disabled) { border-color: var(--accent); }
+.deck-picker-note { margin: 0; font: 400 var(--t-sm)/1.45 var(--font); color: var(--text-dim); }
+.deck-picker-note[data-error] { color: #a2452f; }
+.deck-picker-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.deck-picker-alt {
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 var(--t-sm)/1.3 var(--font);
+}
+.deck-picker-alt:focus { outline: none; border-color: var(--accent); }
+
+/* The toolbar wraps rather than pushing Present off the edge when a narrow
+   panel also has to fit the Picture button. */
+.deck-toolbar { flex-wrap: wrap; row-gap: 6px; }

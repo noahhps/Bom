@@ -24,6 +24,7 @@ from .orchestrator import Orchestrator
 from .providers import OAuthFlows, ProviderError, ProviderRouter, model_setting_key
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import ReadCanvas, WriteCanvas
+from .skills.images import ListImages
 from .skills.sheet import EditSheet, WriteSheet
 from .skills.slides import WriteSlides
 from .skills.design import AskForDesign
@@ -175,6 +176,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry.register(WriteSlides(store))
     registry.register(WriteSheet(store))
     registry.register(EditSheet(store))
+    # The user's own pictures, by id, for those tools to place.
+    registry.register(ListImages(store))
     # Which design standard a result should follow. The turn stops on this one
     # and asks the reader -- see skills/design.py and the turn loop.
     registry.register(AskForDesign(store))

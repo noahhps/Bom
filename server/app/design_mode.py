@@ -82,6 +82,10 @@ live, and a totals row where one helps.
 - Pages: semantic HTML, responsive (fluid widths, clamp() for type), no external \
 fonts, scripts or images unless the user asked; draw visuals as inline SVG, \
 CSS shapes or gradients.
+- Pictures: when the user has given you images, call list_images and use them \
+by id -- a 'photo' slide for a full-bleed picture with the title over it, \
+'split' for a picture beside text, <img src="bom-image:ID"> in a page. Give \
+every picture alt text. Never invent an id and never use a web address.
 
 5. After writing, keep the reply short: what you made, the two or three design \
 decisions that matter, and one or two specific refinements you could make next. \

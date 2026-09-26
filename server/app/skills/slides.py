@@ -47,7 +47,12 @@ LAYOUTS = (
     "image",       # title, visual (inline SVG), caption
     "table",       # title, columns[], rows[][]
     "closing",     # title, subtitle -- the ending
+    "photo",       # image full-bleed, kicker/title/subtitle over it
+    "split",       # image on one side, title and bullets/body on the other
 )
+
+#: How an image may be fitted into its frame.
+FITS = ("cover", "contain")
 
 MAX_SLIDES = 60
 MAX_BULLETS = 8
@@ -155,10 +160,14 @@ def _layout_for(raw: dict, index: int) -> str:
     aliases = {
         "cover": "title", "intro": "title", "hero": "title",
         "divider": "section", "list": "bullets", "text": "content",
-        "comparison": "two_column", "columns": "two_column", "split": "two_column",
+        "comparison": "two_column", "columns": "two_column", "compare": "two_column",
         "stats": "stat", "number": "stat", "metric": "stat", "metrics": "stat",
         "visual": "image", "diagram": "image", "chart": "image",
         "end": "closing", "thanks": "closing", "outro": "closing",
+        "full_image": "photo", "full_bleed": "photo", "hero_image": "photo",
+        "background": "photo", "picture": "photo", "cover_image": "photo",
+        "image_left": "split", "image_right": "split", "side_by_side": "split",
+        "media": "split", "image_text": "split",
     }
     named = aliases.get(named, named)
     if named in LAYOUTS:
@@ -171,6 +180,10 @@ def _layout_for(raw: dict, index: int) -> str:
         return "table"
     if raw.get("left") or raw.get("right"):
         return "two_column"
+    if raw.get("image") and (raw.get("bullets") or raw.get("body")):
+        return "split"
+    if raw.get("image"):
+        return "photo"
     if raw.get("visual"):
         return "image"
     if raw.get("bullets") or raw.get("points"):
@@ -227,11 +240,56 @@ def normalize_slide(raw, index: int) -> dict | None:
             rows.append([plain_text(c) for c in cells][: len(columns)])
         slide["rows"] = rows
 
+    picture = _image_ref(raw.get("image") or raw.get("photo") or raw.get("picture"))
+    if picture:
+        slide["image"] = picture
+
     visual = raw.get("visual") or raw.get("svg")
     if isinstance(visual, str) and _SVG.match(visual):
         slide["visual"] = visual.strip()
 
     return slide if len(slide) > 1 else None
+
+
+_IMAGE_ID = re.compile(r"img_[A-Za-z0-9]+")
+
+
+def _image_ref(value) -> dict | None:
+    """A slide's picture: {id, fit, side, alt}, from an id or an object.
+
+    Only an id from the library is kept. A web address is dropped here rather
+    than stored -- the whole point of the library is that nothing on a slide is
+    fetched from anywhere.
+    """
+    if value is None or value == "":
+        return None
+    item = as_dict(value) if not isinstance(value, dict) else value
+    if item is None:
+        item = {"id": value}
+    ref = plain_text(item.get("id") or item.get("image") or item.get("src") or item.get("value"))
+    hit = _IMAGE_ID.search(ref)
+    if not hit:
+        return None
+    fit = plain_text(item.get("fit")).lower()
+    side = plain_text(item.get("side") or item.get("position")).lower()
+    picture = {"id": hit.group(0), "fit": fit if fit in FITS else "cover"}
+    if side in ("left", "right"):
+        picture["side"] = side
+    alt = plain_text(item.get("alt") or item.get("description"))
+    if alt:
+        picture["alt"] = alt[:300]
+    return picture
+
+
+def check_images(deck: dict, known: set[str]) -> list[str]:
+    """Drop pictures that are not in the library; say which, for the model."""
+    missing: list[str] = []
+    for number, slide in enumerate(deck["slides"], start=1):
+        picture = slide.get("image")
+        if picture and picture["id"] not in known:
+            missing.append(f"slide {number} ({picture['id']})")
+            del slide["image"]
+    return missing
 
 
 def normalize_deck(slides, theme=None, defaults: dict | None = None,
@@ -315,6 +373,8 @@ def outline(deck: dict) -> str:
                 lines.append(f"   row: {' | '.join(row)}")
         if slide.get("visual"):
             lines.append(f"   visual: <svg, {len(slide['visual'])} chars>")
+        if slide.get("image"):
+            lines.append(f"   image: {json.dumps(slide['image'])}")
         if slide.get("notes"):
             lines.append(f"   notes: {slide['notes']}")
     return "\n".join(lines)
@@ -380,10 +440,15 @@ class WriteSlides(Skill):
                 "subtitle}; bullets {title, bullets[]}; content {title, body}; "
                 "two_column {title, left_title, left, right_title, right}; stat "
                 "{title, stats[{value, label}] -- one to four big numbers}; "
-                "quote {quote, attribution}; image {title, visual, caption} "
-                "where visual is an inline <svg> you draw; table {title, "
-                "columns[], rows[][]}; closing {title, subtitle}. Any slide may "
-                "carry `notes` -- what the speaker says. "
+                "quote {quote, attribution}; image {title, visual or image, "
+                "caption} where visual is an inline <svg> you draw; table "
+                "{title, columns[], rows[][]}; closing {title, subtitle}; photo "
+                "{image, kicker, title, subtitle} -- a picture filling the slide "
+                "with the words over it; split {image, title, bullets[] or body} "
+                "-- a picture beside the text. `image` is the id of one of the "
+                "user's pictures from list_images, or {id, fit: 'cover' or "
+                "'contain', side: 'left' or 'right', alt}; never a web address. "
+                "Any slide may carry `notes` -- what the speaker says. "
                 "Write a deck a designer would: open with a title slide, one idea "
                 "per slide, titles that state the point, at most five short "
                 "bullets, and vary the layouts. Reusing a title replaces that "
@@ -425,6 +490,10 @@ class WriteSlides(Skill):
                                 "quote": {"type": "string"},
                                 "attribution": {"type": "string"},
                                 "visual": {"type": "string"},
+                                "image": {
+                                    "type": ["string", "object"],
+                                    "description": "An image id from list_images, or {id, fit, side, alt}.",
+                                },
                                 "caption": {"type": "string"},
                                 "columns": {"type": "array", "items": {"type": "string"}},
                                 "rows": {
@@ -467,6 +536,9 @@ class WriteSlides(Skill):
                 "That deck had no slides with anything on them. Pass `slides` as "
                 "a list of objects, each with a layout and a title."
             )
+        from .images import known_ids  # local: images imports nothing of ours back
+
+        missing = check_images(deck, known_ids(self.store, session))
         content = json.dumps(deck, ensure_ascii=False, indent=1)
         verb = save_canvas(self.store, session, name, content, KIND)
         count = len(deck["slides"])
@@ -477,6 +549,9 @@ class WriteSlides(Skill):
             "the same title, or read it back first with read_canvas."
         )
         flags = advice(deck)
+        if missing:
+            flags.insert(0, "these images do not exist and were left off: "
+                         + ", ".join(missing) + " -- call list_images for the real ids")
         if flags:
             said += " Before you finish, consider: " + "; ".join(flags) + "."
         return said

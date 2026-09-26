@@ -86,6 +86,7 @@ const SOURCES = {
   write_sheet: { source: "Sheet", icon: "sheet" },
   edit_sheet: { source: "Sheet", icon: "sheet" },
   ask_for_design: { source: "Design", icon: "design" },
+  list_images: { source: "Images", icon: "image" },
   run_python: { source: "Sandbox", icon: "code" },
   run_shell: { source: "Sandbox", icon: "code" },
 };
@@ -200,6 +201,7 @@ const DOING = {
   write_sheet: "Building sheet",
   edit_sheet: "Editing sheet",
   ask_for_design: "Choosing a look",
+  list_images: "Finding images",
   add_event: "Scheduling",
   update_event: "Scheduling",
   list_events: "Checking dates",

@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeckView, exportDeck } from "./DeckView";
 import { Icon } from "./Icon";
 import { SheetView } from "./SheetView";
+import { useImageUrls } from "../hooks/useImages";
+import { useApi } from "../lib/api-context";
 import { fileStem, saveFile } from "../lib/files";
+import { inlinePageImages, textImageIds } from "../lib/images";
 import { renderMarkdown } from "../lib/markdown";
 import { blankSheet, parseSheet, serializeSheet, toCsv } from "../lib/sheet";
 import { blankDeck, parseDeck, serializeDeck } from "../lib/slides";
@@ -115,6 +118,7 @@ export function Canvas({
   onResizeStart,
   onResizeKey,
 }) {
+  const api = useApi();
   const [draft, setDraft] = useState(active?.content ?? "");
   const [titleDraft, setTitleDraft] = useState(active?.title ?? "");
   const [mode, setMode] = useState(() => openingMode(active));
@@ -256,16 +260,20 @@ export function Canvas({
     const stem = fileStem(titleDraft || active.title);
     if (sheet) return saveFile(`${stem}.csv`, toCsv(sheet), "text/csv");
     if (deck) {
-      const html = await exportDeck(deck, fallbackTheme, titleDraft || active.title);
+      const html = await exportDeck(deck, fallbackTheme, titleDraft || active.title, api);
       return saveFile(`${stem}.html`, html, "text/html");
     }
-    if (active.kind === "html") return saveFile(`${stem}.html`, stripFence(draft), "text/html");
+    // A page or a document leaves with its pictures inside it, since the
+    // bom-image: addresses only mean something inside this app.
+    if (active.kind === "html") {
+      return saveFile(`${stem}.html`, await inlinePageImages(api, stripFence(draft)), "text/html");
+    }
     if (active.kind === "code") {
       const ext = EXTENSIONS[(active.language || "").toLowerCase()] || "txt";
       return saveFile(`${stem}.${ext}`, draft);
     }
-    return saveFile(`${stem}.md`, draft, "text/markdown");
-  }, [active, deck, draft, fallbackTheme, sheet, titleDraft]);
+    return saveFile(`${stem}.md`, await inlinePageImages(api, draft), "text/markdown");
+  }, [active, api, deck, draft, fallbackTheme, sheet, titleDraft]);
 
   // HTML regardless of how it was labelled: an explicit html canvas, or a
   // markdown one whose content is plainly a page (the common case when the
@@ -274,15 +282,40 @@ export function Canvas({
   const isHtml =
     active && (active.kind === "html" || (active.kind === "markdown" && looksLikeHtml(draft)));
 
+  // The user's pictures a document names, as addresses the preview can draw.
+  const pictures = useImageUrls(
+    active?.kind === "markdown" && mode === "preview" ? textImageIds(draft) : [],
+  );
+
   // Markdown preview only when it is not really HTML -- otherwise the renderer
   // would escape the tags and show the source, which is the bug this fixes.
   const previewHtml = useMemo(
     () =>
       active && mode === "preview" && !isHtml && active.kind === "markdown"
-        ? { __html: renderMarkdown(draft) }
+        ? { __html: renderMarkdown(draft, { imageUrl: (id) => pictures[id] }) }
         : null,
-    [active, isHtml, mode, draft],
+    [active, isHtml, mode, draft, pictures],
   );
+
+  // A page is previewed in a sandboxed frame with an opaque origin, which
+  // cannot fetch anything with the app's token -- so its pictures go in as
+  // data: URIs, the same form they take when the page is downloaded.
+  const [frameDoc, setFrameDoc] = useState("");
+  useEffect(() => {
+    if (!isHtml || mode !== "preview") return undefined;
+    const page = stripFence(draft);
+    let live = true;
+    setFrameDoc(page);
+    if (textImageIds(page).length) {
+      inlinePageImages(api, page).then(
+        (inlined) => live && setFrameDoc(inlined),
+        () => {},
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [api, draft, isHtml, mode]);
 
   const canPreview = active && (PREVIEWABLE.has(active.kind) || isHtml);
   const structured = active && STRUCTURED.has(active.kind);
@@ -430,7 +463,12 @@ export function Canvas({
               sheet ? (
                 <SheetView sheet={sheet} fallbackTheme={fallbackTheme} onChange={onStructured} />
               ) : deck ? (
-                <DeckView deck={deck} fallbackTheme={fallbackTheme} onChange={onStructured} />
+                <DeckView
+                  deck={deck}
+                  fallbackTheme={fallbackTheme}
+                  onChange={onStructured}
+                  sessionId={active.session_id}
+                />
               ) : (
                 <div className="canvas-empty">
                   <p>This {KIND_LABEL[active.kind]}’s source isn’t valid JSON, so it can’t be drawn.</p>
@@ -455,7 +493,7 @@ export function Canvas({
                 className="canvas-preview-frame"
                 sandbox={runScripts ? "allow-scripts" : ""}
                 title="HTML preview"
-                srcDoc={stripFence(draft)}
+                srcDoc={frameDoc}
               />
             ) : (
               <textarea

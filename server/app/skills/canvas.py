@@ -158,8 +158,10 @@ class WriteCanvas(Skill):
                 "source.unsplash.com, images.unsplash.com, picsum.photos or "
                 "similar -- an inline SVG with a shape and a caption is a better "
                 "placeholder than a broken one, and says what the picture is "
-                "for. Link a remote image only when the user gave you that exact "
-                "URL. Pass the raw "
+                "for. The user's own pictures are the exception: call "
+                "list_images and use <img src=\"bom-image:ID\"> (or "
+                "![alt](bom-image:ID) in markdown). Link a remote image only "
+                "when the user gave you that exact URL. Pass the raw "
                 "content itself, not wrapped in a code fence. Writing to a title "
                 "that already exists replaces that canvas whole, so read_canvas "
                 "first if you mean to revise rather than start over. Keep your "
@@ -268,6 +270,18 @@ class WriteCanvas(Skill):
 
         lines = body.count("\n") + 1 if body else 0
         note = ""
+        # The user's pictures, by id. One that is not in the library is a
+        # picture that will not appear, so the model hears about it now.
+        from .images import REFERENCE, known_ids
+
+        named = set(REFERENCE.findall(body))
+        unknown = sorted(named - known_ids(self.store, session)) if named else []
+        if unknown:
+            note += (
+                f" WARNING: {', '.join(unknown)} "
+                f"{'is' if len(unknown) == 1 else 'are'} not in this conversation's "
+                "images, so nothing will show there. Call list_images for the real ids."
+            )
         # Said in the result as well as the description, because the
         # description is read once before the model has written anything and
         # this arrives holding the actual page. It is a report, not a refusal:
@@ -285,7 +299,7 @@ class WriteCanvas(Skill):
             named = ", ".join(hosts[:_NAMED_HOSTS])
             if len(hosts) > _NAMED_HOSTS:
                 named += f" and {len(hosts) - _NAMED_HOSTS} more"
-            note = (
+            note += (
                 f" WARNING: {len(remote)} "
                 f"{'image' if len(remote) == 1 else 'images'} in this canvas "
                 f"{'loads' if len(remote) == 1 else 'load'} from the internet "

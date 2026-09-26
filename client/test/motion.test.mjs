@@ -104,7 +104,7 @@ test("every working word fits the label", () => {
   const names = ["web_search", "search_files", "search_history", "remember", "forget", "current_time",
     "list_directory", "read_file", "read_canvas", "write_canvas", "add_event", "update_event",
     "list_events", "find_events", "list_photos", "list_albums", "create_album", "add_to_album",
-    "run_python", "run_shell", "write_slides", "write_sheet", "edit_sheet", "ask_for_design",
+    "run_python", "run_shell", "write_slides", "write_sheet", "edit_sheet", "ask_for_design", "list_images",
     "unknown"];
   for (const name of names) {
     const word = workingWord([{ name }], false);

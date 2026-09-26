@@ -37,6 +37,8 @@ const PATHS = {
   document: "M7 3h8l4 4v14H7zM15 3v4h4M10 13h6M10 17h6",
   // A grid with a header row and a label column: the sheet.
   sheet: "M4.5 5h15v14h-15zM4.5 9.5h15M4.5 14.2h15M9.5 5v14",
+  // A framed picture: a sun and a hill.
+  image: "M4.5 5h15v14h-15zM4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5M15 9.2a1.2 1.2 0 100 .01",
   // A screen on a stand: the deck.
   slides: "M3.5 5h17M5 5v10h14V5M12 15v4M8.5 19h7M8.5 9.5h7M8.5 12h4",
   // Two figures, one behind the other: a team of agents rather than the single

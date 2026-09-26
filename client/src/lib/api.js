@@ -321,6 +321,21 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
     deleteCanvas: (id) =>
       request("/canvases/" + encodeURIComponent(id), { method: "DELETE" }),
+    // -- images ----------------------------------------------------------
+    // A conversation's own pictures, cleaned by the server on the way in and
+    // referenced by id from decks and pages. Blobs rather than URLs for the
+    // same reason as attachments: the route is behind the bearer token.
+    listImages: (sessionId) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images"),
+    uploadImage: (sessionId, body) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    imageBlob: async (id) => (await request("/images/" + encodeURIComponent(id))).blob(),
+    updateImage: (id, patch) =>
+      json("/images/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(patch) }),
+    deleteImage: (id) => request("/images/" + encodeURIComponent(id), { method: "DELETE" }),
     deleteSessions: (ids) =>
       json("/sessions/delete", {
         method: "POST",

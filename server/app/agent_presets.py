@@ -110,7 +110,7 @@ PRESETS: list[dict] = [
         ),
         "skills": [
             "ask_for_design", "write_slides", "write_sheet", "edit_sheet",
-            "write_canvas", "read_canvas",
+            "write_canvas", "read_canvas", "list_images",
         ],
     },
     {

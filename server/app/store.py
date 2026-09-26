@@ -279,6 +279,53 @@ class StoredDesign:
 
 
 @dataclass
+class StoredImage:
+    """A picture in a conversation's library, already cleaned -- see images.py."""
+
+    id: str
+    session_id: str
+    attachment_id: str | None
+    name: str
+    mime: str
+    width: int
+    height: int
+    size: int
+    alt: str | None
+    created_at: int
+    # Left out of listings: a library is megabytes, and the UI fetches the
+    # bytes one image at a time, by id.
+    data: bytes | None = None
+
+    @property
+    def orientation(self) -> str:
+        if self.width > self.height * 1.15:
+            return "landscape"
+        if self.height > self.width * 1.15:
+            return "portrait"
+        return "square"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "name": self.name,
+            "mime": self.mime,
+            "width": self.width,
+            "height": self.height,
+            "size": self.size,
+            "alt": self.alt,
+            "orientation": self.orientation,
+            "from_chat": self.attachment_id is not None,
+            "created_at": self.created_at,
+        }
+
+
+_IMAGE_META = (
+    "id, session_id, attachment_id, name, mime, width, height, size, alt, created_at"
+)
+
+
+@dataclass
 class StoredMCPServer:
     id: str
     name: str
@@ -1408,6 +1455,67 @@ class Store:
     def delete_canvas(self, canvas_id: str) -> bool:
         existed = self.get_canvas(canvas_id) is not None
         self.db.execute("DELETE FROM canvases WHERE id = ?", (canvas_id,))
+        return existed
+
+    # -- images -----------------------------------------------------------
+
+    def add_image(
+        self,
+        session_id: str,
+        *,
+        name: str,
+        mime: str,
+        width: int,
+        height: int,
+        data: bytes,
+        alt: str | None = None,
+        attachment_id: str | None = None,
+    ) -> StoredImage:
+        image = StoredImage(
+            id=_new_id("img"),
+            session_id=session_id,
+            attachment_id=attachment_id,
+            name=name,
+            mime=mime,
+            width=width,
+            height=height,
+            size=len(data),
+            alt=alt,
+            created_at=_now(),
+        )
+        self.db.execute(
+            f"INSERT INTO images ({_IMAGE_META}, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (image.id, image.session_id, image.attachment_id, image.name, image.mime,
+             image.width, image.height, image.size, image.alt, image.created_at, data),
+        )
+        return image
+
+    def get_image(self, image_id: str, *, with_data: bool = False) -> StoredImage | None:
+        columns = _IMAGE_META + (", data" if with_data else "")
+        row = self.db.query_one(f"SELECT {columns} FROM images WHERE id = ?", (image_id,))
+        return StoredImage(**dict(row)) if row else None
+
+    def session_images(self, session_id: str) -> list[StoredImage]:
+        rows = self.db.query(
+            f"SELECT {_IMAGE_META} FROM images WHERE session_id = ? ORDER BY created_at, rowid",
+            (session_id,),
+        )
+        return [StoredImage(**dict(row)) for row in rows]
+
+    def imported_attachments(self, session_id: str) -> set[str]:
+        rows = self.db.query(
+            "SELECT attachment_id FROM images WHERE session_id = ? AND attachment_id IS NOT NULL",
+            (session_id,),
+        )
+        return {row["attachment_id"] for row in rows}
+
+    def set_image_alt(self, image_id: str, alt: str | None) -> StoredImage | None:
+        self.db.execute("UPDATE images SET alt = ? WHERE id = ?", (alt, image_id))
+        return self.get_image(image_id)
+
+    def delete_image(self, image_id: str) -> bool:
+        existed = self.get_image(image_id) is not None
+        self.db.execute("DELETE FROM images WHERE id = ?", (image_id,))
         return existed
 
     # -- agents -----------------------------------------------------------

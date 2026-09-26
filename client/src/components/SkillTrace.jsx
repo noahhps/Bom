@@ -1,8 +1,36 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { PLANS, sketchFor } from "../lib/drawkit";
 import { describeSkill } from "../lib/skillWidgets";
+import { CanvasBoard } from "./CanvasBoard";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
+
+/**
+ * True while `active`, and afterwards until `minMs` has passed since it first
+ * was -- so something that finishes almost at once is still on screen long
+ * enough to be seen. A card that mounts already finished, from history, never
+ * turns it on at all.
+ */
+function useAtLeast(active, minMs) {
+  const since = useRef(null);
+  const [held, setHeld] = useState(false);
+  if (active && since.current === null) since.current = Date.now();
+  useEffect(() => {
+    if (active) {
+      setHeld(true);
+      return undefined;
+    }
+    const left = since.current === null ? 0 : minMs - (Date.now() - since.current);
+    if (left <= 0) {
+      setHeld(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setHeld(false), left);
+    return () => clearTimeout(timer);
+  }, [active, minMs]);
+  return active || held;
+}
 
 /**
  * What the model reached for, and what came back.
@@ -25,6 +53,16 @@ function Card({ skill }) {
   const [open, setOpen] = useState(false);
   const running = skill.result === undefined;
   const widget = describeSkill(skill);
+
+  // A canvas being written draws on a board instead of saying "Working…".
+  //
+  // The write itself takes milliseconds: the long wait is the model composing
+  // the document, and the backends only report a call once it is whole. So
+  // the board stays up until it has finished one drawing even if the call
+  // came back sooner -- the card's own "running" still goes when the call
+  // does, but the drawing is not cut off a frame after it started.
+  const sketch = skill.name === "write_canvas" ? sketchFor(skill.arguments) : null;
+  const drawing = useAtLeast(Boolean(sketch) && running, sketch ? PLANS[sketch].drawn + 400 : 0);
 
   return (
     <div
@@ -65,7 +103,9 @@ function Card({ skill }) {
         </dl>
       ) : null}
 
-      {running ? (
+      {sketch && drawing ? (
+        <CanvasBoard sketch={sketch} />
+      ) : running ? (
         <p className="skill-card-preview" data-soft="">
           Working…
         </p>

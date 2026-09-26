@@ -18,6 +18,9 @@ export function MessageList({
   onDecide,
   onChooseDesign,
   onContinue,
+  // What an empty conversation says above the composer. The chat's greeting
+  // by default; a design conversation hands in its own.
+  head = null,
 }) {
   const ref = useRef(null);
 
@@ -42,7 +45,7 @@ export function MessageList({
   return (
     <main className="messages" ref={ref}>
       {messages.length === 0 ? (
-        <StartersHead />
+        head || <StartersHead />
       ) : (
         messages.map((m) => (
           <Message

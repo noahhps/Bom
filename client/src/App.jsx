@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Agents } from "./components/Agents";
 import { Design } from "./components/Design";
+import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
 import { Icon } from "./components/Icon";
 import { Composer } from "./components/Composer";
@@ -48,8 +49,12 @@ export default function App() {
   const [phase, setPhase] = useState(() => (localStorage.getItem(TOKEN_KEY) ? BOOT : GATE));
   const [gateError, setGateError] = useState("");
   const [focusToken, setFocusToken] = useState(0);
-  // Which of the rail's three destinations is on screen.
+  // Which of the rail's destinations is on screen. "chat" and "design" are
+  // both the conversation screen -- a design conversation reads a different
+  // preamble and opens on a different empty screen -- and "standards" is the
+  // library of design.md files the Design group links to.
   const [view, setView] = useState("chat");
+  const talking = view === "chat" || view === "design";
   const rail = useRailWidth();
   const canvasSize = useCanvasWidth();
   // Below 900px the rail stops being a strip beside the sheet and becomes a
@@ -100,6 +105,9 @@ export default function App() {
   // The agent picked on the empty new-conversation screen. It is sent with
   // the first turn so the server can assign it before the model runs.
   const [newAgentId, setNewAgentId] = useState(null);
+  // The look picked on an empty design conversation, sent with its first
+  // message so the answer is styled from the start and nothing is asked.
+  const [newDesign, setNewDesign] = useState(null);
 
   const bootstrapped = useRef("");
   const signOutRef = useRef(() => {});
@@ -144,8 +152,39 @@ export default function App() {
     [],
   );
 
-  const chat = useChat(api, { onSessionsChanged, onCanvas, provider, agentId: newAgentId });
+  const chat = useChat(api, {
+    onSessionsChanged,
+    onCanvas,
+    provider,
+    agentId: newAgentId,
+    // Only read for a conversation not yet sent: what it is started as.
+    mode: view === "design" ? "design" : "chat",
+    design: view === "design" ? newDesign : null,
+  });
   const { setBadge, openSession, startNew } = chat;
+
+  // The open conversation's row, for its mode, its standard and its filing.
+  const current = sessions.sessions.find((s) => s.id === chat.sessionId) || null;
+  // What the conversation screen is dressed as. A sent conversation is what it
+  // was started as, whichever list it was opened from; an unsent one is what
+  // the rail said to start.
+  // Between the first message creating the session and the list refreshing,
+  // the row is not known yet -- the view it was started from still is.
+  const designing = current ? current.mode === "design" : view === "design";
+  // Its standard: the stored one, or -- before the first message, and until
+  // the list catches up with the session it created -- the pick being sent.
+  const look = current ? current.design ?? null : newDesign;
+  // What the canvas falls back to for a sheet or a deck with no theme of its
+  // own: the conversation's standard, when that is a preset with tokens.
+  const lookTokens = useMemo(
+    () => designs.presets.find((p) => p.id === look)?.tokens || null,
+    [designs.presets, look],
+  );
+  // Every standard, for the top bar's picker: yours first, then the presets.
+  const looks = useMemo(
+    () => [...designs.designs, ...designs.presets].map((d) => ({ id: d.id, name: d.name })),
+    [designs.designs, designs.presets],
+  );
 
   const canvas = useCanvas(api, chat.sessionId);
   canvasApplyRef.current = canvas.applyEvent;
@@ -199,8 +238,10 @@ export default function App() {
 
         const list = await refresh();
         if (stale()) return;
-        if (list.length) await openSession(list[0].id);
-        else startNew();
+        if (list.length) {
+          if (list[0].mode === "design") setView("design");
+          await openSession(list[0].id);
+        } else startNew();
         setPhase(READY);
       } catch (error) {
         // A 401 has already been turned into a sign-out by the api client.
@@ -272,6 +313,41 @@ export default function App() {
     setFocusToken((n) => n + 1);
   }, [startNew]);
 
+  // The Design tab: a fresh conversation, started as a design one. Nothing is
+  // created on the server until the first message, the same as a chat.
+  const handleNewDesign = useCallback(() => {
+    setView("design");
+    setSidebarOpen(false);
+    setNewAgentId(null);
+    setNewDesign(null);
+    startNew();
+    setFocusToken((n) => n + 1);
+  }, [startNew]);
+
+  // "Start a design with this", from the standards page: a new design
+  // conversation with that look already picked.
+  const handleDesignWith = useCallback(
+    (design) => {
+      handleNewDesign();
+      setNewDesign(design);
+    },
+    [handleNewDesign],
+  );
+
+  // The look, from the top bar or the empty screen. Before the first message
+  // it is only remembered here; after, it is the conversation's.
+  const handleLook = useCallback(
+    async (design) => {
+      if (!chat.sessionId) {
+        setNewDesign(design);
+        return;
+      }
+      await api.setSessionDesign(chat.sessionId, design);
+      await onSessionsChanged();
+    },
+    [api, chat.sessionId, onSessionsChanged],
+  );
+
   // A chat that begins life already filed. Sessions are normally created
   // lazily by the first message, so this is the one path that has to make an
   // empty one up front -- there is nowhere else to record the project.
@@ -303,13 +379,20 @@ export default function App() {
     [sessions, chat.sessionId, startNew],
   );
 
+  // A conversation opens on the screen it was started on: a design one in the
+  // design view, whichever list it was picked from.
   const handleOpenSession = useCallback(
     (id) => {
-      setView("chat");
+      const known = sessions.sessions.find((s) => s.id === id);
+      setView(known?.mode === "design" ? "design" : "chat");
       setSidebarOpen(false);
-      openSession(id).catch(() => {});
+      openSession(id)
+        .then((session) => {
+          if (session && !known) setView(session.mode === "design" ? "design" : "chat");
+        })
+        .catch(() => {});
     },
-    [openSession],
+    [openSession, sessions.sessions],
   );
 
   // -- render ---------------------------------------------------------------
@@ -337,7 +420,7 @@ export default function App() {
         data-resizing={rail.resizing || canvasSize.resizing ? "" : undefined}
         // Splits the sheet when the canvas is open, so the thread and the
         // document sit side by side rather than one over the other.
-        data-canvas={view === "chat" && canvas.open ? "" : undefined}
+        data-canvas={talking && canvas.open ? "" : undefined}
         // Both omitted below 900px so the stylesheet's phone sizing survives:
         // there the rail is a full-screen panel and the canvas a full overlay,
         // and an inline custom property would outrank the rules that say so.
@@ -399,6 +482,7 @@ export default function App() {
           activeId={chat.sessionId}
           onOpenSession={handleOpenSession}
           onNewSession={handleNewSession}
+          onNewDesign={handleNewDesign}
           onDelete={handleDelete}
         />
 
@@ -411,35 +495,36 @@ export default function App() {
             child. */}
         <div
           className="screen"
-          data-view={view}
-          data-empty={
-            view === "chat" && chat.messages.length === 0 ? "" : undefined
-          }
+          data-view={talking ? (designing ? "design" : "chat") : view}
+          data-empty={talking && chat.messages.length === 0 ? "" : undefined}
         >
-          {view === "chat" ? (
+          {talking ? (
             <>
               <TopBar
-                title={chat.title}
+                // Until the server names it after the first exchange.
+                title={
+                  designing && (!chat.sessionId || chat.title === "New conversation")
+                    ? "New design"
+                    : chat.title
+                }
+                mode={designing ? "design" : "chat"}
+                looks={looks}
+                look={look}
+                onLook={(design) => handleLook(design).catch(() => {})}
                 badge={chat.badge}
                 projects={projects.projects}
                 canFile={Boolean(chat.sessionId)}
-                projectId={
-                  sessions.sessions.find((s) => s.id === chat.sessionId)?.project_id ||
-                  null
-                }
+                projectId={current?.project_id || null}
                 onProject={async (projectId) => {
                   await api.setSessionProject(chat.sessionId, projectId);
                   await onSessionsChanged();
                 }}
-                onNewSession={handleNewSession}
+                onNewSession={designing ? handleNewDesign : handleNewSession}
                 canvasCount={canvas.count}
                 canvasOpen={canvas.open}
                 onToggleCanvas={canvas.toggle}
                 agents={agents.agents}
-                agentId={
-                  sessions.sessions.find((s) => s.id === chat.sessionId)?.agent_id ||
-                  null
-                }
+                agentId={current?.agent_id || null}
                 onAgent={async (agentId) => {
                   await api.setSessionAgent(chat.sessionId, agentId);
                   await onSessionsChanged();
@@ -453,6 +538,7 @@ export default function App() {
                 onDecide={chat.decide}
                 onChooseDesign={chat.chooseDesign}
                 onContinue={chat.continueTurn}
+                head={designing ? <DesignStartersHead /> : null}
               />
 
               <Composer
@@ -468,10 +554,22 @@ export default function App() {
                 agents={chat.sessionId ? [] : agents.agents}
                 agentId={newAgentId}
                 onAgent={setNewAgentId}
+                placeholder={designing ? "Describe what you want to make." : undefined}
               />
 
               {chat.messages.length === 0 ? (
-                <Starters onPick={(text) => setDraft({ text })} />
+                designing ? (
+                  <DesignStarters
+                    onPick={(text) => setDraft({ text })}
+                    presets={designs.presets}
+                    designs={designs.designs}
+                    value={look}
+                    onChoose={(design) => handleLook(design).catch(() => {})}
+                    onManage={() => goTo("standards")}
+                  />
+                ) : (
+                  <Starters onPick={(text) => setDraft({ text })} />
+                )
               ) : null}
             </>
           ) : view === "projects" ? (
@@ -510,13 +608,14 @@ export default function App() {
               // show the truth.
               onChanged={onSessionsChanged}
             />
-          ) : view === "design" ? (
+          ) : view === "standards" ? (
             <Design
               designs={designs.designs}
               presets={designs.presets}
               onCreate={designs.create}
               onUpdate={designs.update}
               onDelete={designs.remove}
+              onUse={handleDesignWith}
             />
           ) : (
             <Settings
@@ -539,7 +638,7 @@ export default function App() {
             than a child of it, so it splits the width with the thread instead
             of scrolling inside it -- and only in chat, where a conversation is
             what a canvas belongs to. */}
-        {view === "chat" && canvas.open ? (
+        {talking && canvas.open ? (
           <Canvas
             canvases={canvas.canvases}
             active={canvas.active}
@@ -548,6 +647,7 @@ export default function App() {
             onSave={canvas.save}
             onCreate={canvas.create}
             onDelete={canvas.remove}
+            fallbackTheme={lookTokens}
             resizable={canvasSize.enabled}
             width={canvasSize.width}
             onResizeStart={canvasSize.start}

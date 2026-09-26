@@ -17,7 +17,10 @@ const message = (role, content = "", extra = {}) => ({
  * The conversation: which session is open, what is in it, and the turn in
  * flight. Everything durable lives on the server -- this is a view of it.
  */
-export function useChat(api, { onSessionsChanged, onCanvas, provider = null, agentId = null }) {
+export function useChat(
+  api,
+  { onSessionsChanged, onCanvas, provider = null, agentId = null, mode = "chat", design = null },
+) {
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
   // Mirror of the above, readable from a callback that outlived its render --
@@ -92,6 +95,8 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null, age
   const openSession = useCallback(
     async (id) => {
       const data = await api.getSession(id);
+      // Returned as well as applied, so the caller can tell a design
+      // conversation from a chat without waiting for the list to refresh.
       setSessionId(id);
       setTitle(data.session.title || "Untitled");
       setMessages(
@@ -114,6 +119,7 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null, age
       );
       jumpToEnd();
       onSessionsChanged();
+      return data.session;
     },
     [api, jumpToEnd, onSessionsChanged],
   );
@@ -180,6 +186,9 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null, age
           // the top-bar picker instead.
           sessionId ? null : agentId,
           controller.signal,
+          // Likewise what a new conversation is started as: a design chat,
+          // and the look picked on its empty screen before anything was sent.
+          sessionId ? {} : { mode, design },
         );
 
         for await (const { event, data } of readEvents(response)) {
@@ -252,6 +261,10 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null, age
                         id: data.id,
                         options: data.options,
                         askedFor: data.asked_for || undefined,
+                        // Set when the turn stopped a deck, a sheet or a page
+                        // on its way to being built, rather than being asked
+                        // by the model -- the card says so.
+                        before: data.before || undefined,
                       },
                     })
                   : s,
@@ -360,6 +373,8 @@ export function useChat(api, { onSessionsChanged, onCanvas, provider = null, age
       onCanvas,
       onSessionsChanged,
       agentId,
+      mode,
+      design,
       provider,
       schedule,
       sessionId,

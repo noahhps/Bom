@@ -1,7 +1,41 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { renderMarkdown } from "../lib/markdown";
+import { Swatch, swatchOf } from "./DesignStarters";
 import { useDialog } from "./Dialog";
+
+/* A preset's tokens, drawn: the colours as chips and the two faces as
+   specimens. What the tools will actually apply, shown before it is picked. */
+function Tokens({ tokens }) {
+  if (!tokens) return null;
+  const colours = ["background", "surface", "text", "muted", "accent", "accent_2", "line"]
+    .filter((key) => tokens[key])
+    .map((key) => [key.replace("_", " "), tokens[key]]);
+  return (
+    <div className="design-tokens">
+      <div className="design-token-colours">
+        {colours.map(([name, value]) => (
+          <span className="design-token" key={name} title={`${name}: ${value}`}>
+            <i style={{ background: value }} />
+            <span className="mi">{name}</span>
+          </span>
+        ))}
+      </div>
+      <div className="design-token-type">
+        <span
+          style={{
+            fontFamily: tokens.heading_font,
+            fontWeight: tokens.heading_weight,
+            textTransform: tokens.heading_case === "upper" ? "uppercase" : "none",
+          }}
+        >
+          Heading Aa
+        </span>
+        <span style={{ fontFamily: tokens.body_font }}>Body text reads like this.</span>
+      </div>
+    </div>
+  );
+}
 
 // What a fresh standard starts as. Not empty: a blank textarea is a worse
 // prompt than a skeleton, and these six headings are the ones every preset
@@ -66,7 +100,7 @@ function forkOf(preset) {
  * so the headings have to be right; the person writing it reads the prose, and
  * catching "this section is empty" is much easier rendered than in source.
  */
-export function Design({ designs, presets, onCreate, onUpdate, onDelete }) {
+export function Design({ designs, presets, onCreate, onUpdate, onDelete, onUse }) {
   const { confirm, notify } = useDialog();
   // The id being edited, or "new". Null when nothing is open.
   const [editing, setEditing] = useState(null);
@@ -194,13 +228,13 @@ export function Design({ designs, presets, onCreate, onUpdate, onDelete }) {
       <div className="page-head" data-tint="ochre">
         <div className="inner">
           <div>
-            <h1 className="h">Design</h1>
+            <h1 className="h">Design standards</h1>
             <p>
               A design.md is the brief a result is held to — type, colour,
               layout, components and the voice the words are written in. When
-              the model is about to make something whose look matters it stops
-              and asks which of these to follow, and the one you pick is handed
-              to it whole.
+              the model is about to make a deck, a sheet or a page it stops and
+              asks which of these to follow, and the one you pick styles
+              everything else in that conversation too.
             </p>
           </div>
           <div className="actions">
@@ -267,7 +301,10 @@ export function Design({ designs, presets, onCreate, onUpdate, onDelete }) {
               data-active={reading?.id === preset.id ? "" : undefined}
               onClick={() => setReading(preset)}
             >
-              <span className="design-item-name">{preset.name}</span>
+              <span className="design-item-top">
+                <Swatch colours={swatchOf(preset.tokens)} />
+                <span className="design-item-name">{preset.name}</span>
+              </span>
               <span className="design-item-summary">{preset.summary}</span>
               {preset.tags?.length ? (
                 <span className="design-opt-tags">
@@ -290,10 +327,18 @@ export function Design({ designs, presets, onCreate, onUpdate, onDelete }) {
                   <h2 className="design-reading-name">{reading.name}</h2>
                   <p className="mi">Preset · read-only</p>
                 </div>
-                <button type="button" className="btnp" onClick={() => fork(reading)}>
-                  Fork to edit
-                </button>
+                <div className="design-reading-actions">
+                  {onUse ? (
+                    <button type="button" className="btnp" onClick={() => onUse(reading.id)}>
+                      Start a design with this
+                    </button>
+                  ) : null}
+                  <button type="button" className="btn" onClick={() => fork(reading)}>
+                    Fork to edit
+                  </button>
+                </div>
               </div>
+              <Tokens tokens={reading.tokens} />
               <div className="design-preview body" dangerouslySetInnerHTML={preview} />
             </>
           ) : editing == null ? (
@@ -344,6 +389,11 @@ export function Design({ designs, presets, onCreate, onUpdate, onDelete }) {
                 <button type="button" className="btnp" disabled={busy} onClick={save}>
                   {busy ? "Saving…" : editing === "new" ? "Create" : "Save"}
                 </button>
+                {editing !== "new" && onUse ? (
+                  <button type="button" className="btn" disabled={busy} onClick={() => onUse(editing)}>
+                    Start a design with this
+                  </button>
+                ) : null}
                 {editing !== "new" ? (
                   <button
                     type="button"

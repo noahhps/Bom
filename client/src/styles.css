@@ -779,7 +779,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .navrail[data-open] .navrail-dest { gap: 10px; }
 
 .navrail-dest > button,
-.navrail-group > button {
+.navrail-group > .navrail-section {
   position: relative;
   display: flex;
   align-items: center;
@@ -826,7 +826,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* Open, it becomes a full-width row again -- there is a label to sit beside
    now, so hugging the text would leave the name floating off the pill. */
 .navrail[data-open] .navrail-dest > button,
-.navrail[data-open] .navrail-group > button {
+.navrail[data-open] .navrail-group > .navrail-section {
   min-height: 36px;
   width: 100%;
   align-self: stretch;
@@ -867,7 +867,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    sit beside, open there is a name to make room for. Animating the width as
    well would have the glyph breathe on every hover for no reason. */
 .navrail-dest button > :is(.icon-mask, svg),
-.navrail-group > button > :is(.icon-mask, svg) {
+.navrail-group > .navrail-section > :is(.icon-mask, svg) {
   width: 18px;
   height: 18px;
   opacity: 1;
@@ -875,7 +875,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   transition: margin-right var(--rail-motion);
 }
 .navrail[data-open] .navrail-dest button > :is(.icon-mask, svg),
-.navrail[data-open] .navrail-group > button > :is(.icon-mask, svg) {
+.navrail[data-open] .navrail-group > .navrail-section > :is(.icon-mask, svg) {
   margin-right: 10px;
 }
 
@@ -4802,3 +4802,564 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .popover-accents .accents { padding: 4px 2px 2px; }
 .popover-accents .popover-head { padding: 2px 2px 10px; }
 .popover-accents .popover-foot { margin-top: 10px; }
+
+/* -- the rail's two conversation groups ---------------------------------------
+ *
+ * Chat and Design each fold a list of conversations under them. The row goes
+ * somewhere; the chevron beside it shows or hides the list. The chevron sits
+ * over the right end of the row rather than beside it, so the row keeps the
+ * same width and alignment as every destination below it. */
+.navrail-group { position: relative; }
+.navrail[data-open] .navrail-group > .navrail-section { padding-right: 40px; }
+
+.navrail-fold {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  display: none;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-faint);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.navrail[data-open] .navrail-fold { display: grid; }
+.navrail-fold:hover { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+.navrail-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.navrail-fold svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.18s ease;
+}
+/* Pointing down when the list is out, right when it is folded away. */
+.navrail-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+
+/* Two lists share the column now, so each gives up some height: the chats
+   keep the larger share, the designs scroll sooner. */
+.navrail-sessions ul { max-height: 28vh; }
+.navrail-sessions ul[data-list="design"] { max-height: 20vh; }
+
+/* A secondary row inside a group -- "Design standards" -- quieter than the
+   "+ New" above it, since it goes somewhere rather than making something. */
+.navrail-new.navrail-link { color: var(--text-dim); margin-top: 0; }
+.navrail-new.navrail-link:hover { color: var(--ink); }
+.navrail-new.navrail-link[aria-current="page"] {
+  color: var(--ink);
+  background: rgba(20, 23, 29, 0.07);
+}
+
+.navrail-session {
+  display: flex;
+  align-items: center;
+}
+.navrail-session-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The design glyph at the left of a design conversation, in either list. The
+   same footprint as a bead plus its gap, so titles line up whichever a row
+   wears. */
+.navrail-session-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  color: var(--text-faint);
+}
+.navrail-session-icon .icon-mask { width: 14px; height: 14px; }
+.navrail-sessions li[data-active="true"] .navrail-session-icon { color: var(--accent); }
+
+/* -- the design conversation -------------------------------------------------
+ *
+ * The same screen as a chat, told apart by three things: the Design tag in the
+ * top bar, the look picker beside it, and the drafting grid left showing while
+ * the conversation is empty -- a sheet of graph paper is the right thing to
+ * find when you came to make something. Once there is a thread it goes, for
+ * the same reason it goes behind a chat: nothing should sit under reading. */
+.screen[data-view="design"]:not([data-empty]) { background-image: none; }
+
+.topbar-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 4px 9px 4px 7px;
+  margin-right: 10px;
+  border-radius: 999px;
+  background: var(--accent-field);
+  color: var(--accent);
+}
+.topbar-mode .icon-mask { width: 13px; height: 13px; }
+
+.design-head .design-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--accent-field);
+  color: var(--accent);
+  flex: none;
+}
+.design-head .design-mark .icon-mask { width: 22px; height: 22px; }
+
+.design-starters { gap: 18px; }
+.design-looks {
+  width: 100%;
+  max-width: min(var(--read-w), 860px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.design-looks-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px;
+  color: var(--text-faint);
+}
+.design-looks-manage { color: var(--accent); }
+.design-looks-manage:hover { color: var(--accent-hover); }
+.design-looks-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.design-look {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+.design-look:hover { border-color: var(--line-strong); color: var(--ink); }
+.design-look[data-on] {
+  border-color: var(--accent);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.design-look:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Three stripes -- ground, ink, accent -- so a standard is recognised by its
+   look before its name is read. */
+.swatch {
+  display: inline-flex;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+  align-self: center;
+}
+.swatch i { flex: 1; display: block; }
+.swatch i:first-child { flex: 1.6; }
+.swatch[data-custom],
+.swatch[data-ask] {
+  place-items: center;
+  justify-content: center;
+  align-items: center;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font: 600 11px/1 var(--font);
+}
+.swatch[data-custom] .icon-mask,
+.swatch[data-custom] svg { width: 12px; height: 12px; }
+.design-opt-top .swatch { width: 26px; height: 15px; align-self: center; }
+
+/* -- the standards page, additions -------------------------------------------- */
+.design-item-top { display: flex; align-items: center; gap: 9px; }
+.design-reading-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.design-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.design-token-colours { display: flex; flex-wrap: wrap; gap: 10px; }
+.design-token { display: inline-flex; flex-direction: column; align-items: center; gap: 5px; }
+.design-token i {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+.design-token .mi { font-size: 8.5px; color: var(--text-faint); }
+.design-token-type { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.design-token-type span:first-child { font-size: 22px; line-height: 1.1; color: var(--ink); }
+.design-token-type span:last-child { font-size: 14px; color: var(--text-dim); }
+
+/* -- the canvas: making one of each kind ----------------------------------------- */
+.canvas-new { position: relative; flex: none; }
+.canvas-new-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 172px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--menu);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--elevation-float);
+}
+.canvas-new-menu .canvas-kind-choice {
+  justify-content: flex-start;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+.canvas-new-menu .canvas-kind-choice:hover { background: rgba(20, 23, 29, 0.06); }
+.canvas-kind-choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 340px;
+}
+.canvas-kind-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.canvas-kind-choice:hover { border-color: var(--line-strong); }
+.canvas-kind-choice > :is(svg, .icon-mask) { width: 15px; height: 15px; flex: none; opacity: 0.8; }
+
+/* A sheet or a deck scrolls inside its own view rather than the body. */
+.canvas-body[data-kind="sheet"],
+.canvas-body[data-kind="slides"] { overflow: hidden; }
+
+/* Small square tools shared by the deck and the sheet. */
+.deck-tool {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font: 500 var(--t-sm)/1 var(--font);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.deck-tool:hover:not(:disabled) { background: rgba(20, 23, 29, 0.06); color: var(--ink); }
+.deck-tool:disabled { opacity: 0.35; cursor: default; }
+.deck-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* -- the deck ----------------------------------------------------------------- */
+.deck-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  outline: none;
+}
+.deck-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  backdrop-filter: blur(10px);
+}
+.deck-toolbar .spacer { flex: 1; }
+.deck-pager { display: inline-flex; align-items: center; gap: 2px; }
+.deck-pager .mi { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+.deck-layout,
+.deck-add-select,
+.sheet-format select {
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 5px 6px;
+  margin-left: 6px;
+}
+.deck-present-btn {
+  margin-left: 6px;
+  padding: 7px 13px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--ground);
+  font: 500 var(--t-micro) var(--font-mono);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+.deck-present-btn:hover { background: #2c313c; }
+
+.deck-stage {
+  flex: none;
+  padding: 18px 18px 10px;
+}
+.deck-stage .deck-frame {
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(20, 23, 29, 0.08), 0 14px 34px -18px rgba(20, 23, 29, 0.45);
+}
+
+.deck-notes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 18px 12px;
+  color: var(--text-faint);
+}
+.deck-notes textarea {
+  resize: vertical;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 var(--t-sm)/1.5 var(--font);
+}
+.deck-notes textarea:focus { outline: none; border-color: var(--accent); }
+
+.deck-strip {
+  flex: none;
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px 16px;
+  overflow-x: auto;
+  border-top: 1px solid var(--line-soft);
+  scroll-padding: 18px;
+}
+.deck-thumb {
+  flex: none;
+  width: 132px;
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--line);
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+.deck-thumb:hover { box-shadow: 0 0 0 1px var(--line-strong); }
+.deck-thumb[data-on] { box-shadow: 0 0 0 2px var(--accent); }
+.deck-thumb:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+/* Thumbnails are pictures, not the thing: nothing inside them takes a click. */
+.deck-thumb .deck-frame { pointer-events: none; }
+.deck-add { flex: none; display: flex; align-items: center; }
+.deck-add-select { margin-left: 0; height: 32px; cursor: pointer; }
+.deck-empty {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-faint);
+}
+
+/* Presenting: one slide, as large as the screen allows at 16:9, on black. */
+.deck-present {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: #000;
+  outline: none;
+  cursor: pointer;
+}
+.deck-present-stage { width: min(100vw, calc(100vh * 16 / 9)); }
+.deck-present-count {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* -- the sheet ------------------------------------------------------------------ */
+.sheet-view {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sheet-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+}
+.sheet-addr {
+  flex: none;
+  min-width: 46px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(20, 23, 29, 0.05);
+  text-align: center;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sheet-formula {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 400 13px/1.3 var(--font-mono);
+}
+.sheet-formula:focus { outline: none; border-color: var(--accent); }
+.sheet-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sheet-tools .spacer { flex: 1; }
+.sheet-format { display: inline-flex; align-items: center; gap: 2px; color: var(--text-faint); }
+.sheet-format select { margin-left: 4px; }
+.sheet-tool { font-size: var(--t-xs); }
+
+/* The grid wears the conversation's standard: its ground, its ink, its faces
+   and its accent, through the same custom properties a deck reads. The row
+   and column labels stay the app's -- they are the tool, not the document. */
+.sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--d-bg);
+  color: var(--d-text);
+  font-family: var(--d-body-font);
+  outline: none;
+}
+.sheet-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-grid th,
+.sheet-grid td {
+  height: 30px;
+  padding: 0 10px;
+  border-right: 1px solid color-mix(in srgb, var(--d-line) 70%, transparent);
+  border-bottom: 1px solid var(--d-line);
+  white-space: nowrap;
+  text-align: left;
+}
+.sheet-corner,
+.sheet-letter,
+.sheet-rownum {
+  position: sticky;
+  z-index: 1;
+  background: color-mix(in srgb, var(--d-text) 4%, var(--d-bg));
+  color: color-mix(in srgb, var(--d-text) 45%, var(--d-bg));
+  font: 500 10.5px/1 var(--font-mono);
+  text-align: center !important;
+  user-select: none;
+}
+.sheet-corner { top: 0; left: 0; z-index: 3; width: 38px; }
+.sheet-letter { top: 0; height: 24px !important; min-width: 96px; cursor: pointer; }
+.sheet-rownum { left: 0; width: 38px; min-width: 38px; cursor: pointer; }
+.sheet-letter[data-sel],
+.sheet-rownum[data-sel] {
+  color: var(--d-accent);
+  background: color-mix(in srgb, var(--d-accent) 10%, var(--d-bg));
+}
+
+.sheet-cell { cursor: cell; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.sheet-cell[data-num] { text-align: right !important; }
+.sheet-cell[data-error] { color: #c2412d; font-family: var(--font-mono); font-size: 11.5px; }
+.sheet-cell[data-sel] {
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+  background: color-mix(in srgb, var(--d-accent) 6%, var(--d-bg));
+}
+/* A formula's result is set a touch apart, so a reader scanning the grid can
+   tell what they typed from what the sheet worked out. */
+.sheet-cell[data-formula] { color: color-mix(in srgb, var(--d-text) 82%, var(--d-accent)); }
+
+/* Row 1 is the header: the standard's heading face, a tint of its accent, and
+   a rule in the accent under it. */
+.sheet-head .sheet-cell {
+  font-family: var(--d-head-font);
+  font-weight: 600;
+  text-transform: var(--d-head-case);
+  letter-spacing: 0.01em;
+  background: color-mix(in srgb, var(--d-accent) 9%, var(--d-bg));
+  border-bottom: 2px solid var(--d-accent);
+}
+tbody tr:nth-child(odd):not(.sheet-head) .sheet-cell:not([data-sel]) {
+  background: color-mix(in srgb, var(--d-surface) 55%, var(--d-bg));
+}
+/* A totals row, the way a ledger sets one off: bold, with a rule above. */
+tr[data-total] .sheet-cell {
+  font-weight: 700;
+  border-top: 2px solid var(--d-text);
+}
+
+.sheet-input {
+  width: 100%;
+  min-width: 80px;
+  height: 26px;
+  padding: 0 2px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+}
+
+@media (max-width: 900px) {
+  .deck-thumb { width: 108px; }
+  .deck-toolbar { flex-wrap: wrap; }
+  .sheet-tools { flex-wrap: wrap; }
+}
+
+/* The top bar with the canvas open has half the width and the same controls.
+   The title is what must survive, so it keeps a floor, and the rest give up
+   their labels: the model badge goes (the rail's foot still says it), the
+   pickers lose their captions, and the Design tag keeps only its glyph. */
+.topbar .title { min-width: 7ch; flex: 0 1 auto; }
+.app[data-canvas] .topbar .state { display: none; }
+.app[data-canvas] .topbar-project > .mi { display: none; }
+.app[data-canvas] .topbar-project select { max-width: 110px; }
+.app[data-canvas] .topbar-mode { padding: 5px 7px; margin-right: 0; }
+.app[data-canvas] .topbar-mode-label { display: none; }

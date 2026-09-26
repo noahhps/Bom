@@ -110,6 +110,7 @@ export function Composer({
   agents = [],
   agentId = null,
   onAgent,
+  placeholder = "Ask me. Task me.",
 }) {
   const [value, setValue] = useState("");
   // Whatever the current control's value is. Reset when the control changes
@@ -553,7 +554,7 @@ export function Composer({
         <textarea
           ref={input}
           rows="1"
-          placeholder="Ask me. Task me."
+          placeholder={placeholder}
           autoComplete="off"
           autoCapitalize="sentences"
           value={value}

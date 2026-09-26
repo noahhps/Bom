@@ -85,6 +85,10 @@ const SOURCES = {
   add_to_album: { source: "Photos", icon: "apps" },
   write_canvas: { source: "Canvas", icon: "document" },
   read_canvas: { source: "Canvas", icon: "document" },
+  write_slides: { source: "Slides", icon: "slides" },
+  write_sheet: { source: "Sheet", icon: "sheet" },
+  edit_sheet: { source: "Sheet", icon: "sheet" },
+  ask_for_design: { source: "Design", icon: "design" },
   run_python: { source: "Sandbox", icon: "code" },
   run_shell: { source: "Sandbox", icon: "code" },
 };
@@ -105,6 +109,10 @@ const TITLE_KEYS = {
   list_events: [],
   write_canvas: ["title"],
   read_canvas: ["title"],
+  write_slides: ["title"],
+  write_sheet: ["title"],
+  edit_sheet: ["title"],
+  ask_for_design: ["name"],
   run_python: ["code"],
   run_shell: ["command"],
 };
@@ -145,6 +153,17 @@ export function describeSkill(skill) {
     title = asText(first);
   }
 
+  // What a deck or a sheet call made, counted rather than quoted: the
+  // arguments are the whole document, and the card is a glance at it.
+  const rows = rowsFrom(args, ROW_KEYS[name] || []);
+  if (name === "write_slides" && Array.isArray(args.slides)) {
+    rows.push({ label: "Slides", value: String(args.slides.length) });
+  }
+  if (name === "write_sheet" && Array.isArray(args.columns)) {
+    const count = Array.isArray(args.rows) ? args.rows.length : 0;
+    rows.push({ label: "Size", value: `${args.columns.length} × ${count}` });
+  }
+
   return {
     source,
     // Null icon means "draw the service mark instead" -- see SkillTrace.
@@ -152,7 +171,7 @@ export function describeSkill(skill) {
     server: known ? null : skill?.server || null,
     name,
     title: clip(title, 120),
-    rows: rowsFrom(args, ROW_KEYS[name] || []),
+    rows,
     preview: clip(skill?.result),
   };
 }
@@ -180,6 +199,10 @@ const DOING = {
   read_file: "Reading",
   read_canvas: "Reading",
   write_canvas: "Drafting",
+  write_slides: "Building slides",
+  write_sheet: "Building sheet",
+  edit_sheet: "Editing sheet",
+  ask_for_design: "Choosing a look",
   add_event: "Scheduling",
   update_event: "Scheduling",
   list_events: "Checking dates",

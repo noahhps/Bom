@@ -44,7 +44,10 @@ from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
+from .design_mode import normalize as normalize_mode
+from .images import ImageError, prepare as prepare_image, sync_from_chat
 from .design_presets import PRESETS as DESIGN_PRESETS
+from .skills.design import NO_DESIGN, resolve as resolve_design
 
 # Where the app-wide accent lives in `app_settings`. Namespaced like the
 # memory switches beside it, because that table is shared.
@@ -83,6 +86,10 @@ class ClientContext(BaseModel):
 
 class SessionIn(BaseModel):
     client: ClientContext | None = None
+    # "chat" or "design". Anything else is an ordinary chat -- see design_mode.
+    mode: str | None = Field(default=None, max_length=20)
+    # A design standard picked before the first message, or "none".
+    design: str | None = Field(default=None, max_length=120)
 
 
 class ChatRequest(BaseModel):
@@ -93,6 +100,11 @@ class ChatRequest(BaseModel):
     # Optional persona for a brand-new conversation. It is applied before the
     # first turn runs, so the selected agent shapes the opening response too.
     agent_id: str | None = None
+    # For a brand-new conversation only, like `agent_id`: what it is started
+    # as ("chat" or "design"), and a design standard picked on the empty
+    # screen before anything was sent. Ignored once the session exists.
+    mode: str | None = Field(default=None, max_length=20)
+    design: str | None = Field(default=None, max_length=120)
     attachments: list[AttachmentIn] = Field(default_factory=list)
     # Sent with every message, recorded only on the first one. A conversation
     # that starts from the phone should say so even when the client opened it
@@ -293,6 +305,32 @@ class DesignChoice(BaseModel):
     choice: str = Field(min_length=1, max_length=120)
 
 
+class ImageIn(BaseModel):
+    """A picture uploaded to a conversation's library, from the canvas panel."""
+
+    name: str = Field(min_length=1, max_length=300)
+    data: str  # base64, without the data: URL prefix
+    alt: str | None = Field(default=None, max_length=300)
+
+
+class ImageGenerate(BaseModel):
+    """A picture asked for from the panel's picker."""
+
+    prompt: str = Field(min_length=1, max_length=1000)
+    shape: str = Field(default="landscape", pattern="^(landscape|portrait|square)$")
+    match_style: bool = True
+
+
+class ImagePatch(BaseModel):
+    alt: str | None = Field(default=None, max_length=300)
+
+
+class SessionDesign(BaseModel):
+    # A preset id, a stored design's id, "none" for no standard, or null to
+    # forget the choice so the next deck asks again.
+    design: str | None = Field(default=None, max_length=120)
+
+
 class SessionAgent(BaseModel):
     # None runs the conversation as the default assistant. Explicitly nullable,
     # like SessionProject, so "unassign" is something the client can say.
@@ -456,14 +494,33 @@ def build_router(
     def list_sessions() -> dict:
         return {"sessions": [_read_accent(s) for s in store.list_sessions()]}
 
+    def _valid_design(design: str | None) -> str | None:
+        """A design id worth storing, or a 404 for one that names nothing."""
+        if not design:
+            return None
+        if design != NO_DESIGN and resolve_design(store, design) is None:
+            raise HTTPException(404, "no such design standard")
+        return design
+
     @router.post("/sessions")
     def create_session(body: SessionIn | None = None) -> dict:
         # Body-less POSTs still work: an older client, or curl, is a caller
         # that simply has nothing to report about where it is.
         client = body.client if body else None
         return store.create_session(
-            situation=Situation.from_client(client.model_dump() if client else None)
+            situation=Situation.from_client(client.model_dump() if client else None),
+            mode=normalize_mode(body.mode if body else None),
+            design=_valid_design(body.design if body else None),
         )
+
+    @router.put("/sessions/{session_id}/design")
+    def set_session_design(session_id: str, body: SessionDesign) -> dict:
+        """Pick, change or forget the standard a conversation is styled to."""
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        design = _valid_design(body.design)
+        store.set_session_design(session_id, design)
+        return {"ok": True, "design": design}
 
     @router.get("/sessions/{session_id}")
     def get_session(session_id: str) -> dict:
@@ -590,6 +647,104 @@ def build_router(
     def delete_canvas(canvas_id: str) -> dict:
         if not store.delete_canvas(canvas_id):
             raise HTTPException(404, "no such canvas")
+        return {"ok": True}
+
+    # -- images -----------------------------------------------------------
+    #
+    # A conversation's picture library: what a deck or a page may show. Every
+    # image is cleaned on the way in (images.py), and the chat's own image
+    # attachments are brought in on first listing, so the panel's picker and
+    # the model's list_images see the same set.
+
+    @router.get("/sessions/{session_id}/images")
+    def list_images(session_id: str) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        sync_from_chat(store, session_id)
+        return {"images": [i.to_dict() for i in store.session_images(session_id)]}
+
+    @router.post("/sessions/{session_id}/images")
+    def upload_image(session_id: str, body: ImageIn) -> dict:
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        try:
+            raw = base64.b64decode(body.data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(400, "that image did not arrive intact") from exc
+        try:
+            ready = prepare_image(body.name.strip(), raw)
+        except ImageError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        image = store.add_image(
+            session_id,
+            name=ready.name,
+            mime=ready.mime,
+            width=ready.width,
+            height=ready.height,
+            data=ready.data,
+            alt=(body.alt or "").strip() or None,
+        )
+        return image.to_dict()
+
+    def _generator():
+        skill = registry.get("generate_image")
+        return getattr(skill, "generator", None)
+
+    # Declared before /images/{image_id} so "generator" is not read as an id.
+    @router.get("/images/generator")
+    def image_generator() -> dict:
+        """Whether pictures can be generated here, and whether that leaves the
+        machine -- the picker says so before it sends anything."""
+        generator = _generator()
+        return generator.describe() if generator else {"available": False, "remote": False}
+
+    @router.post("/sessions/{session_id}/images/generate")
+    async def generate_image(session_id: str, body: ImageGenerate) -> dict:
+        """Asked for by the person, from the picker: their click is the consent,
+        so no approval prompt -- the picker confirms first for a remote one."""
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        generator = _generator()
+        if generator is None or not generator.configured:
+            raise HTTPException(400, "no image generator is set up (IMAGE_GEN_URL)")
+        from .imagegen import GenerationError, create
+
+        try:
+            image = await create(
+                store, generator, session_id, body.prompt,
+                shape=body.shape, match_style=body.match_style,
+            )
+        except GenerationError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return image.to_dict()
+
+    @router.get("/images/{image_id}")
+    def get_image(image_id: str) -> Response:
+        image = store.get_image(image_id, with_data=True)
+        if not image:
+            raise HTTPException(404, "no such image")
+        return Response(
+            content=image.data,
+            media_type=image.mime,
+            headers={
+                # The bytes of an id never change; see get_attachment.
+                "Cache-Control": "private, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline",
+            },
+        )
+
+    @router.patch("/images/{image_id}")
+    def update_image(image_id: str, body: ImagePatch) -> dict:
+        updated = store.set_image_alt(image_id, (body.alt or "").strip() or None)
+        if updated is None:
+            raise HTTPException(404, "no such image")
+        return updated.to_dict()
+
+    @router.delete("/images/{image_id}")
+    def delete_image(image_id: str) -> dict:
+        if not store.delete_image(image_id):
+            raise HTTPException(404, "no such image")
         return {"ok": True}
 
     # -- agents -----------------------------------------------------------
@@ -800,7 +955,11 @@ def build_router(
         else:
             if body.agent_id and not store.get_agent(body.agent_id):
                 raise HTTPException(404, "no such agent")
-            session_id = store.create_session(situation=situation)["id"]
+            session_id = store.create_session(
+                situation=situation,
+                mode=normalize_mode(body.mode),
+                design=_valid_design(body.design),
+            )["id"]
             if body.agent_id:
                 store.set_session_agent(session_id, body.agent_id)
 

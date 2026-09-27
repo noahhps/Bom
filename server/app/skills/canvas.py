@@ -21,9 +21,13 @@ the exception, and only because revising something means seeing it first.
 
 from __future__ import annotations
 
+import json
 import re
 
 from ..store import Store
+from . import sheet as sheets
+from .args import plain_text
+from . import slides as decks
 from .skill import Skill
 
 # A full HTML document, or a fragment that opens with a structural tag. Used to
@@ -136,9 +140,14 @@ class WriteCanvas(Skill):
                 "page you are building together. Use this instead of a long "
                 "fenced block in the chat when the user will keep the result or "
                 "edit it. For a document or prose, use kind 'markdown'; for a "
-                "page, an interactive layout, or a slideshow, write a complete "
-                "HTML document with kind 'html' -- its scripts and styles run in "
-                "the preview, so self-contained pages work best. "
+                "page, a poster, a dashboard or any interactive layout, write a "
+                "complete HTML document with kind 'html' -- its scripts and "
+                "styles run in the preview, so self-contained pages work best. "
+                "For a presentation use write_slides instead, and for a table of "
+                "numbers use write_sheet -- both draw far better than HTML. "
+                "Before a page whose look matters, call ask_for_design if no "
+                "standard has been chosen in this conversation, and declare the "
+                "standard's colours and fonts as CSS custom properties. "
                 "IMAGES: draw them, do not link them. Inline SVG, a CSS "
                 "gradient, or a data: URI renders every time; a remote URL "
                 "usually does not, because the placeholder services are dead or "
@@ -149,8 +158,10 @@ class WriteCanvas(Skill):
                 "source.unsplash.com, images.unsplash.com, picsum.photos or "
                 "similar -- an inline SVG with a shape and a caption is a better "
                 "placeholder than a broken one, and says what the picture is "
-                "for. Link a remote image only when the user gave you that exact "
-                "URL. Pass the raw "
+                "for. The user's own pictures are the exception: call "
+                "list_images and use <img src=\"bom-image:ID\"> (or "
+                "![alt](bom-image:ID) in markdown). Link a remote image only "
+                "when the user gave you that exact URL. Pass the raw "
                 "content itself, not wrapped in a code fence. Writing to a title "
                 "that already exists replaces that canvas whole, so read_canvas "
                 "first if you mean to revise rather than start over. Keep your "
@@ -186,17 +197,50 @@ class WriteCanvas(Skill):
         )
         self.store = store
 
+    def wants_design(self, arguments: dict) -> bool:
+        """A page has a look; a code snippet or a plain draft does not.
+
+        Only an explicit html kind, or content that is plainly a page, counts.
+        Asking which design standard a Python script should follow would be a
+        question with no sensible answer.
+        """
+        kind = str(arguments.get("kind") or "").strip().lower()
+        if kind == "html":
+            return True
+        if kind in ("", "markdown"):
+            return _looks_like_html(str(arguments.get("content") or ""))
+        return False
+
     async def use(
         self,
         session: str,
-        title: str,
-        content: str,
+        title=None,
+        content="",
         kind: str | None = None,
         language: str | None = None,
+        **extra,
     ) -> str:
-        name = (title or "").strip()
+        # Unwrapped if it came as an object; refused, with a sentence rather
+        # than a TypeError, if it did not come at all.
+        name = plain_text(title or extra.get("name"))[:200]
         if not name:
             return "Give the canvas a title so it can be found and updated later."
+        # The body under another name, or as something other than text: an
+        # object or a list would otherwise be stored as its Python repr.
+        if not content:
+            content = next((extra[k] for k in ("text", "body", "html", "markdown", "code") if k in extra), "")
+        if not isinstance(content, str):
+            content = plain_text(content)
+        kind = plain_text(kind) or None
+        language = plain_text(language) or None
+        # The two structured kinds have their own tools, which take structure
+        # rather than text. Content written here for them would be a document
+        # the panel cannot draw.
+        asked = (kind or "").strip().lower()
+        if asked in ("slides", "deck", "presentation"):
+            return "Use write_slides for a presentation -- it takes the slides as a list."
+        if asked in ("sheet", "spreadsheet", "table", "csv"):
+            return "Use write_sheet for a spreadsheet -- it takes the columns and rows."
         # content is allowed to be empty: clearing a canvas back to a blank
         # sheet is a real edit, and refusing it would make the model paste a
         # single space to get around the check.
@@ -226,6 +270,18 @@ class WriteCanvas(Skill):
 
         lines = body.count("\n") + 1 if body else 0
         note = ""
+        # The user's pictures, by id. One that is not in the library is a
+        # picture that will not appear, so the model hears about it now.
+        from .images import REFERENCE, known_ids
+
+        named = set(REFERENCE.findall(body))
+        unknown = sorted(named - known_ids(self.store, session)) if named else []
+        if unknown:
+            note += (
+                f" WARNING: {', '.join(unknown)} "
+                f"{'is' if len(unknown) == 1 else 'are'} not in this conversation's "
+                "images, so nothing will show there. Call list_images for the real ids."
+            )
         # Said in the result as well as the description, because the
         # description is read once before the model has written anything and
         # this arrives holding the actual page. It is a report, not a refusal:
@@ -243,7 +299,7 @@ class WriteCanvas(Skill):
             named = ", ".join(hosts[:_NAMED_HOSTS])
             if len(hosts) > _NAMED_HOSTS:
                 named += f" and {len(hosts) - _NAMED_HOSTS} more"
-            note = (
+            note += (
                 f" WARNING: {len(remote)} "
                 f"{'image' if len(remote) == 1 else 'images'} in this canvas "
                 f"{'loads' if len(remote) == 1 else 'load'} from the internet "
@@ -286,7 +342,7 @@ class ReadCanvas(Skill):
         )
         self.store = store
 
-    async def use(self, session: str, title: str | None = None) -> str:
+    async def use(self, session: str, title=None, **extra) -> str:
         canvases = self.store.session_canvases(session)
         if not canvases:
             return (
@@ -294,7 +350,7 @@ class ReadCanvas(Skill):
                 "write_canvas."
             )
 
-        name = (title or "").strip()
+        name = plain_text(title)
         if not name:
             listed = "\n".join(
                 f"- {c.title} ({c.kind}"
@@ -313,6 +369,18 @@ class ReadCanvas(Skill):
         header = f"{canvas.title} ({canvas.kind}" + (
             f", {canvas.language}" if canvas.language else ""
         ) + "):"
+        # The structured kinds are stored as JSON, which is a poor way to read a
+        # deck and a worse way to read a sheet. Both come back in the shape the
+        # model would write them: an outline, and a grid with its addresses.
+        if canvas.kind == sheets.KIND:
+            loaded = sheets.load(canvas.content)
+            if loaded is not None:
+                body = sheets.as_text(loaded)
+        elif canvas.kind == decks.KIND:
+            try:
+                body = decks.outline(json.loads(canvas.content or "{}"))
+            except (ValueError, AttributeError):
+                pass
         if len(body) > MAX_READ_CHARS:
             body = (
                 body[:MAX_READ_CHARS]

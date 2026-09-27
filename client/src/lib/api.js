@@ -226,10 +226,18 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
 
     listSessions: () => json("/sessions"),
-    createSession: () =>
+    // `mode` is "chat" or "design"; `design` a standard picked up front.
+    createSession: ({ mode = null, design = null } = {}) =>
       json("/sessions", {
         method: "POST",
-        body: JSON.stringify({ client: clientContext() }),
+        body: JSON.stringify({ client: clientContext(), mode, design }),
+      }),
+    // The design standard a conversation is styled to: a preset id, one of
+    // the reader's own, "none", or null to forget it so the next deck asks.
+    setSessionDesign: (sessionId, design) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/design", {
+        method: "PUT",
+        body: JSON.stringify({ design }),
       }),
     listProjects: () => json("/projects"),
     createProject: (name) =>
@@ -313,6 +321,29 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
     deleteCanvas: (id) =>
       request("/canvases/" + encodeURIComponent(id), { method: "DELETE" }),
+    // -- images ----------------------------------------------------------
+    // A conversation's own pictures, cleaned by the server on the way in and
+    // referenced by id from decks and pages. Blobs rather than URLs for the
+    // same reason as attachments: the route is behind the bearer token.
+    listImages: (sessionId) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images"),
+    uploadImage: (sessionId, body) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    // Whether pictures can be generated here, and whether that leaves the
+    // machine -- asked before the picker offers to.
+    imageGenerator: () => json("/images/generator"),
+    generateImage: (sessionId, body) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/images/generate", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    imageBlob: async (id) => (await request("/images/" + encodeURIComponent(id))).blob(),
+    updateImage: (id, patch) =>
+      json("/images/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(patch) }),
+    deleteImage: (id) => request("/images/" + encodeURIComponent(id), { method: "DELETE" }),
     deleteSessions: (ids) =>
       json("/sessions/delete", {
         method: "POST",
@@ -336,6 +367,10 @@ export function createApi(token, onUnauthorized = () => {}) {
       provider = null,
       agentId = null,
       signal = undefined,
+      // For a brand-new conversation only: "chat" or "design", and a design
+      // standard chosen on the empty screen. The server ignores both once the
+      // session exists.
+      { mode = null, design = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -349,6 +384,8 @@ export function createApi(token, onUnauthorized = () => {}) {
           think: thinkingLevel,
           provider,
           agent_id: agentId,
+          mode,
+          design,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

@@ -29,14 +29,15 @@ import { swatchOf } from "../lib/theme";
  */
 
 const LIST_KEY = "unified-llm-rail-list-open";
+const DESIGN_LIST_KEY = "unified-llm-rail-design-list-open";
 
+// Chat and Design are not in this list: each is a group with a conversation
+// list folded under it, drawn by `RailGroup` above the plain destinations.
 const DESTINATIONS = [
-  { id: "chat", label: "Chat", icon: "chat_bubble" },
   { id: "projects", label: "Projects", icon: "folder" },
   { id: "memory", label: "Memory", icon: "memory" },
   { id: "skills", label: "Skills", icon: "skills" },
   { id: "agents", label: "Agents", icon: "agents" },
-  { id: "design", label: "Design", icon: "design" },
   // Named for the page it opens. It was "tools", but `view === "tools"` has
   // never had a branch of its own -- it fell through to the Settings page,
   // which is also where the mark at the head of the rail goes. The label was
@@ -93,6 +94,85 @@ function accentOf(session, projects, agents) {
   );
 }
 
+/* A fold's open/shut state, remembered. A layout preference, so it persists
+   like the pin does -- someone who keeps a list shut wants it shut tomorrow. */
+function useFold(key) {
+  const [open, setOpen] = useState(() => localStorage.getItem(key) !== "0");
+  const toggle = useCallback(() => {
+    setOpen((was) => {
+      localStorage.setItem(key, was ? "0" : "1");
+      return !was;
+    });
+  }, [key]);
+  return [open, toggle];
+}
+
+/* A destination with a list of conversations folded under it -- Chat, and
+ * Design. Two controls in the head, because they are two different intents:
+ * the row goes somewhere, the chevron beside it shows or hides the list. One
+ * button doing both meant you could not fold the list away without also
+ * being taken to the page it belongs to.
+ *
+ * The chevron only appears once the rail is open; shut, the rail is a column
+ * of icons and the lists are not on screen at all. */
+function RailGroup({
+  id,
+  label,
+  icon,
+  current,
+  open,
+  onToggle,
+  onGo,
+  hint,
+  newLabel,
+  onNew,
+  extra,
+  children,
+}) {
+  const listId = `navrail-${id}-list`;
+  return (
+    <div className="navrail-group" data-group={id}>
+      <button
+        type="button"
+        className="navrail-section"
+        aria-current={current ? "page" : undefined}
+        title={hint}
+        onClick={onGo}
+      >
+        <Icon name={icon} />
+        <Label label={label} />
+      </button>
+      <button
+        type="button"
+        className="navrail-fold"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-label={open ? `Hide ${label.toLowerCase()} list` : `Show ${label.toLowerCase()} list`}
+        title={open ? "Hide list" : "Show list"}
+        onClick={onToggle}
+      >
+        <Icon name="chevron" />
+      </button>
+
+      {/* Collapsed to nothing until the rail opens. Deliberately not `inert`
+          while shut: the rail opens on focus, so making its contents
+          unfocusable would mean a keyboard user could never open it -- tabbing
+          in is the only way they have. */}
+      <div className="navrail-sessions">
+        <div className="navrail-sessions-inner">
+          <button type="button" className="navrail-new" onClick={onNew}>
+            {newLabel}
+          </button>
+          {extra}
+          <div id={listId} hidden={!open}>
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* One conversation, wherever it is filed. */
 function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDelete, empty }) {
   const { confirm } = useDialog();
@@ -105,9 +185,11 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
   }
   return sessions.map((session) => {
     const accent = accentOf(session, projects, agents);
+    const design = session.mode === "design";
     return (
     <li
       key={session.id}
+      data-mode={design ? "design" : undefined}
       data-active={String(session.id === activeId)}
       draggable
       onDragStart={(event) => {
@@ -118,12 +200,26 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
       }}
     >
       <button className="navrail-session" onClick={() => onOpenSession(session.id)}>
-        {/* The bead shows the assigned agent's color first, then the project's
-            color for chats that have no agent. */}
-        {accent ? (
+        {/* A design conversation wears the design glyph at its left, in both
+            lists, so it can be told from a chat at a glance -- tinted with
+            the conversation's accent where it has one, which is the colour
+            the bead would otherwise have carried.
+
+            Otherwise the bead shows the assigned agent's color first, then
+            the project's color for chats that have no agent. */}
+        {design ? (
+          <span
+            className="navrail-session-icon"
+            aria-label="Design"
+            role="img"
+            style={accent ? { color: accent } : undefined}
+          >
+            <Icon name="design" />
+          </span>
+        ) : accent ? (
           <span className="accent-bead" aria-hidden="true" style={{ background: accent }} />
         ) : null}
-        {session.title || "Untitled"}
+        <span className="navrail-session-title">{session.title || "Untitled"}</span>
       </button>
       <button
         className="navrail-session-delete"
@@ -173,14 +269,13 @@ export function NavRail({
   activeId,
   onOpenSession,
   onNewSession,
+  onNewDesign,
   onDelete,
 }) {
-  // Whether the conversation list is unfolded under Chat. A layout preference,
-  // so it persists like the pin does -- someone who keeps it shut wants it shut
-  // tomorrow as well.
-  const [listOpen, setListOpen] = useState(
-    () => localStorage.getItem(LIST_KEY) !== "0",
-  );
+  // Whether each conversation list is unfolded under its heading.
+  const [listOpen, toggleList] = useFold(LIST_KEY);
+  const [designOpen, toggleDesign] = useFold(DESIGN_LIST_KEY);
+  const designSessions = (sessions || []).filter((s) => s.mode === "design");
   // Whether a dragged conversation is currently over the list. One at a time,
   // so one id rather than a set.
   const [dropOver, setDropOver] = useState(null);
@@ -293,99 +388,101 @@ export function NavRail({
         </div>
 
         <div className="navrail-dest">
-          <div className="navrail-group">
-            {/* Chat is both the destination and the fold above its own list,
-                so one press does both: go there, and show what is there.
-                `aria-expanded` describes the list it controls; `aria-current`
-                describes where you are. */}
-            <button
-              type="button"
-              className="navrail-section"
-              aria-current={view === "chat" ? "page" : undefined}
-              aria-expanded={listOpen}
-              aria-controls="navrail-session-list"
-              onClick={() => {
-                const next = !listOpen;
-                setListOpen(next);
-                localStorage.setItem(LIST_KEY, next ? "1" : "0");
-                onView("chat");
+          {/* Every conversation, design ones included -- a design chat is
+              still a conversation, and this is the list of them. */}
+          <RailGroup
+            id="chat"
+            label="Chat"
+            icon="chat_bubble"
+            current={view === "chat"}
+            open={listOpen}
+            onToggle={toggleList}
+            onGo={() => onView("chat")}
+            newLabel="+ New conversation"
+            onNew={onNewSession}
+          >
+            {/* Every conversation, in one flat list.
+             *
+             * The projects used to be here too, each an unfoldable section
+             * with its own chats nested inside and its own context menu --
+             * which made this a second, worse copy of the Projects page inside
+             * a 252px column. Projects live in one place now; this is the list
+             * of conversations, and a chat's project shows as its colour rather
+             * than as a folder it has to be dug out of. */}
+            <ul
+              id="navrail-session-list"
+              data-over={dropOver === "unfiled" ? "" : undefined}
+              onDragOver={(event) => {
+                if (event.dataTransfer.types.includes("text/session")) {
+                  event.preventDefault();
+                  setDropOver("unfiled");
+                }
+              }}
+              onDragLeave={() =>
+                setDropOver((was) => (was === "unfiled" ? null : was))
+              }
+              onDrop={(event) => {
+                event.preventDefault();
+                setDropOver(null);
+                const id = event.dataTransfer.getData("text/session");
+                // Dropping on the list takes a chat out of its project.
+                // Filing it into one is done on the Projects page, which
+                // is where the projects are.
+                if (id) onFileSession(id, null);
               }}
             >
-              <Icon name={DESTINATIONS[0].icon} />
-              <Label label={DESTINATIONS[0].label} />
-            </button>
+              <SessionRows
+                sessions={sessions}
+                projects={projects}
+                agents={agents}
+                activeId={activeId}
+                onOpenSession={onOpenSession}
+                onDelete={onDelete}
+                empty="Nothing yet"
+              />
+            </ul>
+          </RailGroup>
 
-            {/* Collapsed to nothing until the rail opens. Deliberately not
-                `inert` while shut: the rail opens on focus, so making its
-                contents unfocusable would mean a keyboard user could never
-                open it -- tabbing in is the only way they have. */}
-            <div className="navrail-sessions">
-              <div className="navrail-sessions-inner">
-                {/* The section header doubles as the fold. `aria-controls`
-                    rather than nesting the list inside the button: a button
-                    wrapping a list of buttons is not a thing a screen reader
-                    can describe. */}
+          {/* Design: pressing it starts a new design conversation, and the
+              list under it is only the design ones. The standards library --
+              the design.md files a result is held to -- is one row here, since
+              it is what those conversations draw from. */}
+          <RailGroup
+            id="design"
+            label="Design"
+            icon="design"
+            current={view === "design" || view === "standards"}
+            open={designOpen}
+            onToggle={toggleDesign}
+            onGo={onNewDesign}
+            hint="Start a new design"
+            newLabel="+ New design"
+            onNew={onNewDesign}
+            extra={
+              <button
+                type="button"
+                className="navrail-new navrail-link"
+                aria-current={view === "standards" ? "page" : undefined}
+                onClick={() => onView("standards")}
+              >
+                Design standards
+              </button>
+            }
+          >
+            <ul data-list="design">
+              <SessionRows
+                sessions={designSessions}
+                projects={projects}
+                agents={agents}
+                activeId={activeId}
+                onOpenSession={onOpenSession}
+                onDelete={onDelete}
+                empty="No designs yet"
+              />
+            </ul>
+          </RailGroup>
 
-                <button type="button" className="navrail-new" onClick={onNewSession}>
-                  + New conversation
-                </button>
-
-                {/* Projects first, each one a fold of its own, then the
-                    conversations that are in no project. A chat filed into a
-                    project appears only there -- listing it twice would make
-                    the counts lie. */}
-                <div hidden={!listOpen}>
-                  {/* Every conversation, in one flat list.
-                   *
-                   * The projects used to be here too, each an unfoldable
-                   * section with its own chats nested inside and its own
-                   * context menu -- which made this a second, worse copy of
-                   * the Projects page inside a 252px column. Projects live in
-                   * one place now; this is the list of conversations, and a
-                   * chat's project shows as its colour rather than as a
-                   * folder it has to be dug out of.
-                   *
-                   * Every session, not just the unfiled ones. With the folds
-                   * gone a filed chat would otherwise have nowhere to appear
-                   * in the rail at all. */}
-                  <ul
-                    id="navrail-session-list"
-                    data-over={dropOver === "unfiled" ? "" : undefined}
-                    onDragOver={(event) => {
-                      if (event.dataTransfer.types.includes("text/session")) {
-                        event.preventDefault();
-                        setDropOver("unfiled");
-                      }
-                    }}
-                    onDragLeave={() =>
-                      setDropOver((was) => (was === "unfiled" ? null : was))
-                    }
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      setDropOver(null);
-                      const id = event.dataTransfer.getData("text/session");
-                      // Dropping on the list takes a chat out of its project.
-                      // Filing it into one is done on the Projects page, which
-                      // is where the projects are.
-                      if (id) onFileSession(id, null);
-                    }}
-                  >
-                    <SessionRows
-                      sessions={sessions}
-                      projects={projects}
-                      agents={agents}
-                      activeId={activeId}
-                      onOpenSession={onOpenSession}
-                      onDelete={onDelete}
-                      empty="Nothing yet"
-                    />
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {DESTINATIONS.slice(1).map((destination) => (
+          {DESTINATIONS.map((destination) => (
             <button
               key={destination.id}
               type="button"

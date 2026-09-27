@@ -21,6 +21,14 @@ export function useCanvas(api, sessionId) {
   // on the conversation they moved to.
   const sessionRef = useRef(sessionId);
   sessionRef.current = sessionId;
+  // A canvas written in the very first turn of a new conversation can arrive
+  // before this hook has seen that conversation's id -- the `session` frame
+  // and the `canvas` frame are a few milliseconds apart, and a render need not
+  // fall between them. Kept here until the id lands, rather than dropped.
+  const early = useRef(null);
+  // Bumped by every model write, so a list fetched before one cannot land on
+  // top of it and put back the version without the new canvas.
+  const writes = useRef(0);
 
   // A conversation's canvases load when it opens. A conversation with none is
   // the common case, so the panel starts shut and stays shut until there is
@@ -32,11 +40,19 @@ export function useCanvas(api, sessionId) {
       setCanvases([]);
       return undefined;
     }
+    const held = early.current?.sessionId === sessionId ? early.current.list : null;
+    early.current = null;
+    if (held?.length) {
+      setCanvases(held);
+      setActiveId(held[0].id);
+      setOpen(true);
+    }
     let ignore = false;
+    const seen = writes.current;
     api
       .listCanvases(sessionId)
       .then((data) => {
-        if (!ignore && sessionRef.current === sessionId) {
+        if (!ignore && sessionRef.current === sessionId && writes.current === seen) {
           setCanvases(data.canvases || []);
         }
       })
@@ -52,7 +68,13 @@ export function useCanvas(api, sessionId) {
   // (the server orders most-recent-first, so that is the head), and open the
   // panel so the change is not something the reader has to go looking for.
   const applyEvent = useCallback((list, forSessionId) => {
-    if (forSessionId && forSessionId !== sessionRef.current) return;
+    if (forSessionId && forSessionId !== sessionRef.current) {
+      // Only a conversation still being created is held for later. One the
+      // reader has navigated away from is theirs to reopen.
+      if (!sessionRef.current) early.current = { sessionId: forSessionId, list: list || [] };
+      return;
+    }
+    writes.current += 1;
     const next = list || [];
     setCanvases(next);
     if (next.length) {
@@ -81,10 +103,13 @@ export function useCanvas(api, sessionId) {
     [api],
   );
 
+  // A title alone makes a blank document, as it always has; an object makes
+  // any kind with the starter content the panel's + menu hands it.
   const create = useCallback(
-    async (title = "Untitled") => {
+    async (spec = "Untitled") => {
       if (!sessionId) return null;
-      const canvas = await api.createCanvas(sessionId, { title });
+      const body = typeof spec === "string" ? { title: spec } : spec;
+      const canvas = await api.createCanvas(sessionId, body);
       setCanvases((prev) => [canvas, ...prev]);
       setActiveId(canvas.id);
       setOpen(true);

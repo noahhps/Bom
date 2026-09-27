@@ -61,7 +61,16 @@ function Card({ skill }) {
   // the board stays up until it has finished one drawing even if the call
   // came back sooner -- the card's own "running" still goes when the call
   // does, but the drawing is not cut off a frame after it started.
-  const sketch = skill.name === "write_canvas" ? sketchFor(skill.arguments) : null;
+  // A deck draws the page wireframe and a sheet the ruled scribble; the
+  // canvas picks by what it is making.
+  const sketch =
+    skill.name === "write_canvas"
+      ? sketchFor(skill.arguments)
+      : skill.name === "write_slides"
+        ? "wireframe"
+        : skill.name === "write_sheet"
+          ? "scribble"
+          : null;
   const drawing = useAtLeast(Boolean(sketch) && running, sketch ? PLANS[sketch].drawn + 400 : 0);
 
   return (

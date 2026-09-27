@@ -486,6 +486,68 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_designs_name ON designs(name COLLATE NOCASE);
     """,
+    # 17 -- design conversations, and the standard a conversation settled on.
+    #
+    # `mode` is what the conversation was started as: 'chat', the assistant as
+    # it has always been, or 'design', which reads a second preamble about
+    # making things that look good and is listed under Design in the rail. Not
+    # null, defaulted, so every existing conversation is simply a chat.
+    #
+    # `design` is the design standard the reader picked for this conversation --
+    # a preset id, a stored design's id, or 'none' for "no standard, use your
+    # judgement". NULL means nobody has been asked yet, which is not the same
+    # as 'none': NULL is what makes the turn loop ask before it builds a deck,
+    # and 'none' is the answer that stops it asking again.
+    #
+    # Deliberately not a foreign key. Presets are not rows, and a deleted
+    # custom standard should leave its conversations readable -- resolving an
+    # id that has gone is handled where it is read, as "no longer available".
+    """
+    ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
+    ALTER TABLE sessions ADD COLUMN design TEXT;
+    """,
+    # 18 -- a conversation's image library.
+    #
+    # The pictures a deck or a page can use: the reader's own, uploaded in the
+    # canvas panel or attached in the chat. Stored here rather than pointed at
+    # in `attachments` because they are cleaned on the way in -- re-encoded,
+    # metadata (including GPS) stripped, scaled to a sane size -- and a deck
+    # exported next week must not carry where the photo was taken.
+    #
+    # Scoped to a conversation and deleted with it, like a canvas: the images
+    # are part of the work, not a standing collection. `attachment_id` marks a
+    # picture imported from the chat so it is imported once; SET NULL so
+    # deleting the message does not take the picture out of a deck using it.
+    """
+    CREATE TABLE images (
+      id             TEXT PRIMARY KEY,
+      session_id     TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      attachment_id  TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+      name           TEXT NOT NULL,
+      mime           TEXT NOT NULL,
+      width          INTEGER NOT NULL,
+      height         INTEGER NOT NULL,
+      size           INTEGER NOT NULL,
+      data           BLOB NOT NULL,
+      alt            TEXT,
+      created_at     INTEGER NOT NULL
+    );
+
+    CREATE INDEX idx_images_session ON images(session_id, created_at);
+    CREATE INDEX idx_images_attachment ON images(attachment_id);
+    """,
+    # 19 -- where a picture came from, and for a generated one, what made it.
+    #
+    # `source` is 'upload', 'chat' or 'generated'. A generated picture is
+    # labelled as such wherever it is shown -- in the picker, to the model,
+    # and on the slide -- so it is not mistaken for a photograph of something
+    # real. `prompt` keeps what it was generated from, for regenerating a
+    # variant and for knowing afterwards what was asked for.
+    """
+    ALTER TABLE images ADD COLUMN source TEXT;
+    ALTER TABLE images ADD COLUMN prompt TEXT;
+    UPDATE images SET source = CASE WHEN attachment_id IS NULL THEN 'upload' ELSE 'chat' END;
+    """,
 ]
 
 

@@ -5739,3 +5739,7 @@ tr[data-total] .sheet-cell {
 }
 .network-found li > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .network-found code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The Make menu's outcome in an answer's margin. */
+.margin p[data-pin="missed"], .margin p[data-pin="off"] { color: #a2452f; }
+.margin p[data-pin="done"] { color: var(--green); }

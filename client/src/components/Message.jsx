@@ -40,6 +40,7 @@ export const Message = memo(function Message({
   truncated,
   continuable,
   model,
+  pin = null,
 }) {
   // renderMarkdown escapes the source before emitting a single tag, so no
   // model output reaches the DOM as markup. That is the whole contract; see
@@ -81,6 +82,24 @@ export const Message = memo(function Message({
           <>
             <span className="mi">Answered by</span>
             <p data-soft>{model}</p>
+          </>
+        ) : null}
+        {/* What the Make menu pinned this answer to, and whether it was
+            honoured -- checked by the server against what was actually
+            made, not taken from the model. */}
+        {pin ? (
+          <>
+            <span className="mi">Make</span>
+            <p data-soft data-pin={pin.status}>
+              {pin.label || "Pinned"} ·{" "}
+              {pin.status === "done"
+                ? "made"
+                : pin.status === "missed"
+                  ? "not made"
+                  : pin.status === "off"
+                    ? "switched off in Skills, not enforced"
+                    : `asking again (${pin.attempt || 1}/2)`}
+            </p>
           </>
         ) : null}
       </div>

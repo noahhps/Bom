@@ -62,6 +62,7 @@ export function MessageList({
             skills={m.skills}
             truncated={m.truncated}
             continuable={m.continuable}
+            pin={m.pin}
             // Only the turn that is actually from the assistant carries the
             // provenance line; a user bubble and an error have no model.
             model={m.role === "assistant" ? model : null}

@@ -39,7 +39,15 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
-from .design_mode import DESIGN, DESIGN_PREAMBLE, blocked_by, pin_instruction, pinned
+from .design_mode import (
+    DESIGN,
+    DESIGN_PREAMBLE,
+    MAX_PIN_NUDGES,
+    blocked_by,
+    pin_instruction,
+    pin_nudge,
+    pinned,
+)
 from .design_presets import tokens_for
 from .skills.design import (
     NO_DESIGN,
@@ -415,11 +423,13 @@ class Orchestrator:
         # the other ways of making a document are taken away for this turn.
         # Only when the pinned tool is actually offered -- a pin to a skill that
         # is switched off would be an instruction the model cannot follow.
-        choice = pinned(make)
+        requested = pinned(make)
+        choice: dict | None = None
         blocked: set[str] = set()
-        if choice and self.registry is not None:
+        if requested and self.registry is not None:
             offered = {name for name, _ in self.registry.enabled()}
-            if choice["tool"] in offered:
+            if requested["tool"] in offered:
+                choice = requested
                 blocked = blocked_by(choice)
                 system = f"{system}\n\n{pin_instruction(choice)}"
         window = self.build_window(history, stored_files, system=system)
@@ -444,6 +454,14 @@ class Orchestrator:
                 "provider": provider.name,
                 "model": provider.model,
                 "source": route.reason,
+                # The Make menu, as the server took it: what was asked for, and
+                # whether it is being enforced. A pin to a skill that is off is
+                # asked-for but not applied, and the client says so.
+                "make": {
+                    "requested": requested["id"] if requested else None,
+                    "applied": choice["id"] if choice else None,
+                    "label": requested["label"] if requested else None,
+                },
             },
         )
 
@@ -483,6 +501,11 @@ class Orchestrator:
             # ask_for_design or by the gate below. Once is enough: a turn that
             # writes a deck and then a sheet should not ask twice.
             design_settled = False
+            # A pinned turn is finished only when the pinned format exists:
+            # a canvas of that kind written this turn (or, for an image, a
+            # picture made). Until then a model that stops is sent back.
+            pin_done = choice is None
+            pin_nudges = 0
 
             for _ in range(max_rounds):
                 final = None
@@ -536,7 +559,24 @@ class Orchestrator:
                     )
                     continue
                 if final is None or not final.tool_calls:
-                    break
+                    if pin_done or pin_nudges >= MAX_PIN_NUDGES:
+                        break
+                    # Stopped without making what the user pinned -- answered
+                    # in text, or had its other tool refused. Said back as a
+                    # user turn, the way the garbled-call retry is, and the
+                    # round goes again.
+                    pin_nudges += 1
+                    # What it wrote instead is withdrawn from the reply: the
+                    # round is being redone, and a reply that keeps every
+                    # attempt reads as the same answer pasted three times.
+                    # The client is handed the whole reply to redraw.
+                    if round_text:
+                        del parts[len(parts) - len(round_text):]
+                        yield _sse("replace", {"text": "".join(parts)})
+                    yield _sse("make", {"status": "retry", "make": choice["id"], "attempt": pin_nudges})
+                    window.append(Message(role="assistant", content="".join(round_text)))
+                    window.append(Message(role="user", content=pin_nudge(choice)))
+                    continue
 
                 # What the model said on its way to asking, plus the asking
                 # itself. Both have to go back or the next round replays a
@@ -739,9 +779,17 @@ class Orchestrator:
                             defaults = tokens_for(self.store.session_design(session_id))
                             if defaults:
                                 extra.setdefault("design_defaults", defaults)
+                        # A pin to a kind of canvas holds the kind too: a
+                        # pinned document cannot come out as a web page.
+                        if choice and choice.get("kind") and call.name == choice["tool"]:
+                            extra["kind"] = choice["kind"]
+                            extra["kind_pinned"] = True
+                        before = self._canvas_marks(session_id) if choice and not pin_done else None
                         result = await self._run_skill(call, session_id, extra=extra)
                         result += _gated_note(self.store, gated, extra, call.name)
                         record["result"] = result
+                        if before is not None and call.name == choice["tool"]:
+                            pin_done = self._pin_met(choice, session_id, before, result)
 
                     yield _sse(
                         "tool_result",
@@ -779,6 +827,22 @@ class Orchestrator:
                             tool_name=call.name,
                         )
                     )
+            # How the pin went, said once at the end. A miss is also written
+            # into the reply itself, so reopening the conversation still shows
+            # that this answer is not what was picked.
+            if choice is not None:
+                if not pin_done:
+                    note = (
+                        f"\n\n*No {choice['label'].lower()} was made: the model did not "
+                        f"use {choice['tool']} for this message, even when asked again. "
+                        "Try once more, or switch to a model that handles tools better.*"
+                    )
+                    parts.append(note)
+                    yield _sse("delta", {"text": note})
+                yield _sse(
+                    "make",
+                    {"status": "done" if pin_done else "missed", "make": choice["id"], "label": choice["label"]},
+                )
         except ProviderError as exc:
             self.router.invalidate_health()
             # Keep whatever arrived before the failure rather than dropping it.
@@ -907,6 +971,29 @@ class Orchestrator:
             write_auto_approved(self.store, read_auto_approved(self.store) | {name})
         elif decision == ALLOW_SESSION and session_id:
             self._session_grants.setdefault(session_id, set()).add(name)
+
+    def _canvas_marks(self, session_id: str | None) -> dict[str, tuple]:
+        """What each canvas in the conversation is, to tell afterwards which
+        one a skill wrote. Content is part of it, because timestamps are whole
+        seconds and a rewrite can land in the same one."""
+        if not session_id:
+            return {}
+        return {
+            c.id: (c.kind, c.updated_at, hash(c.content))
+            for c in self.store.session_canvases(session_id)
+        }
+
+    def _pin_met(self, choice: dict, session_id: str | None, before: dict, result: str) -> bool:
+        """Whether the pinned tool produced what was pinned. By the effect,
+        not the model's word: a canvas of the pinned kind that is new or
+        changed. An image has no canvas, so its result is read instead."""
+        if choice["makes"] is None:
+            return result.startswith("Generated img_")
+        after = self._canvas_marks(session_id)
+        return any(
+            mark[0] == choice["makes"] and before.get(cid) != mark
+            for cid, mark in after.items()
+        )
 
     async def _run_skill(
         self, call, session_id: str | None = None, extra: dict | None = None

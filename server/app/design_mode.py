@@ -23,12 +23,20 @@ MODES = (CHAT, DESIGN)
 #: the tools that stay available alongside it, and how the choice is said to
 #: the model. "auto" (or nothing) leaves the model to choose.
 MAKE = {
-    "wireframe": {"label": "Wireframe", "tool": "write_wireframe", "keep": {"read_canvas", "open_canvas"}},
-    "slides": {"label": "Presentation", "tool": "write_slides", "keep": {"wireframe_to_slides", "read_canvas", "open_canvas"}},
-    "sheet": {"label": "Sheet", "tool": "write_sheet", "keep": {"edit_sheet", "read_canvas", "open_canvas"}},
-    "page": {"label": "Web page", "tool": "write_canvas", "kind": "html", "keep": {"read_canvas", "open_canvas"}},
-    "document": {"label": "Document", "tool": "write_canvas", "kind": "markdown", "keep": {"read_canvas", "open_canvas"}},
-    "image": {"label": "Image", "tool": "generate_image", "keep": set()},
+    # `makes` is the canvas kind that proves the pin was honoured: a turn
+    # pinned to a wireframe is done when a wireframe canvas was written, not
+    # when the model says so. An image has no canvas; its result says.
+    "wireframe": {"id": "wireframe", "label": "Wireframe", "tool": "write_wireframe", "makes": "wireframe",
+                  "keep": {"read_canvas", "open_canvas"}},
+    "slides": {"id": "slides", "label": "Presentation", "tool": "write_slides", "makes": "slides",
+               "keep": {"wireframe_to_slides", "read_canvas", "open_canvas"}},
+    "sheet": {"id": "sheet", "label": "Sheet", "tool": "write_sheet", "makes": "sheet",
+              "keep": {"edit_sheet", "read_canvas", "open_canvas"}},
+    "page": {"id": "page", "label": "Web page", "tool": "write_canvas", "kind": "html", "makes": "html",
+             "keep": {"read_canvas", "open_canvas"}},
+    "document": {"id": "document", "label": "Document", "tool": "write_canvas", "kind": "markdown",
+                 "makes": "markdown", "keep": {"read_canvas", "open_canvas"}},
+    "image": {"id": "image", "label": "Image", "tool": "generate_image", "makes": None, "keep": set()},
 }
 
 #: The tools that make a whole piece of work. Pinning one takes the others
@@ -59,6 +67,24 @@ def pin_instruction(choice: dict) -> str:
         "of document this turn. If the request reads like a different format, "
         f"still make it as a {choice['label'].lower()} -- the user picked it on "
         "purpose -- and mention in one line that other formats are in the menu."
+    )
+
+
+#: How many times a pinned turn that ended without the pinned format is sent
+#: back to the model. Twice is enough for a model that can: one that ignores
+#: two direct instructions is not going to follow a third.
+MAX_PIN_NUDGES = 2
+
+
+def pin_nudge(choice: dict) -> str:
+    """Said to a model that finished a pinned turn without making the thing."""
+    kind = f' with kind "{choice["kind"]}"' if choice.get("kind") else ""
+    return (
+        f"You have not made the {choice['label'].lower()} yet. The user picked "
+        f"{choice['label']} in the Make menu, so this message must produce one. "
+        f"Call {choice['tool']}{kind} now, with the complete content -- anything you "
+        "wrote above can become its content. Do not answer in text, and do not use "
+        "another tool to make it."
     )
 
 

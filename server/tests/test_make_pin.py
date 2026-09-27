@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -151,3 +152,74 @@ async def test_the_pin_reaches_the_api(tmp_path: Path, monkeypatch):
         assert r.status_code == 200
         r.read()
     assert seen.get("make") == "sheet"
+
+
+def _events(joined: str, name: str) -> list[dict]:
+    out = []
+    for block in joined.split("\n\n"):
+        if block.startswith(f"event: {name}\n"):
+            out.append(json.loads(block.split("data: ", 1)[1]))
+    return out
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_answers_in_text_is_sent_back_to_make_it(store: Store):
+    # Round 1 answers in prose (no calls); the nudge gets the wireframe.
+    orch, provider = _orchestrator(store, [], [WIRE])
+    sid = store.create_session()["id"]
+    joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
+    assert [e["status"] for e in _events(joined, "make")] == ["retry", "done"]
+    assert [c.kind for c in store.session_canvases(sid)] == ["wireframe"]
+    meta = _events(joined, "meta")[0]
+    assert meta["make"] == {"requested": "wireframe", "applied": "wireframe", "label": "Wireframe"}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_detour_is_followed_by_the_pinned_tool(store: Store):
+    doc = ("write_canvas", {"title": "Plan", "kind": "markdown", "content": "# Plan"})
+    orch, provider = _orchestrator(store, [doc], [], [WIRE])
+    sid = store.create_session()["id"]
+    joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
+    assert "write_canvas did not run" in joined
+    assert _events(joined, "make")[-1]["status"] == "done"
+    assert [c.kind for c in store.session_canvases(sid)] == ["wireframe"]
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_never_complies_is_reported_not_hidden(store: Store):
+    orch, provider = _orchestrator(store)  # answers in text, always
+    sid = store.create_session()["id"]
+    joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
+    statuses = [e["status"] for e in _events(joined, "make")]
+    assert statuses == ["retry", "retry", "missed"]
+    assert "No wireframe was made" in joined
+    assert store.session_canvases(sid) == []
+    # And it is in the stored reply, so reopening shows it too.
+    stored = [m for m in store.list_messages(sid) if m.role == "assistant"][-1]
+    assert "No wireframe was made" in stored.content
+    # The redone rounds' text is withdrawn, not piled up: one answer, once.
+    assert stored.content.count("Made it.") == 1
+    assert len(_events(joined, "replace")) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_pinned_document_cannot_come_out_as_a_page(store: Store):
+    page = ("write_canvas", {"title": "Brief", "kind": "html", "content": "<h1>Brief</h1>"})
+    orch, provider = _orchestrator(store, [page])
+    sid = store.create_session()["id"]
+    joined = await _run(orch, sid, "A brief", make="document")
+    assert [c.kind for c in store.session_canvases(sid)] == ["markdown"]
+    assert _events(joined, "make")[-1]["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_a_wireframe_call_that_fails_does_not_count(store: Store):
+    broken = ("write_wireframe", {"title": "App", "frames": []})
+    # It fails, the model then stops in text: that is not done, so it is
+    # sent back, and only the real wireframe finishes the turn.
+    orch, provider = _orchestrator(store, [broken], [], [WIRE])
+    sid = store.create_session()["id"]
+    joined = await _run(orch, sid, "An app", make="wireframe")
+    assert "had no frames" in joined
+    assert [e["status"] for e in _events(joined, "make")] == ["retry", "done"]
+    assert [c.kind for c in store.session_canvases(sid)] == ["wireframe"]

@@ -208,6 +208,26 @@ export function useChat(
                   : data.model,
               tone: data.source === "fallback" ? "warn" : null,
             });
+            // The Make menu as the server took it. Asked for but not applied
+            // means the pinned skill is switched off -- said on the answer,
+            // since the model was then free to make anything.
+            if (data.make?.requested && !data.make.applied) {
+              const pin = { status: "off", label: data.make.label };
+              setMessages((prev) => prev.map((m) => (m.key === answer.key ? { ...m, pin } : m)));
+            }
+          } else if (event === "replace") {
+            // The server withdrew text from a round it is redoing; this is the
+            // whole reply as it now stands.
+            content = data.text || "";
+            pending.current = { key: answer.key, text: content, reasoning };
+            schedule();
+          } else if (event === "make") {
+            // How a pinned message is going: sent back to the model, made,
+            // or not made after all.
+            const pin = { status: data.status, label: data.label, attempt: data.attempt };
+            setMessages((prev) =>
+              prev.map((m) => (m.key === answer.key ? { ...m, pin: { ...m.pin, ...pin, label: pin.label || m.pin?.label } } : m)),
+            );
           } else if (event === "thinking") {
             if (!announced) {
               announced = true;

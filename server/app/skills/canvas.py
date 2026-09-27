@@ -250,7 +250,9 @@ class WriteCanvas(Skill):
         # Rescue a page the model wrote but labelled prose: stored as markdown
         # it would render escaped, as source. Only upgrades markdown -- an
         # explicit `code` kind means the user wants to see the HTML as text.
-        if resolved_kind == "markdown" and _looks_like_html(body):
+        # Not when the kind was pinned by the user's Make menu: a document
+        # they asked for stays a document, whatever the model put in it.
+        if resolved_kind == "markdown" and _looks_like_html(body) and not extra.get("kind_pinned"):
             resolved_kind = "html"
 
         existing = self.store.find_canvas_by_title(session, name)

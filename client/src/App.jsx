@@ -27,6 +27,7 @@ import { useModels } from "./hooks/useModels";
 import { useProjects } from "./hooks/useProjects";
 import { useRailWidth } from "./hooks/useRailWidth";
 import { useSessions } from "./hooks/useSessions";
+import { useAppearance } from "./hooks/useAppearance";
 import { useTheme } from "./hooks/useTheme";
 import { UnauthorizedError, createApi } from "./lib/api";
 import { ApiContext } from "./lib/api-context";
@@ -57,6 +58,9 @@ export default function App() {
   const talking = view === "chat" || view === "design";
   const rail = useRailWidth();
   const canvasSize = useCanvasWidth();
+  // Light or dark, for this device. Up here, above every early return, so
+  // the token gate follows it as well as the app behind it.
+  const appearance = useAppearance();
   // Below 900px the rail stops being a strip beside the sheet and becomes a
   // full-screen panel behind one button, so the shell has to know which layout
   // it is in rather than leaving it all to the stylesheet.
@@ -225,6 +229,8 @@ export default function App() {
     pendingAgentId: newAgentId,
     title: chat.title,
     messages: chat.messages,
+    // The accent is derived per mode: the same hue, drawn on a dark ladder.
+    mode: appearance.mode,
   });
 
   // -- bootstrap ------------------------------------------------------------
@@ -653,6 +659,7 @@ export default function App() {
               onSessionsChanged={onSessionsChanged}
               onSignOut={() => signOut("")}
               theme={theme}
+              appearance={appearance}
             />
           )}
         </div>

@@ -10,6 +10,7 @@
 import { ManageChats } from "./ManageChats";
 import { Providers } from "./Providers";
 import { ThemePicker } from "./ThemePicker";
+import { APPEARANCES } from "../lib/appearance";
 import { DEFAULT_ACCENT } from "../lib/theme";
 
 export function Settings({
@@ -24,6 +25,7 @@ export function Settings({
   sessions,
   onSessionsChanged,
   theme,
+  appearance,
 }) {
   return (
     <div className="page">
@@ -68,6 +70,39 @@ export function Settings({
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Light or dark, for this device only -- like the pinned rail, it
+              is kept here rather than on the server. The accent below is
+              drawn for whichever mode is in force. */}
+          <div className="lane">
+            <span className="mi" data-strong>
+              Appearance
+            </span>
+            <i />
+            <span className="mi">{appearance?.mode === "dark" ? "dark" : "light"} now</span>
+          </div>
+
+          <div className="sur" style={{ padding: "18px" }}>
+            <div className="appearance" role="radiogroup" aria-label="Appearance">
+              {APPEARANCES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={appearance?.preference === option.id}
+                  data-mode={option.id}
+                  onClick={() => appearance?.setPreference(option.id)}
+                >
+                  <i aria-hidden="true" />
+                  {option.name}
+                </button>
+              ))}
+            </div>
+            <p className="caveat" style={{ margin: "14px 0 0" }}>
+              <b>System</b> follows this device and switches with it. Dark is
+              black and grey with the accent kept for what you act on.
+            </p>
           </div>
 
           {/* The accent, app-wide. This is the bottom of the stack of three:

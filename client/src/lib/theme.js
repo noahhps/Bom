@@ -91,6 +91,31 @@ const LADDER = {
   wash: [0.9431, 0.085],
 };
 
+/* The same rungs for dark mode, drawn in Vercel's dark language rather than
+ * read off the light sheet: near-black neutrals a step apart (#000 behind,
+ * #0a0a0a and #111 for what sits on it), hairlines that are barely there, and
+ * text at #ededed. The chroma fractions are a fraction of the light ladder's,
+ * so an accent tints the dark as a trace rather than a cast -- Vercel's greys
+ * are greys, and the hue belongs to the things you act on and to the glow
+ * behind the sheet, not to every surface. */
+const LADDER_DARK = {
+  ground: [0.1448, 0.02],
+  surface: [0.1776, 0.02],
+  shell: [0.0, 0.0],
+  menu: [0.1776, 0.03],
+  "menu-well": [0.2178, 0.035],
+  rail: [0.1448, 0.02],
+  "grid-line": [0.1776, 0.03],
+  line: [0.2809, 0.035],
+  "line-soft": [0.2393, 0.03],
+  "line-firm": [0.3211, 0.04],
+  "line-strong": [0.3904, 0.05],
+  ink: [0.9491, 0.012],
+  "accent-soft": [0.72, 0.8],
+  field: [0.1985, 0.11],
+  wash: [0.1776, 0.08],
+};
+
 /**
  * Every custom property an accent sets, as a plain object ready to be written
  * onto an element's style.
@@ -99,9 +124,10 @@ const LADDER = {
  * let styles.css stand" -- an empty object would mean the same thing, but a
  * null makes the two cases impossible to confuse at the call site.
  */
-export function palette(accent, fallbackSeed = null) {
+export function palette(accent, fallbackSeed = null, mode = "light") {
   const seed = seedOf(accent, fallbackSeed);
   if (!seed) return null;
+  if (mode === "dark") return darkPalette(seed, accent);
 
   const { hue } = seed;
   const strength = clampStrength(accent?.strength);
@@ -122,6 +148,10 @@ export function palette(accent, fallbackSeed = null) {
   // settled on after two rounds of darkening them by hand.
   const accentColour = readable(hue, chroma, ground, 5.5, 0.56);
   const accentHover = readable(hue, chroma, ground, 8, 0.42);
+  // A fill that carries white text. On the light sheet that is the accent
+  // itself -- it already clears 5.5:1 against a near-white ground, so white
+  // on it clears too -- and only dark mode needs the two to differ.
+  const accentFill = accentColour;
   const dim = readable(hue, chroma * 0.156 * spread, ground, 6, 0.56);
   const faint = readable(hue, chroma * 0.148 * spread, ground, 4.6, 0.58);
 
@@ -143,6 +173,7 @@ export function palette(accent, fallbackSeed = null) {
     // that turns blue because the reader likes blue is a bug.
     "--accent": accentColour,
     "--accent-hover": accentHover,
+    "--accent-fill": accentFill,
     "--accent-soft": tone("accent-soft"),
     "--accent-field": tone("field"),
     "--accent-wash": tone("wash"),
@@ -171,6 +202,62 @@ export function palette(accent, fallbackSeed = null) {
     // A saturated form of the accent for the one place that wants the hue
     // undiluted -- the swatch a chat wears in the rail.
     "--accent-pure": oklch(0.62, chroma, hue),
+  };
+}
+
+/* The dark ladder. Same tokens, same checks, a different ground: every colour
+ * that carries text is searched for against the dark sheet, upwards, and the
+ * glow behind it is kept low and deep so it reads as light from somewhere off
+ * screen -- the soft gradient Vercel lets bleed behind a black page -- rather
+ * than as a coloured fog over the conversation. */
+function darkPalette(seed, accent) {
+  const { hue, chroma } = seed;
+  const strength = clampStrength(accent?.strength);
+  const spread = 0.5 + 1.6 * strength;
+  const tone = (rung) => {
+    const [lightness, fraction] = LADDER_DARK[rung];
+    return oklch(lightness, chroma * fraction * spread, hue);
+  };
+
+  const ground = tone("ground");
+  // Links and marks: light enough to read on #0a0a0a at 5.5:1, which lands
+  // near Vercel's own dark-mode blue for the cobalt accent.
+  const accentColour = readable(hue, chroma, ground, 5.5, 0.6);
+  const accentHover = readable(hue, chroma, ground, 8, 0.7);
+  // Buttons and the send control: the darkest step that still carries white
+  // text at 4.5:1, like Vercel's filled blue on black.
+  const accentFill = readable(hue, chroma, "#ffffff", 4.5, 0.62);
+  const dim = readable(hue, chroma * 0.03 * spread, ground, 7, 0.62);
+  const faint = readable(hue, chroma * 0.03 * spread, ground, 5, 0.55);
+
+  return {
+    "--shell": tone("shell"),
+    "--menu": tone("menu"),
+    "--menu-well": tone("menu-well"),
+    "--ground": ground,
+    "--rail": tone("rail"),
+    "--surface": tone("surface"),
+    "--ink": tone("ink"),
+    "--grid-line": tone("grid-line"),
+    "--accent": accentColour,
+    "--accent-hover": accentHover,
+    "--accent-fill": accentFill,
+    "--accent-soft": tone("accent-soft"),
+    "--accent-field": tone("field"),
+    "--accent-wash": tone("wash"),
+    "--line": tone("line"),
+    "--line-soft": tone("line-soft"),
+    "--line-firm": tone("line-firm"),
+    "--line-strong": tone("line-strong"),
+    "--text-dim": dim,
+    "--text-faint": faint,
+    "--aura-1": oklch(0.42, chroma * 1.0, hue),
+    "--aura-2": oklch(0.36, chroma * 1.1, hue + 26),
+    "--aura-3": oklch(0.46, chroma * 0.8, hue - 32),
+    // Lower than the light sheet's: a glow on black carries much further than
+    // a tint on white, and past this it stops being a glow.
+    "--aura-opacity": (0.08 + 0.3 * strength).toFixed(3),
+    "--accent-pure": oklch(0.66, chroma, hue),
   };
 }
 

@@ -28,6 +28,7 @@ export function useTheme({
   title,
   messages,
   pendingAgentId = null,
+  mode = "light",
 }) {
   const [appAccent, setAppAccent] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -129,8 +130,8 @@ export function useTheme({
   }, [sessionId, title, signature]);
 
   const tokens = useMemo(
-    () => palette(active, agentAccent ? agentSeed : contextSeed),
-    [active, agentAccent, agentSeed, contextSeed],
+    () => palette(active, agentAccent ? agentSeed : contextSeed, mode),
+    [active, agentAccent, agentSeed, contextSeed, mode],
   );
 
   useEffect(() => {

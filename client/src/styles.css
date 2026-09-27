@@ -78,6 +78,38 @@
   --green-field: #d8ece7;
   --ochre: #9a6b12;       /* warning */
   --ochre-field: #f3e8d2;
+  /* Something went wrong, or is about to be undone. */
+  --danger: #a2452f;
+  --danger-fill: #8c2f22;
+  --danger-fill-hover: #74271c;
+  --green-wash: #e6f0e8;
+  --quiet-mark: #c9d3cc;
+
+  /* What changes between light and dark beyond the palette above. Each has
+     its light value here and its dark one in the `[data-theme="dark"]` block
+     below the second :root; nothing else in the sheet writes a colour that
+     only works on white.
+
+       --sheet...        the opaque sheet `.screen` pins under the thread
+       --on-ink          text on an ink-filled button (the primary one)
+       --ink-hover       that button, pressed
+       --accent-fill     the accent as a fill under white text or a glyph;
+                         the same as --accent on white, a step deeper on black
+       --on-accent       what sits on --accent-fill
+       --ink-rgb         the ink as channels, for the hover and hairline tints
+                         that used to be written rgba(20, 23, 29, a) -- so a
+                         6% hover is 6% of the ink in either mode
+       --shadow-rgb      the same for shadows and scrims, which stay dark
+                         whatever the mode */
+  --sheet: #ffffff;
+  --sheet-surface: #ffffff;
+  --sheet-rail: #f4f6fa;
+  --on-ink: #f8f9fa;
+  --ink-hover: #2c313c;
+  --accent-fill: var(--accent);
+  --on-accent: #ffffff;
+  --ink-rgb: 20, 23, 29;
+  --shadow-rgb: 20, 23, 29;
 
   /* Firmer than the drawing. On a white ground with no fills left to do the
      work, these lines are the only thing separating one surface from the
@@ -133,7 +165,7 @@
      contact shadow (see `.composer-box`) because it is a bar docked to the foot
      of the screen, not a panel floating over a scrim -- a documented exception,
      not a fourth invented value. */
-  --elevation-float: 0 20px 48px -20px rgba(20, 23, 29, 0.4);
+  --elevation-float: 0 20px 48px -20px rgba(var(--shadow-rgb), 0.4);
   --glow-accent:
     0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
     0 8px 34px -10px color-mix(in srgb, var(--accent) 34%, transparent);
@@ -326,10 +358,10 @@ button {
 .btnp {
   padding: 10px 16px;
   background: var(--ink);
-  color: #f8f9fa;
+  color: var(--on-ink);
   font: 400 var(--t-sm)/1 var(--font);
 }
-.btnp:hover { background: #2c313c; }
+.btnp:hover { background: var(--ink-hover); }
 
 .chip {
   padding: 7px 12px;
@@ -372,7 +404,7 @@ button {
   color: var(--ink);
   flex: none;
 }
-.icon-btn:hover { background: rgba(20, 23, 29, 0.06); }
+.icon-btn:hover { background: rgba(var(--ink-rgb), 0.06); }
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
 .icon-btn:disabled:hover { background: none; }
 
@@ -481,9 +513,9 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
      tokens rather than as one background, so every surface nested inside --
      the composer, the top bar, cards, callouts -- inherits the opaque value
      without each needing a rule of its own. */
-  --ground: #ffffff;
-  --surface: #ffffff;
-  --rail: #f4f6fa;
+  --ground: var(--sheet);
+  --surface: var(--sheet-surface);
+  --rail: var(--sheet-rail);
   background-color: var(--ground);
 }
 
@@ -812,11 +844,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    Two different shapes, because the two states are asking different
    questions. */
 .navrail-dest button[aria-current="page"] {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 .navrail[data-open] .navrail-dest button[aria-current="page"] {
-  background: rgba(20, 23, 29, 0.07);
+  background: rgba(var(--ink-rgb), 0.07);
   color: var(--ink);
 }
 .navrail[data-open] .navrail-dest button[aria-current="page"] .lbl-h {
@@ -847,7 +879,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* Only once the rail is open does an inactive row respond to the pointer --
    otherwise travelling to the rail lights up whatever it passes over. */
 .navrail[data-open] .navrail-dest button:not([aria-current="page"]):hover {
-  background: rgba(20, 23, 29, 0.07);
+  background: rgba(var(--ink-rgb), 0.07);
   color: var(--ink);
 }
 
@@ -1180,8 +1212,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--accent);
   white-space: nowrap;
 }
-.navrail-new:hover { background: rgba(20, 23, 29, 0.07); }
-.navrail-new:hover { background: rgba(20, 23, 29, 0.07); }
+.navrail-new:hover { background: rgba(var(--ink-rgb), 0.07); }
+.navrail-new:hover { background: rgba(var(--ink-rgb), 0.07); }
 
 /* Recessed into the panel rather than sharing its fill, so the list reads as
    a distinct thing the sidebar contains. */
@@ -1213,14 +1245,14 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    * there would claim an edge that is not one, and would still be claiming it
    * once you had scrolled to the end. */
   border-top: 1px solid var(--line-soft);
-  box-shadow: inset 0 -6px 7px -7px rgba(20, 23, 29, 0.34);
+  box-shadow: inset 0 -6px 7px -7px rgba(var(--shadow-rgb), 0.34);
 }
 .navrail-sessions li {
   display: flex;
   align-items: center;
   border-radius: 10px;
 }
-.navrail-sessions li:hover { background: rgba(20, 23, 29, 0.08); }
+.navrail-sessions li:hover { background: rgba(var(--ink-rgb), 0.08); }
 /* A wash, where the active *section* above is a solid fill -- two different
    kinds of "current" should not look like the same control.
 
@@ -1232,7 +1264,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    so the current conversation is marked the way the current destination is --
    the same grey plate, so "where you are" looks the same wherever you are. */
 .navrail-sessions li[data-active="true"] {
-  background: rgba(20, 23, 29, 0.07);
+  background: rgba(var(--ink-rgb), 0.07);
   box-shadow: none;
 }
 .navrail-sessions li[data-active="true"] .navrail-session { font-weight: 400; }
@@ -1281,7 +1313,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 
 .navrail-dot { background: var(--green); }
 .navrail-dot[data-tone="warn"] { background: var(--ochre); }
-.navrail-dot[data-tone="down"] { background: rgba(20, 23, 29, 0.3); }
+.navrail-dot[data-tone="down"] { background: rgba(var(--ink-rgb), 0.3); }
 
 /* -- popover -------------------------------------------------------------------
  *
@@ -1313,14 +1345,14 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   padding: 9px 10px;
   border-radius: 11px;
 }
-.popover-item:hover { background: rgba(20, 23, 29, 0.06); }
+.popover-item:hover { background: rgba(var(--ink-rgb), 0.06); }
 
 .popover-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex: none;
-  background: rgba(20, 23, 29, 0.22);
+  background: rgba(var(--ink-rgb), 0.22);
 }
 .popover-dot[data-ok] { background: var(--green); }
 
@@ -1401,7 +1433,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   font-size: var(--t-md);
   line-height: 1;
 }
-.popover-more:hover { background: rgba(20, 23, 29, 0.06); color: var(--ink); }
+.popover-more:hover { background: rgba(var(--ink-rgb), 0.06); color: var(--ink); }
 
 
 /* The sheet. Inset from three edges so the shell frames it, and clipped to its
@@ -1561,7 +1593,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* The top-bar toggle when its panel is open, and any icon button that reports
    an on/off it owns. Matches the icon button's own hover so the two states sit
    at the same weight. */
-.icon-btn[data-on] { background: rgba(20, 23, 29, 0.08); }
+.icon-btn[data-on] { background: rgba(var(--ink-rgb), 0.08); }
 
 /* The canvas toggle, lit from below.
  *
@@ -1703,8 +1735,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
 }
 .canvas-foot-btn:hover { border-color: var(--line-strong); }
-.canvas-foot-btn[data-danger] { color: #a2452f; border-color: transparent; }
-.canvas-foot-btn[data-danger]:hover { border-color: #a2452f; }
+.canvas-foot-btn[data-danger] { color: var(--danger); border-color: transparent; }
+.canvas-foot-btn[data-danger]:hover { border-color: var(--danger); }
 
 .canvas-empty {
   flex: 1;
@@ -1749,7 +1781,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border: 1px solid var(--line-firm);
   color: var(--ink);
 }
-.agents-preset:hover { border-color: var(--line-strong); background: rgba(20, 23, 29, 0.04); }
+.agents-preset:hover { border-color: var(--line-strong); background: rgba(var(--ink-rgb), 0.04); }
 .agents-list-head { padding: 2px 2px 4px; display: block; }
 .agents-item-head { display: flex; align-items: center; gap: 9px; }
 .agents-badge { display: inline-grid; place-items: center; width: 22px; height: 22px; color: var(--ink); flex: none; }
@@ -1769,7 +1801,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
 }
 .agents-icon:hover { border-color: var(--line-strong); }
-.agents-icon[data-on] { border-color: var(--ink); background: rgba(20, 23, 29, 0.05); }
+.agents-icon[data-on] { border-color: var(--ink); background: rgba(var(--ink-rgb), 0.05); }
 .agents-item {
   display: flex;
   flex-direction: column;
@@ -1781,7 +1813,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
   text-align: left;
 }
-.agents-item:hover { background: rgba(20, 23, 29, 0.05); }
+.agents-item:hover { background: rgba(var(--ink-rgb), 0.05); }
 .agents-item[data-active] {
   background: var(--surface);
   border-color: var(--line);
@@ -1836,9 +1868,9 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 
 .agents-actions { display: flex; gap: 9px; margin-top: 4px; }
-.agents-error { color: #a2452f; font: 400 var(--t-body) var(--font); margin: 0; }
-.btn[data-danger] { color: #a2452f; }
-.btn[data-danger]:hover { border-color: #a2452f; }
+.agents-error { color: var(--danger); font: 400 var(--t-body) var(--font); margin: 0; }
+.btn[data-danger] { color: var(--danger); }
+.btn[data-danger]:hover { border-color: var(--danger); }
 
 @media (max-width: 900px) {
   .agents-body { flex-direction: column; }
@@ -1881,7 +1913,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
   text-align: left;
 }
-.design-item:hover { background: rgba(20, 23, 29, 0.05); }
+.design-item:hover { background: rgba(var(--ink-rgb), 0.05); }
 .design-item[data-active] {
   background: var(--surface);
   border-color: var(--line);
@@ -1969,7 +2001,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .design-editor > .design-preview { max-height: none; }
 
 .design-actions { display: flex; gap: 9px; margin-top: 4px; }
-.design-error { color: #a2452f; font: 400 var(--t-body) var(--font); margin: 0; }
+.design-error { color: var(--danger); font: 400 var(--t-body) var(--font); margin: 0; }
 
 @media (max-width: 900px) {
   .design-body { flex-direction: column; }
@@ -2019,7 +2051,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   left: 202px;
   color: var(--ink);
 }
-.rail-toggle:hover { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+.rail-toggle:hover { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
 
 /* The corner the toggle stands in, while it is standing there. Shut, it is
    over the sheet and the sheet's own first line has to start clear of it;
@@ -2078,7 +2110,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: block;
 }
 .state[data-tone="warn"] i { background: var(--ochre); }
-.state[data-tone="down"] i { background: rgba(20, 23, 29, 0.25); }
+.state[data-tone="down"] i { background: rgba(var(--ink-rgb), 0.25); }
 
 /* -- thread ----------------------------------------------------------------- */
 
@@ -2541,13 +2573,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .margin p {
   margin: 0;
   font: 400 var(--t-sm)/1.6 var(--font);
-  color: rgba(20, 23, 29, 0.66);
+  color: rgba(var(--ink-rgb), 0.66);
 }
 .margin p[data-soft] {
   font-size: var(--t-xs);
   /* Was 0.5 -- 3.41:1, the worst value on the sheet, and it sits above the
      answer now rather than off in a margin, so it is read more often. */
-  color: rgba(20, 23, 29, 0.64);
+  color: rgba(var(--ink-rgb), 0.64);
 }
 .margin .mi + .mi { margin-top: 6px; }
 
@@ -2557,7 +2589,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background: var(--line);
   flex: none;
 }
-.margin-rule[data-soft] { background: rgba(20, 23, 29, 0.06); }
+.margin-rule[data-soft] { background: rgba(var(--ink-rgb), 0.06); }
 
 .answer {
   flex: 1;
@@ -2654,7 +2686,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* The caveat line under an answer. */
 .caveat {
   font: 400 var(--t-sm)/1.65 var(--font);
-  color: rgba(20, 23, 29, 0.5);
+  color: rgba(var(--ink-rgb), 0.5);
 }
 
 .followups { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 2px; }
@@ -2666,10 +2698,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   gap: 12px;
   padding: 10px 17px 10px 12px;
   border-radius: var(--r-pill);
-  border: 1px solid rgba(20, 23, 29, 0.14);
+  border: 1px solid rgba(var(--ink-rgb), 0.14);
   width: fit-content;
   font: 400 var(--t-sm)/1 var(--font);
-  color: rgba(20, 23, 29, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 .sources .stack { display: flex; flex: none; }
 .sources .stack i {
@@ -2802,7 +2834,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   overflow-y: auto;
   white-space: pre-wrap;
   font: 400 var(--t-sm)/1.7 var(--font);
-  color: rgba(20, 23, 29, 0.66);
+  color: rgba(var(--ink-rgb), 0.66);
 }
 
 /* -- memory nudge ----------------------------------------------------------- */
@@ -2832,7 +2864,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .nudge b { font-weight: 500; }
 .nudge .decline {
   font: 400 var(--t-sm)/1 var(--font);
-  color: rgba(20, 23, 29, 0.5);
+  color: rgba(var(--ink-rgb), 0.5);
 }
 
 /* -- composer --------------------------------------------------------------- */
@@ -2901,13 +2933,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .composer-box {
   max-width: var(--read-w);
   margin: 0 auto;
-  border: 1px solid rgba(20, 23, 29, 0.14);
+  border: 1px solid rgba(var(--ink-rgb), 0.14);
   background: var(--surface);
   border-radius: var(--r-control);
   padding: 17px 20px 14px;
   box-shadow:
-    0 1px 2px rgba(20, 23, 29, 0.04),
-    0 8px 24px -18px rgba(20, 23, 29, 0.4);
+    0 1px 2px rgba(var(--shadow-rgb), 0.04),
+    0 8px 24px -18px rgba(var(--shadow-rgb), 0.4);
   position: relative;
   --tuck: 80%;
   transform: translateY(calc(var(--tuck) * (1 - var(--near))));
@@ -2991,7 +3023,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   font: 400 var(--t-body)/1.5 var(--font);
   max-height: 40vh;
 }
-.composer textarea::placeholder { color: rgba(20, 23, 29, 0.4); }
+.composer textarea::placeholder { color: rgba(var(--ink-rgb), 0.4); }
 
 .composer-row {
   display: flex;
@@ -3059,8 +3091,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   flex: none;
@@ -3141,13 +3173,52 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-radius: var(--r-pill);
   font: 400 var(--t-xs)/1 var(--font);
   letter-spacing: var(--track-body);
-  color: rgba(20, 23, 29, 0.55);
+  color: rgba(var(--ink-rgb), 0.55);
 }
 .effort button[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--ink);
 }
 .effort button:disabled { opacity: 0.45; cursor: default; }
+
+/* Light, dark or the device's own -- a three-way segmented control, drawn the
+   way Vercel draws its theme switcher: a hairline track, and the chosen
+   segment lifted by a fill and a ring rather than by colour. Tints of the ink,
+   so it reads the same on either ground. */
+.appearance {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+}
+.appearance button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: calc(var(--r-control) - 3px);
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--text-dim);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.appearance button:hover { color: var(--ink); }
+.appearance button[aria-checked="true"] {
+  background: rgba(var(--ink-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.12);
+  color: var(--ink);
+}
+/* A swatch of each mode, so the choice is visible before it is made. */
+.appearance i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.35);
+  flex: none;
+}
+.appearance [data-mode="light"] i { background: #ffffff; }
+.appearance [data-mode="dark"] i { background: #000000; }
+.appearance [data-mode="system"] i { background: linear-gradient(135deg, #ffffff 50%, #000000 50%); }
 
 /* -- screen headers (1b, 1c) ------------------------------------------------- */
 
@@ -3169,7 +3240,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    "blue" used to be separate values that painted the same fill -- they are now
    one `accent`. */
 .page-head[data-tint="accent"] { background: var(--accent-field); }
-.page-head[data-tint="green"] { background: #e6f0e8; }
+.page-head[data-tint="green"] { background: var(--green-wash); }
 
 .page-head .inner {
   position: relative;
@@ -3226,13 +3297,13 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   margin-top: 13px;
 }
 .fact-meta .spacer { flex: 1; }
-.fact-meta .sep { width: 1px; height: 10px; background: rgba(20, 23, 29, 0.14); }
+.fact-meta .sep { width: 1px; height: 10px; background: rgba(var(--ink-rgb), 0.14); }
 
 /* Provenance: a solid bar when you said it, a part-filled one when the
    assistant inferred it and is correspondingly less sure. */
 .origin { width: 36px; height: 3px; border-radius: 2px; flex: none; }
 .origin[data-from="told"] { background: var(--green); }
-.origin[data-from="inferred"] { background: rgba(20, 23, 29, 0.1); }
+.origin[data-from="inferred"] { background: rgba(var(--ink-rgb), 0.1); }
 .origin[data-from="inferred"] span {
   display: block;
   height: 3px;
@@ -3272,17 +3343,17 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 
 .fact-fading {
-  border: 1px dashed rgba(20, 23, 29, 0.2);
+  border: 1px dashed rgba(var(--ink-rgb), 0.2);
   border-radius: var(--r-surface);
   padding: 15px 18px;
   display: flex;
   align-items: center;
   gap: 12px;
   font: 400 var(--t-md)/1.6 var(--font);
-  color: rgba(20, 23, 29, 0.66);
+  color: rgba(var(--ink-rgb), 0.66);
 }
 .fact-fading span { flex: 1; }
-.fact-fading em { font-style: normal; color: rgba(20, 23, 29, 0.4); }
+.fact-fading em { font-style: normal; color: rgba(var(--ink-rgb), 0.4); }
 
 .callout {
   display: flex;
@@ -3304,18 +3375,18 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .toggle-row > span {
   flex: 1;
   font: 400 var(--t-sm)/1.5 var(--font);
-  color: rgba(20, 23, 29, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 .switch {
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: rgba(20, 23, 29, 0.14);
+  background: rgba(var(--ink-rgb), 0.14);
   padding: 3px;
   display: flex;
   flex: none;
 }
-.switch[aria-pressed="true"] { background: var(--accent); justify-content: flex-end; }
+.switch[aria-pressed="true"] { background: var(--accent-fill); justify-content: flex-end; }
 .switch i {
   width: 14px;
   height: 14px;
@@ -3341,7 +3412,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .corpus p {
   margin: 10px 0 0;
   font: 400 var(--t-sm)/1.65 var(--font);
-  color: rgba(20, 23, 29, 0.55);
+  color: rgba(var(--ink-rgb), 0.55);
 }
 
 .side-actions { display: flex; gap: 9px; }
@@ -3493,12 +3564,12 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   flex: none;
   display: block;
 }
-.skill-head > i[data-tint="grey"] { background: #c9d3cc; }
+.skill-head > i[data-tint="grey"] { background: var(--quiet-mark); }
 .skill-head .h { font-size: var(--t-lg); flex: 1; }
 .skill-body {
   margin: 12px 0 0;
   font: 400 var(--t-md)/1.7 var(--font);
-  color: rgba(20, 23, 29, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 .skill-actions {
   display: flex;
@@ -3527,9 +3598,9 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 }
 .spark i { flex: 1; border-radius: 2px; display: block; background: var(--accent-soft); }
 .spark i[data-hot] { background: var(--accent); }
-.spark[data-tint="quiet"] i { background: rgba(20, 23, 29, 0.09); }
-.spark[data-tint="green"] i { background: #c9d3cc; }
-.spark[data-tint="green"] i[data-cold] { background: rgba(20, 23, 29, 0.1); }
+.spark[data-tint="quiet"] i { background: rgba(var(--ink-rgb), 0.09); }
+.spark[data-tint="green"] i { background: var(--quiet-mark); }
+.spark[data-tint="green"] i[data-cold] { background: rgba(var(--ink-rgb), 0.1); }
 
 /* -- permission ask (1f) ------------------------------------------------------ */
 
@@ -3614,7 +3685,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   margin-top: 7px;
   display: block;
 }
-.ask li span { font: 400 var(--t-sm)/1.65 var(--font); color: rgba(20, 23, 29, 0.7); }
+.ask li span { font: 400 var(--t-sm)/1.65 var(--font); color: rgba(var(--ink-rgb), 0.7); }
 
 /* -- gate ---------------------------------------------------------------------- */
 
@@ -3632,7 +3703,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   max-width: 380px;
   background: var(--ground);
   border-radius: var(--r-card);
-  border: 1px solid rgba(20, 23, 29, 0.1);
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
   box-shadow: var(--elevation-float);
   padding: 34px 32px 30px;
   display: flex;
@@ -3686,7 +3757,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   margin: 18px 22px 0;
   padding: 13px 17px;
   border-radius: var(--r-surface);
-  border: 1px dashed rgba(20, 23, 29, 0.24);
+  border: 1px dashed rgba(var(--ink-rgb), 0.24);
   font: 400 var(--t-sm)/1.6 var(--font);
   color: var(--text-dim);
   flex: none;
@@ -3790,7 +3861,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
     content: "";
     width: 16px;
     height: 1px;
-    background: rgba(20, 23, 29, 0.25);
+    background: rgba(var(--ink-rgb), 0.25);
     flex: none;
   }
   .margin p { font-size: var(--t-xs); }
@@ -3939,7 +4010,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--text-faint);
   flex: none;
 }
-.staged-remove:hover { background: rgba(20, 23, 29, 0.1); color: var(--accent); }
+.staged-remove:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--accent); }
 
 /* A file is being dragged over the window. Anywhere is a valid drop, but the
    composer is what lights up, because that is where it lands. */
@@ -3962,7 +4033,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   place-items: center;
   gap: 14px;
   padding: 40px;
-  background: rgba(20, 23, 29, 0.82);
+  background: rgba(var(--shadow-rgb), 0.82);
   cursor: zoom-out;
 }
 .lightbox img {
@@ -4208,7 +4279,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   text-align: left;
   transition: border-color 0.14s ease, background 0.14s ease;
 }
-.design-opt:hover { border-color: var(--accent); background: rgba(20, 23, 29, 0.03); }
+.design-opt:hover { border-color: var(--accent); background: rgba(var(--ink-rgb), 0.03); }
 .design-opt:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
@@ -4519,9 +4590,9 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 /* Destructive confirmations wear the warning colour rather than the ink
    fill, so "Delete" does not look identical to "Save". */
 .dlg-actions .btnp[data-destructive] {
-  background: #8c2f22;
+  background: var(--danger-fill);
 }
-.dlg-actions .btnp[data-destructive]:hover { background: #74271c; }
+.dlg-actions .btnp[data-destructive]:hover { background: var(--danger-fill-hover); }
 
 /* -- accents ----------------------------------------------------------------
  *
@@ -4571,6 +4642,111 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
      as one movement rather than as a dozen. Long enough to read as a light
      changing rather than as a repaint. */
   --accent-motion: 900ms cubic-bezier(0.32, 0.72, 0.3, 1);
+}
+
+/* -- dark ---------------------------------------------------------------------
+ *
+ * The same app in Vercel's dark language: black behind everything, surfaces a
+ * step up at #0a0a0a and #111, hairlines at #262626-#454545 doing the work a
+ * shadow does in the light, text at #ededed with #a1a1a1 and #8f8f8f below it,
+ * the primary button turned white-on-black, and one blue for what you act on.
+ * Set from `lib/appearance.js` as `data-theme` on <html>; nothing here reads
+ * the OS directly, so "System" and an explicit choice go through one path.
+ *
+ * These are the static values -- what dark looks like with the accent off.
+ * With an accent on, `theme.js` draws the same tokens from a dark ladder and
+ * writes them inline, exactly as it does for light. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --shell: #000000;
+  --menu: #0a0a0a;
+  --menu-well: #111111;
+  --ground: #0a0a0a;
+  --rail: #0a0a0a;
+  --surface: #111111;
+  --sidebar: #0a0a0a;
+
+  --sheet: #000000;
+  --sheet-surface: #0a0a0a;
+  --sheet-rail: #0a0a0a;
+
+  --ink: #ededed;
+  --ink-light: #0a0a0a;
+  --on-ink: #0a0a0a;
+  --ink-hover: #cccccc;
+  --grid-line: #111111;
+
+  /* Vercel's blue: #52a8ff to read on black, #0070f3 to fill under white. */
+  --accent: #52a8ff;
+  --accent-hover: #7cbdff;
+  --accent-fill: #0070f3;
+  --accent-soft: #3b8ef0;
+  --accent-field: #0a1a2e;
+  --accent-wash: #0b1522;
+  --on-accent: #ffffff;
+
+  --green: #45c46d;
+  --green-field: #0c2415;
+  --green-wash: #0c1f13;
+  --ochre: #f5a524;
+  --ochre-field: #2a1d06;
+  --danger: #ff6166;
+  --danger-fill: #e5484d;
+  --danger-fill-hover: #f06a6e;
+  --quiet-mark: #2f3632;
+
+  --line: #262626;
+  --line-soft: #1f1f1f;
+  --line-firm: #2e2e2e;
+  --line-strong: #454545;
+
+  --text-dim: #a1a1a1;
+  --text-faint: #8f8f8f;
+
+  --ink-rgb: 237, 237, 237;
+  --shadow-rgb: 0, 0, 0;
+
+  /* Vercel rounds its buttons, inputs and cards at 6px, not 3. */
+  --r-card: 6px;
+  --r-control: 8px;
+
+  /* On black a shadow barely shows, so what floats is ringed instead: the
+     1px white-at-10% edge Vercel puts round its menus, with a deep drop
+     under it for the depth. */
+  --elevation-float:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 16px 32px -12px rgba(0, 0, 0, 0.9);
+  --glow-accent:
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* The glows behind a page head are pastel swatches drawn for a white sheet.
+   On black they would be lamps; turned down, they are the soft colour Vercel
+   lets bleed from behind a dark header. */
+:root[data-theme="dark"] .page-head .sw,
+:root[data-theme="dark"] .gate-card .sw { opacity: 0.07; }
+/* The gate stands on the page itself in dark, not on a tinted field: black
+   behind, the card a step up, one hairline round it. */
+:root[data-theme="dark"] .gate { background: var(--shell); }
+/* A header on black is set off by a hairline, the way Vercel closes its own,
+   rather than by the fill doing all of the work. */
+:root[data-theme="dark"] .page-head { box-shadow: inset 0 -1px 0 var(--line); }
+:root[data-theme="dark"] .sources .stack i { background: var(--accent-field); }
+:root[data-theme="dark"] .sources .stack i + i { background: var(--green-field); }
+
+/* Switching modes is a cut: see applyAppearance. */
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after {
+  transition: none !important;
+}
+
+/* Selected text: the blue, not the OS's default grey-on-grey. */
+:root[data-theme="dark"] ::selection {
+  background: color-mix(in srgb, var(--accent-fill) 55%, transparent);
+  color: #ffffff;
 }
 
 /* The ambient field: three soft discs of colour low and wide behind the sheet,
@@ -4831,7 +5007,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   transition: background 0.14s ease, color 0.14s ease;
 }
 .navrail[data-open] .navrail-fold { display: grid; }
-.navrail-fold:hover { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+.navrail-fold:hover { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
 .navrail-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .navrail-fold svg {
   width: 15px;
@@ -4852,7 +5028,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .navrail-new.navrail-link:hover { color: var(--ink); }
 .navrail-new.navrail-link[aria-current="page"] {
   color: var(--ink);
-  background: rgba(20, 23, 29, 0.07);
+  background: rgba(var(--ink-rgb), 0.07);
 }
 
 .navrail-session {
@@ -5038,7 +5214,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   border-radius: 7px;
   padding: 8px 10px;
 }
-.canvas-new-menu .canvas-kind-choice:hover { background: rgba(20, 23, 29, 0.06); }
+.canvas-new-menu .canvas-kind-choice:hover { background: rgba(var(--ink-rgb), 0.06); }
 .canvas-kind-choices {
   display: flex;
   flex-wrap: wrap;
@@ -5156,7 +5332,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   padding: 0 8px; border: 0; border-left: 1px solid rgba(255,255,255,.25);
   border-radius: 0 var(--r-card) var(--r-card) 0; background: var(--ink); color: var(--ground) !important; cursor: pointer;
 }
-.wf-export .wf-export-more:hover { background: #2c313c; }
+.wf-export .wf-export-more:hover { background: var(--ink-hover); }
 .wf-export :disabled { opacity: .5; cursor: default; }
 
 .wf-menu-anchor { position: relative; display: inline-flex; }
@@ -5171,7 +5347,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: none; border-radius: 7px;
   background: none; text-align: left; cursor: pointer; white-space: nowrap; font: 400 var(--t-sm)/1 var(--font);
 }
-.wf-menu button:hover { background: rgba(20, 23, 29, 0.06); }
+.wf-menu button:hover { background: rgba(var(--ink-rgb), 0.06); }
 .wf-menu button > :is(svg, .icon-mask) { width: 15px; height: 15px; flex: none; opacity: .8; }
 .wf-menu button[data-default]::after { content: "default"; margin-left: auto; padding-left: 14px; font: 500 var(--t-micro) var(--font-mono); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--text-faint); }
 .wf-menu-label { padding: 8px 10px 4px; }
@@ -5214,7 +5390,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--text-faint); font-size: 10px; opacity: 0; cursor: pointer;
 }
 .wf-tree-row:hover .wf-tree-toggle, .wf-tree-toggle[data-on] { opacity: 1; }
-.wf-tree-toggle:hover { background: rgba(20, 23, 29, 0.06); }
+.wf-tree-toggle:hover { background: rgba(var(--ink-rgb), 0.06); }
 
 .wf-section { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line-soft); }
 .wf-section .canvas-modes { align-self: flex-start; flex-wrap: wrap; max-width: 100%; }
@@ -5252,7 +5428,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 }
 .wf-color-text:focus { border-color: var(--accent); background: var(--ground); }
 .wf-x { width: 22px; height: 22px; border: none; background: none; border-radius: var(--r-card); color: var(--text-faint); cursor: pointer; }
-.wf-x:hover { background: rgba(20, 23, 29, 0.06); }
+.wf-x:hover { background: rgba(var(--ink-rgb), 0.06); }
 .wf-align { display: flex; flex-wrap: wrap; gap: 2px; }
 .wf-actions { flex-direction: row; flex-wrap: wrap; gap: 4px; }
 .wf-actions .deck-tool { border: 1px solid var(--line); }
@@ -5349,7 +5525,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--text-dim);
   white-space: nowrap;
 }
-.deck-tool:hover:not(:disabled) { background: rgba(20, 23, 29, 0.06); color: var(--ink); }
+.deck-tool:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.06); color: var(--ink); }
 .deck-tool:disabled { opacity: 0.35; cursor: default; }
 .deck-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -5399,7 +5575,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
-.deck-present-btn:hover { background: #2c313c; }
+.deck-present-btn:hover { background: var(--ink-hover); }
 
 .deck-stage {
   flex: none;
@@ -5408,7 +5584,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .deck-stage .deck-frame {
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(20, 23, 29, 0.08), 0 14px 34px -18px rgba(20, 23, 29, 0.45);
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.08), 0 14px 34px -18px rgba(var(--shadow-rgb), 0.45);
 }
 
 .deck-notes {
@@ -5504,7 +5680,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   min-width: 46px;
   padding: 6px 8px;
   border-radius: 7px;
-  background: rgba(20, 23, 29, 0.05);
+  background: rgba(var(--ink-rgb), 0.05);
   text-align: center;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -5583,7 +5759,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
 .sheet-cell { cursor: cell; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .sheet-cell[data-num] { text-align: right !important; }
-.sheet-cell[data-error] { color: #c2412d; font-family: var(--font-mono); font-size: 11.5px; }
+.sheet-cell[data-error] { color: var(--danger); font-family: var(--font-mono); font-size: 11.5px; }
 .sheet-cell[data-sel] {
   box-shadow: inset 0 0 0 2px var(--d-accent);
   background: color-mix(in srgb, var(--d-accent) 6%, var(--d-bg));
@@ -5643,7 +5819,7 @@ tr[data-total] .sheet-cell {
 
 /* -- choosing a slide's picture ------------------------------------------------ */
 .deck-picture-btn { border-color: var(--line); margin-left: 6px; }
-.deck-picture-btn[data-on] { background: rgba(20, 23, 29, 0.07); color: var(--ink); }
+.deck-picture-btn[data-on] { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
 .deck-picker {
   flex: none;
   display: flex;
@@ -5680,7 +5856,7 @@ tr[data-total] .sheet-cell {
 }
 .deck-picker-upload:hover:not(:disabled) { border-color: var(--accent); }
 .deck-picker-note { margin: 0; font: 400 var(--t-sm)/1.45 var(--font); color: var(--text-dim); }
-.deck-picker-note[data-error] { color: #a2452f; }
+.deck-picker-note[data-error] { color: var(--danger); }
 .deck-picker-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .deck-picker-alt {
   flex: 1 1 160px;
@@ -5741,5 +5917,5 @@ tr[data-total] .sheet-cell {
 .network-found code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The Make menu's outcome in an answer's margin. */
-.margin p[data-pin="missed"], .margin p[data-pin="off"] { color: #a2452f; }
+.margin p[data-pin="missed"], .margin p[data-pin="off"] { color: var(--danger); }
 .margin p[data-pin="done"] { color: var(--green); }

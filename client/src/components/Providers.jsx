@@ -53,7 +53,7 @@ export function Providers({ models, provider, onProvider, serving }) {
           <div className="corpus-top">
             <i
               style={{
-                background: entry.healthy ? "var(--green)" : "rgba(20,23,29,.18)",
+                background: entry.healthy ? "var(--green)" : "rgba(var(--ink-rgb), 0.18)",
               }}
             />
             <span>{LABELS[entry.id]?.name || entry.name}</span>

@@ -127,13 +127,30 @@ export function contrast(a, b) {
  *
  * Falls through to near-black if even that will not clear the ratio, which
  * only happens when `against` is itself mid-grey.
+ *
+ * On a dark ground the search runs the other way -- upwards from `start`, the
+ * darkest colour that still clears -- because text on black gains contrast by
+ * getting lighter, and searching down would walk straight into the ground.
  */
 export function readable(hue, chroma, against, ratio = 4.5, start = 0.62) {
+  if (isDark(against)) {
+    for (let L = start; L < 0.99; L += 0.02) {
+      const candidate = oklch(L, chroma, hue);
+      if (contrast(candidate, against) >= ratio) return candidate;
+    }
+    return oklch(0.97, chroma * 0.3, hue);
+  }
   for (let L = start; L > 0.1; L -= 0.02) {
     const candidate = oklch(L, chroma, hue);
     if (contrast(candidate, against) >= ratio) return candidate;
   }
   return oklch(0.12, chroma * 0.5, hue);
+}
+
+/** Whether a `#rrggbb` ground is dark enough that text on it should be light.
+ *  0.18 is where black and white text reach the same contrast on it. */
+export function isDark(hex) {
+  return luminance(hex) < 0.18;
 }
 
 /**

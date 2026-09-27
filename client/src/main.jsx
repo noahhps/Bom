@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import App from "./App";
 import { DialogProvider } from "./components/Dialog";
+import { applyAppearance, resolveAppearance, storedAppearance } from "./lib/appearance";
 import "./styles.css";
 
 /* Mark the document when we are inside the desktop shell.
@@ -24,6 +25,10 @@ if (
 ) {
   document.documentElement.setAttribute("data-shell", "tauri");
 }
+
+// Light or dark, before the first paint for the same reason: a dark launch
+// that renders white for a frame is a flash in the face at night.
+applyAppearance(resolveAppearance(storedAppearance()));
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

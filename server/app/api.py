@@ -331,6 +331,11 @@ class SessionDesign(BaseModel):
     design: str | None = Field(default=None, max_length=120)
 
 
+class CanvasCopy(BaseModel):
+    # The conversation the copy goes into.
+    session_id: str = Field(min_length=1, max_length=80)
+
+
 class SessionAgent(BaseModel):
     # None runs the conversation as the default assistant. Explicitly nullable,
     # like SessionProject, so "unassign" is something the client can say.
@@ -629,6 +634,22 @@ def build_router(
             language=body.language,
         )
         return canvas.to_dict()
+
+    # Every conversation's canvases, without content: the panel's "Open from
+    # another conversation" list.
+    @router.get("/canvases")
+    def all_canvases() -> dict:
+        return {"canvases": store.all_canvases()}
+
+    @router.post("/canvases/{canvas_id}/copy")
+    def copy_canvas(canvas_id: str, body: CanvasCopy) -> dict:
+        session_id = body.session_id
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        copy = store.copy_canvas(canvas_id, session_id)
+        if copy is None:
+            raise HTTPException(404, "no such canvas")
+        return copy.to_dict()
 
     @router.patch("/canvases/{canvas_id}")
     def update_canvas(canvas_id: str, body: CanvasPatch) -> dict:

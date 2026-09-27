@@ -376,6 +376,13 @@ class ReadCanvas(Skill):
             loaded = sheets.load(canvas.content)
             if loaded is not None:
                 body = sheets.as_text(loaded)
+        elif canvas.kind == "wireframe":
+            from .wireframe import outline as wireframe_outline
+
+            try:
+                body = wireframe_outline(json.loads(canvas.content or "{}"))
+            except (ValueError, AttributeError, KeyError):
+                pass
         elif canvas.kind == decks.KIND:
             try:
                 body = decks.outline(json.loads(canvas.content or "{}"))
@@ -388,3 +395,68 @@ class ReadCanvas(Skill):
                 "and the whole of it is in the panel."
             )
         return f"{header}\n{body}"
+
+
+class OpenCanvas(Skill):
+    """Put a canvas in front of the user -- this conversation's, or a copy of
+    one from another conversation."""
+
+    surfaces = "canvas"
+    wants_session = True
+
+    def __init__(self, store: Store) -> None:
+        super().__init__(
+            name="open_canvas",
+            description=(
+                "Open a canvas in the side panel for the user: a document, deck, "
+                "sheet, page or wireframe. Use it to show them something you are "
+                "about to discuss or change, or to bring back work from another "
+                "conversation -- a canvas found elsewhere is copied into this one "
+                "(with its pictures) so it can be edited here. Call with no title "
+                "to list the canvases in every conversation."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The canvas to open."},
+                },
+            },
+        )
+        self.store = store
+
+    async def use(self, session: str, title=None, **extra) -> str:
+        name = plain_text(title or extra.get("name"))
+        if not name:
+            everything = self.store.all_canvases(limit=40)
+            if not everything:
+                return "There are no canvases in any conversation yet."
+            lines = [
+                f"- {c['title']} ({c['kind']}) in "
+                + ("this conversation" if c["session_id"] == session
+                   else f"\"{c['session_title'] or 'Untitled'}\"")
+                for c in everything
+            ]
+            return "Canvases, newest first:\n" + "\n".join(lines)
+        here = self.store.find_canvas_by_title(session, name)
+        if here is not None:
+            self.store.touch_canvas(here.id)
+            return f"Opened {here.title!r} ({here.kind}) in the canvas panel."
+        lowered = name.lower()
+        match = next(
+            (c for c in self.store.all_canvases(limit=500) if c["title"].lower() == lowered),
+            None,
+        ) or next(
+            (c for c in self.store.all_canvases(limit=500) if lowered in c["title"].lower()),
+            None,
+        )
+        if match is None:
+            return (
+                f"There is no canvas called {name!r} in any conversation. Call "
+                "open_canvas with no title to see what there is."
+            )
+        copy = self.store.copy_canvas(match["id"], session)
+        return (
+            f"Opened a copy of {match['title']!r} ({match['kind']}) from the conversation "
+            f"\"{match['session_title'] or 'Untitled'}\" as {copy.title!r} in this "
+            "conversation's canvas panel. Edits here do not change the original."
+        )

@@ -49,6 +49,7 @@ LAYOUTS = (
     "closing",     # title, subtitle -- the ending
     "photo",       # image full-bleed, kicker/title/subtitle over it
     "split",       # image on one side, title and bullets/body on the other
+    "board",       # a wireframe frame, drawn from its layers -- see wireframe.py
 )
 
 #: How an image may be fitted into its frame.
@@ -239,6 +240,18 @@ def normalize_slide(raw, index: int) -> dict | None:
                 cells = row if isinstance(row, list) else _as_list(row)
             rows.append([plain_text(c) for c in cells][: len(columns)])
         slide["rows"] = rows
+
+    board = as_dict(raw.get("board")) if not isinstance(raw.get("board"), dict) else raw.get("board")
+    if slide["layout"] == "board" or board:
+        from .wireframe import normalize_wireframe  # local: wireframe imports slides
+
+        frame = (board or {}).get("frame") or board
+        cleaned = normalize_wireframe([frame], (board or {}).get("fidelity")) if frame else None
+        if cleaned and cleaned["frames"]:
+            slide["layout"] = "board"
+            slide["board"] = {"fidelity": cleaned["fidelity"], "frame": cleaned["frames"][0]}
+        elif slide["layout"] == "board":
+            slide["layout"] = "content"
 
     picture = _image_ref(raw.get("image") or raw.get("photo") or raw.get("picture"))
     if picture:

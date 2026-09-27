@@ -49,6 +49,11 @@ layout: write_canvas with kind "html" and one complete, self-contained HTML \
 document
 - a report, brief, proposal or long read: write_canvas with kind "markdown", or \
 "html" when its look matters as much as its words
+- screens, an app flow, a site structure, a UI mockup: write_wireframe -- one \
+frame per screen, prototype links between them -- and wireframe_to_slides when \
+they want it presented
+- to show the user something you already made, or bring back work from another \
+conversation: open_canvas
 
 3. Style to the standard. For write_slides and write_sheet, put the standard's \
 colours and type into `theme` (background, surface, text, muted, accent, line, \

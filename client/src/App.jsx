@@ -646,6 +646,7 @@ export default function App() {
             onClose={canvas.closePanel}
             onSave={canvas.save}
             onCreate={canvas.create}
+            onImport={canvas.importCanvas}
             onDelete={canvas.remove}
             fallbackTheme={lookTokens}
             resizable={canvasSize.enabled}

@@ -321,6 +321,15 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
     deleteCanvas: (id) =>
       request("/canvases/" + encodeURIComponent(id), { method: "DELETE" }),
+    // Every canvas in every conversation, without content -- the list "open
+    // from another conversation" chooses from -- and a copy of one into this
+    // conversation, pictures and all.
+    listAllCanvases: () => json("/canvases"),
+    copyCanvas: (id, sessionId) =>
+      json("/canvases/" + encodeURIComponent(id) + "/copy", {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId }),
+      }),
     // -- images ----------------------------------------------------------
     // A conversation's own pictures, cleaned by the server on the way in and
     // referenced by id from decks and pages. Blobs rather than URLs for the

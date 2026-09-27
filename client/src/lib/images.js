@@ -53,6 +53,9 @@ export function deckImageIds(deck) {
   const ids = new Set();
   for (const slide of deck?.slides || []) {
     if (slide.image?.id) ids.add(slide.image.id);
+    for (const layer of slide.board?.frame?.layers || []) {
+      if (IMAGE_ID.test(layer?.image || "")) ids.add(layer.image);
+    }
   }
   return [...ids];
 }

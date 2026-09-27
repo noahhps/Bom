@@ -41,6 +41,8 @@ const PATHS = {
   image: "M4.5 5h15v14h-15zM4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5M15 9.2a1.2 1.2 0 100 .01",
   // A screen on a stand: the deck.
   slides: "M3.5 5h17M5 5v10h14V5M12 15v4M8.5 19h7M8.5 9.5h7M8.5 12h4",
+  // A phone-sized frame with a header bar and blocks: a wireframe screen.
+  wireframe: "M7 3h10a1 1 0 011 1v16a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1zM6 7h12M9 10h6M9 13h6v4H9z",
   // Two figures, one behind the other: a team of agents rather than the single
   // person the `memory` file glyph draws. One full person, one half-seen past
   // its shoulder, so it reads as "more than one" at rail size.

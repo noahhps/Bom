@@ -7,12 +7,14 @@ import { renderMarkdown } from "../lib/markdown";
 import {
   IMAGE_LAYOUTS,
   LAYOUTS,
+  MADE_LAYOUTS,
   SLIDE_CSS,
   deckDocument,
   resolveTheme,
   svgSource,
   themeVars,
 } from "../lib/slides";
+import { cleanFrame, palette, renderFrame } from "../lib/wireframe";
 
 /* The slide stylesheet, installed once. It is a string rather than rules in
    styles.css so that an exported deck carries exactly the same CSS -- see
@@ -38,7 +40,29 @@ const LAYOUT_NAMES = {
   closing: "Closing",
   photo: "Full-bleed photo",
   split: "Photo beside text",
+  board: "Wireframe screen",
 };
+
+/* A wireframe frame drawn on a slide. The frame keeps its own pixel size and
+   an SVG viewBox scales it into whatever room the slide has, so the markup is
+   the editor's and the exported page's, unchanged. `wire` is the deck's theme
+   and the conversation's standard, which a styled frame is drawn in. */
+function Board({ board, wire, images }) {
+  const frame = useMemo(() => cleanFrame(board.frame), [board.frame]);
+  const html = useMemo(
+    () => renderFrame(frame, palette({ fidelity: board.fidelity, theme: wire?.theme }, wire?.fallback), images),
+    [frame, board.fidelity, wire?.theme, wire?.fallback, images],
+  );
+  return (
+    <div className="deck-board">
+      <svg viewBox={`0 0 ${frame.w} ${frame.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={frame.name}>
+        <foreignObject className="deck-board-frame" x="0" y="0" width={frame.w} height={frame.h}>
+          <div style={{ width: frame.w, height: frame.h }} dangerouslySetInnerHTML={{ __html: html }} />
+        </foreignObject>
+      </svg>
+    </div>
+  );
+}
 
 /**
  * A line of text on a slide that the reader can click and retype.
@@ -95,7 +119,7 @@ const looksNumeric = (text) => /^[-+]?[$€£¥]?\d[\d,.]*%?$/.test(String(text)
  * One slide, drawn from its data. Exported for the HTML export, which renders
  * these to static markup.
  */
-export function Slide({ slide, number, total, edit = false, onEdit, images = {} }) {
+export function Slide({ slide, number, total, edit = false, onEdit, images = {}, wire = null }) {
   const put = (field) => (text) => onEdit?.({ ...slide, [field]: text });
   const text = (field, props = {}) => (
     <Text
@@ -284,6 +308,14 @@ export function Slide({ slide, number, total, edit = false, onEdit, images = {} 
               ))}
             </tbody>
           </table>
+        </>
+      );
+      break;
+    case "board":
+      body = (
+        <>
+          {heading()}
+          {slide.board ? <Board board={slide.board} wire={wire} images={images} /> : null}
         </>
       );
       break;
@@ -527,7 +559,7 @@ function ImagePicker({ sessionId, layout, value, onChange, onClose }) {
 }
 
 /** Full screen, one slide at a time. Arrows, space and a click move; Esc ends. */
-function Presenter({ deck, start, style, images, onClose }) {
+function Presenter({ deck, start, style, images, onClose, wire }) {
   const [at, setAt] = useState(start);
   const node = useRef(null);
   const total = deck.slides.length;
@@ -570,7 +602,7 @@ function Presenter({ deck, start, style, images, onClose }) {
     >
       <div className="deck-present-stage">
         <div className="deck-frame">
-          <Slide slide={deck.slides[at]} number={at + 1} total={total} images={images} />
+          <Slide slide={deck.slides[at]} number={at + 1} total={total} images={images} wire={wire} />
         </div>
       </div>
       <div className="deck-present-count mi">
@@ -587,12 +619,13 @@ export async function exportDeck(deck, fallbackTheme, title, api) {
   // Pictures go inside the file, so the deck stands on its own anywhere.
   const images = api ? await resolveAll(deckImageIds(deck), (id) => imageData(api, id)) : {};
   const style = themeVars(resolveTheme(deck.theme, fallbackTheme));
+  const wire = { theme: deck.theme, fallback: fallbackTheme };
   const total = deck.slides.length;
   const frames = deck.slides
     .map((slide, i) =>
       renderToStaticMarkup(
         <div className="deck-frame" style={style}>
-          <Slide slide={slide} number={i + 1} total={total} images={images} />
+          <Slide slide={slide} number={i + 1} total={total} images={images} wire={wire} />
         </div>,
       ),
     )
@@ -622,6 +655,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
     () => themeVars(resolveTheme(deck.theme, fallbackTheme)),
     [deck.theme, fallbackTheme],
   );
+  const wire = useMemo(() => ({ theme: deck.theme, fallback: fallbackTheme }), [deck.theme, fallbackTheme]);
 
   // Keep the current thumbnail in view as the reader pages through.
   useEffect(() => {
@@ -695,7 +729,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
           value={slide.layout}
           onChange={(event) => replace(current, relayout(slide, event.target.value))}
         >
-          {LAYOUTS.map((l) => (
+          {LAYOUTS.filter((l) => !MADE_LAYOUTS.has(l) || l === slide.layout).map((l) => (
             <option key={l} value={l}>{LAYOUT_NAMES[l]}</option>
           ))}
         </select>
@@ -748,6 +782,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
             edit
             onEdit={(next) => replace(current, next)}
             images={images}
+            wire={wire}
           />
         </div>
       </div>
@@ -784,7 +819,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
             }}
           >
             <div className="deck-frame" aria-hidden="true">
-              <Slide slide={s} number={i + 1} total={total} images={images} />
+              <Slide slide={s} number={i + 1} total={total} images={images} wire={wire} />
             </div>
           </div>
         ))}
@@ -798,7 +833,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
             }}
           >
             <option value="">+ Slide</option>
-            {LAYOUTS.map((l) => (
+            {LAYOUTS.filter((l) => !MADE_LAYOUTS.has(l)).map((l) => (
               <option key={l} value={l}>{LAYOUT_NAMES[l]}</option>
             ))}
           </select>
@@ -806,7 +841,7 @@ export function DeckView({ deck, fallbackTheme, onChange, sessionId = null }) {
       </div>
 
       {presenting ? (
-        <Presenter deck={deck} start={current} style={style} images={images} onClose={closePresenter} />
+        <Presenter deck={deck} start={current} style={style} images={images} onClose={closePresenter} wire={wire} />
       ) : null}
     </div>
   );

@@ -85,6 +85,9 @@ const SOURCES = {
   write_slides: { source: "Slides", icon: "slides" },
   write_sheet: { source: "Sheet", icon: "sheet" },
   edit_sheet: { source: "Sheet", icon: "sheet" },
+  write_wireframe: { source: "Wireframe", icon: "wireframe" },
+  wireframe_to_slides: { source: "Wireframe", icon: "slides" },
+  open_canvas: { source: "Canvas", icon: "document" },
   ask_for_design: { source: "Design", icon: "design" },
   list_images: { source: "Images", icon: "image" },
   generate_image: { source: "Images", icon: "image" },
@@ -112,6 +115,9 @@ const TITLE_KEYS = {
   write_slides: ["title"],
   write_sheet: ["title"],
   edit_sheet: ["title"],
+  write_wireframe: ["title"],
+  wireframe_to_slides: ["title"],
+  open_canvas: ["title"],
   ask_for_design: ["name"],
   run_python: ["code"],
   run_shell: ["command"],
@@ -160,6 +166,9 @@ export function describeSkill(skill) {
   if (name === "write_slides" && Array.isArray(args.slides)) {
     rows.push({ label: "Slides", value: String(args.slides.length) });
   }
+  if (name === "write_wireframe" && Array.isArray(args.frames)) {
+    rows.push({ label: "Screens", value: String(args.frames.length) });
+  }
   if (name === "write_sheet" && Array.isArray(args.columns)) {
     const count = Array.isArray(args.rows) ? args.rows.length : 0;
     rows.push({ label: "Size", value: `${args.columns.length} × ${count}` });
@@ -203,6 +212,9 @@ const DOING = {
   write_slides: "Building slides",
   write_sheet: "Building sheet",
   edit_sheet: "Editing sheet",
+  write_wireframe: "Wireframing",
+  wireframe_to_slides: "Building slides",
+  open_canvas: "Opening canvas",
   ask_for_design: "Choosing a look",
   list_images: "Finding images",
   generate_image: "Drawing image",

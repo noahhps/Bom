@@ -19,6 +19,49 @@ DESIGN = "design"
 MODES = (CHAT, DESIGN)
 
 
+#: What the composer's "Make" menu can pin a turn to: the tool that makes it,
+#: the tools that stay available alongside it, and how the choice is said to
+#: the model. "auto" (or nothing) leaves the model to choose.
+MAKE = {
+    "wireframe": {"label": "Wireframe", "tool": "write_wireframe", "keep": {"read_canvas", "open_canvas"}},
+    "slides": {"label": "Presentation", "tool": "write_slides", "keep": {"wireframe_to_slides", "read_canvas", "open_canvas"}},
+    "sheet": {"label": "Sheet", "tool": "write_sheet", "keep": {"edit_sheet", "read_canvas", "open_canvas"}},
+    "page": {"label": "Web page", "tool": "write_canvas", "kind": "html", "keep": {"read_canvas", "open_canvas"}},
+    "document": {"label": "Document", "tool": "write_canvas", "kind": "markdown", "keep": {"read_canvas", "open_canvas"}},
+    "image": {"label": "Image", "tool": "generate_image", "keep": set()},
+}
+
+#: The tools that make a whole piece of work. Pinning one takes the others
+#: away for that turn; everything else (search, memory, images) is untouched.
+CREATORS = {
+    "write_wireframe", "wireframe_to_slides", "write_slides", "write_sheet",
+    "edit_sheet", "write_canvas", "generate_image", "open_canvas",
+}
+
+
+def pinned(make: str | None) -> dict | None:
+    """The composer's choice, or None for "let the model choose"."""
+    return MAKE.get((make or "").strip().lower())
+
+
+def blocked_by(choice: dict) -> set[str]:
+    """The creation tools a pinned turn may not use."""
+    return CREATORS - {choice["tool"]} - choice["keep"]
+
+
+def pin_instruction(choice: dict) -> str:
+    """What the model is told about the pin, appended to the system prompt."""
+    kind = f' with kind "{choice["kind"]}"' if choice.get("kind") else ""
+    return (
+        f"For this message the user chose **{choice['label']}** in the composer's "
+        f"Make menu. Make what they ask for as a {choice['label'].lower()}, using "
+        f"{choice['tool']}{kind}. Do not use another tool to make a different kind "
+        "of document this turn. If the request reads like a different format, "
+        f"still make it as a {choice['label'].lower()} -- the user picked it on "
+        "purpose -- and mention in one line that other formats are in the menu."
+    )
+
+
 def normalize(mode: str | None) -> str:
     """A mode that can be stored. Anything unknown is an ordinary chat."""
     return DESIGN if (mode or "").strip().lower() == DESIGN else CHAT
@@ -40,7 +83,15 @@ prose -- the chooser is the question. Only ask in words about what is genuinely 
 missing (audience, length, the numbers themselves), and when a sensible default \
 exists, use it and say so rather than asking.
 
-2. Use the right tool for the format:
+2. Start from a wireframe. In a design conversation a new product, app, site, \
+screen or flow begins as write_wireframe: frames for the screens, prototype \
+links between them. Presentations, sheets and documents are made from it \
+afterwards -- wireframe_to_slides first, since presenting the screens is the \
+usual next step -- or straight away when the user asks for that format by name. \
+If a message says the user chose a format in the composer's Make menu, that \
+choice wins over this default.
+
+Use the right tool for the format:
 - a presentation, pitch, talk, lesson or walkthrough: write_slides
 - numbers, a budget, a tracker, a schedule, a comparison, anything with totals: \
 write_sheet, and edit_sheet for small changes to one that exists

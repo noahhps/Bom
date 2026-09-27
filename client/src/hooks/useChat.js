@@ -134,7 +134,7 @@ export function useChat(
   // -- the turn -------------------------------------------------------------
 
   const send = useCallback(
-    async (text, files = [], thinkingLevel = null) => {
+    async (text, files = [], thinkingLevel = null, make = null) => {
       if (streaming || (!text.trim() && !files.length)) return;
       setStreaming(true);
 
@@ -188,7 +188,8 @@ export function useChat(
           controller.signal,
           // Likewise what a new conversation is started as: a design chat,
           // and the look picked on its empty screen before anything was sent.
-          sessionId ? {} : { mode, design },
+          // And, every message, what the Make menu pinned it to.
+          { ...(sessionId ? {} : { mode, design }), make: make && make !== "auto" ? make : null },
         );
 
         for await (const { event, data } of readEvents(response)) {

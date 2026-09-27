@@ -39,7 +39,7 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
-from .design_mode import DESIGN, DESIGN_PREAMBLE
+from .design_mode import DESIGN, DESIGN_PREAMBLE, blocked_by, pin_instruction, pinned
 from .design_presets import tokens_for
 from .skills.design import (
     NO_DESIGN,
@@ -122,7 +122,9 @@ class Orchestrator:
         self.choices = Choices()
         self._session_grants: dict[str, set[str]] = {}
 
-    def _skill_schemas(self, allowed: set[str] | None = None) -> list[dict] | None:
+    def _skill_schemas(
+        self, allowed: set[str] | None = None, blocked: set[str] = frozenset()
+    ) -> list[dict] | None:
         """What the model is told it can call, or None when it can call nothing.
 
         `enabled()` rather than `all()`: a skill switched off is still listed on
@@ -141,7 +143,7 @@ class Orchestrator:
         schemas = [
             skill.schema()
             for name, skill in self.registry.enabled()
-            if allowed is None or name in allowed
+            if (allowed is None or name in allowed) and name not in blocked
         ]
         return schemas or None
 
@@ -386,6 +388,7 @@ class Orchestrator:
         attached: list[files.IncomingFile] | None = None,
         think: ThinkingLevel | None = None,
         prefer: str | None = None,
+        make: str | None = None,
     ) -> AsyncIterator[str]:
         """Yield SSE frames for one turn.
 
@@ -408,6 +411,17 @@ class Orchestrator:
         # Bytes, not just names: this is the one call that needs them.
         stored_files = self.store.attachments_for_session(session_id, with_data=True)
         system, fact_ids = self.build_system_prompt(session_id)
+        # The composer's Make menu: a pinned format is said to the model and
+        # the other ways of making a document are taken away for this turn.
+        # Only when the pinned tool is actually offered -- a pin to a skill that
+        # is switched off would be an instruction the model cannot follow.
+        choice = pinned(make)
+        blocked: set[str] = set()
+        if choice and self.registry is not None:
+            offered = {name for name, _ in self.registry.enabled()}
+            if choice["tool"] in offered:
+                blocked = blocked_by(choice)
+                system = f"{system}\n\n{pin_instruction(choice)}"
         window = self.build_window(history, stored_files, system=system)
         # One batched update, not one statement per fact per turn. This is what
         # "12 answers" under a fact on the memory page is counting, and what
@@ -453,7 +467,7 @@ class Orchestrator:
                 if agent and agent.parsed_skills() is not None
                 else None
             )
-            tools = self._skill_schemas(allowed_skills)
+            tools = self._skill_schemas(allowed_skills, blocked)
             max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)
 
             # One pass per round. A round ends when the model stops; if it
@@ -561,9 +575,14 @@ class Orchestrator:
                     # it is always-registered like recall. Refuse it before the
                     # approval prompt so a restricted agent cannot reach past its
                     # set, and tell the model plainly rather than silently.
-                    if allowed_skills is not None and call.name not in allowed_skills:
+                    refused = allowed_skills is not None and call.name not in allowed_skills
+                    if refused or call.name in blocked:
                         result = (
-                            f"{call.name} is not one of this agent's skills, so it "
+                            f"{call.name} did not run: the user chose "
+                            f"{choice['label']} in the Make menu for this message. "
+                            f"Use {choice['tool']} instead."
+                            if not refused
+                            else f"{call.name} is not one of this agent's skills, so it "
                             "did not run. Answer without it."
                         )
                         record["result"] = result

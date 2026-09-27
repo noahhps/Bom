@@ -20,7 +20,9 @@ import {
   renderFrame,
   serializeWireframe,
   toDeck,
+  toDocument,
   toHtmlCss,
+  toSheet,
   wireframeImageIds,
 } from "../src/lib/wireframe.js";
 import { parseDeck } from "../src/lib/slides.js";
@@ -128,6 +130,36 @@ test("image ids are collected from frames and from board slides", () => {
   assert.deepEqual(deckImageIds(deck), ["img_abc"]);
   // A board without a frame is not a board.
   assert.equal(parseDeck('{"slides":[{"layout":"board","title":"x"}]}').slides[0].layout, "bullets");
+});
+
+test("a sheet inventory: one row per visible element, in reading order", () => {
+  const sheet = toSheet(doc);
+  assert.deepEqual(sheet.columns.slice(0, 5), ["Screen", "Order", "Element", "Content", "Goes to"]);
+  assert.equal(sheet.columns.length, sheet.formats.length);
+  const rows = sheet.rows.filter((r) => r[0] === "Sign in");
+  assert.equal(rows.length, 4); // the hidden rect is left out
+  assert.deepEqual(rows.map((r) => r[2]), ["Heading", "Input", "Image", "Button (primary)"]);
+  assert.equal(rows.find((r) => r[3] === "Continue")[4], "Home");
+  assert.ok(sheet.rows.every((r) => r.length === sheet.columns.length));
+});
+
+test("a document spec: screens, elements, links and the flow", () => {
+  const text = toDocument(doc, "Onboarding");
+  assert.ok(text.startsWith("# Onboarding\n"));
+  assert.ok(text.includes("## 1. Sign in"));
+  assert.ok(text.includes("leads to Home"));
+  assert.ok(text.includes("- **Button (primary)** — Continue → Home"));
+  assert.ok(text.includes("## Flow") && text.includes("- Sign in → Home (Continue)"));
+  // Markdown in the content is escaped, so it reads as the text it was.
+  assert.ok(text.includes("\\<b\\>Hi\\</b\\>"));
+  assert.ok(text.includes("_Empty screen._"));
+});
+
+test("the wireframe kit is Bom's: slate, cobalt and the monospace", () => {
+  const kit = palette({ fidelity: "wireframe" });
+  assert.equal(kit.accent, "#1F4FD8");
+  assert.equal(kit.text, "#0F172A");
+  assert.ok(kit.body.includes("DM Mono"));
 });
 
 const dir = mkdtempSync(join(tmpdir(), "wf-"));

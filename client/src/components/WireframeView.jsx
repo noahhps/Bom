@@ -5,7 +5,9 @@ import { useImageUrls, useSessionImages } from "../hooks/useImages";
 import { useApi } from "../lib/api-context";
 import { fileStem, saveFile } from "../lib/files";
 import { imageData, resolveAll } from "../lib/images";
+import { serializeSheet } from "../lib/sheet";
 import { serializeDeck } from "../lib/slides";
+import { Icon } from "./Icon";
 import {
   FRAME_PRESETS,
   buildPdf,
@@ -18,7 +20,9 @@ import {
   palette,
   renderFrame,
   toDeck,
+  toDocument,
   toHtmlCss,
+  toSheet,
   wireframeImageIds,
 } from "../lib/wireframe";
 
@@ -924,6 +928,20 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
         content: serializeDeck(toDeck(workRef.current)),
       });
     }),
+    sheet: () => run("Sheet", async () => {
+      await onMakeCanvas?.({
+        title: `${title || "Wireframe"} — inventory`,
+        kind: "sheet",
+        content: serializeSheet(toSheet(workRef.current)),
+      });
+    }),
+    document: () => run("Document", async () => {
+      await onMakeCanvas?.({
+        title: `${title || "Wireframe"} — spec`,
+        kind: "markdown",
+        content: toDocument(workRef.current, title || "Wireframe"),
+      });
+    }),
   };
 
   /* -- render ---------------------------------------------------------------------- */
@@ -951,6 +969,10 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
     : null;
   const editFrame = editing ? work.frames.find((f) => f.id === editing.frame) : null;
   const z = view.z;
+  // The ruling in board units, coarsened as the view zooms out so it never
+  // turns into a grey haze of lines a pixel apart.
+  let grid = 22 * z;
+  while (grid < 10) grid *= 5;
 
   const layersPanel = (
     <aside className="wf-panel wf-layers" aria-label="Layers">
@@ -1290,19 +1312,29 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
           </button>
           <button type="button" className="wf-tool wf-play" title="Prototype" disabled={!work.frames.length}
             onClick={() => setProto(sel.frame || work.frames[0]?.id)}>▶</button>
-          <div className="wf-menu-anchor">
-            <button type="button" className="deck-present-btn" aria-haspopup="menu" aria-expanded={menu === "export"}
-              disabled={!work.frames.length || Boolean(busy)} onClick={() => setMenu(menu === "export" ? null : "export")}>
-              {busy ? `${busy}…` : "Export"}
+          {/* Export, presentation first: the one-click action makes a deck of
+              the screens; the caret has the other documents and the files. */}
+          <div className="wf-menu-anchor wf-export">
+            <button type="button" className="deck-present-btn" title="Make a presentation of these screens"
+              disabled={!work.frames.length || Boolean(busy) || !onMakeCanvas} onClick={exports.slides}>
+              {busy ? `${busy}…` : "Present as slides"}
             </button>
+            <button type="button" className="wf-export-more" aria-label="More exports" aria-haspopup="menu"
+              aria-expanded={menu === "export"} disabled={!work.frames.length || Boolean(busy)}
+              onClick={() => setMenu(menu === "export" ? null : "export")}>▾</button>
             {menu === "export" ? (
               <div className="wf-menu" role="menu" data-right="">
-                <button type="button" role="menuitem" onClick={exports.slides}>Presentation (slides)</button>
-                <button type="button" role="menuitem" onClick={exports.zip}>HTML + CSS (.zip)</button>
-                <button type="button" role="menuitem" onClick={exports.html}>HTML (one file)</button>
-                <button type="button" role="menuitem" onClick={exports.pdf}>PDF — all frames</button>
-                <button type="button" role="menuitem" onClick={exports.png}>PNG — {exportFrame?.name}</button>
-                <button type="button" role="menuitem" onClick={exports.pngs}>PNG — all frames (.zip)</button>
+                <span className="wf-menu-label mi">Make a document</span>
+                <button type="button" role="menuitem" data-default="" onClick={exports.slides}><Icon name="slides" />Presentation</button>
+                <button type="button" role="menuitem" onClick={exports.sheet}><Icon name="sheet" />Sheet — element inventory</button>
+                <button type="button" role="menuitem" onClick={exports.document}><Icon name="document" />Document — screen spec</button>
+                <div className="wf-menu-rule" role="separator" />
+                <span className="wf-menu-label mi">Download</span>
+                <button type="button" role="menuitem" onClick={exports.zip}><Icon name="code" />HTML + CSS (.zip)</button>
+                <button type="button" role="menuitem" onClick={exports.html}><Icon name="canvas" />HTML, one file</button>
+                <button type="button" role="menuitem" onClick={exports.pdf}><Icon name="document" />PDF — every screen</button>
+                <button type="button" role="menuitem" onClick={exports.png}><Icon name="image" />PNG — {exportFrame?.name}</button>
+                <button type="button" role="menuitem" onClick={exports.pngs}><Icon name="image" />PNG — every screen (.zip)</button>
               </div>
             ) : null}
           </div>
@@ -1316,6 +1348,12 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
           ref={vp}
           data-tool={tool}
           data-panning={gesture.current?.kind === "pan" ? "" : undefined}
+          // The ruled ground moves and scales with the board, so it reads as
+          // the surface the frames sit on rather than a pattern behind glass.
+          style={{
+            backgroundSize: `${grid}px ${grid}px`,
+            backgroundPosition: `${view.x}px ${view.y}px`,
+          }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

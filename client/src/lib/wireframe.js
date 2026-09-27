@@ -47,28 +47,48 @@ const num = (value, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-/* The greyscale kit a wireframe is drawn in: the look of every wireframing
-   tool, which says "structure, not styling" at a glance. */
+/* The kit a wireframe is drawn in: Bom's own. Its slate neutrals and
+   hairlines for structure, its cobalt for the one thing on a screen that
+   acts, its monospace for every word -- so a wireframe made here reads as
+   part of the app, and still says "structure, not styling" at a glance. */
+const MONO = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace";
 const WIRE = {
   bg: "#FFFFFF",
-  surface: "#F0F0F0",
-  line: "#C7C7C7",
-  strong: "#9B9B9B",
-  text: "#242424",
-  muted: "#8A8A8A",
-  accent: "#4A4A4A",
+  surface: "#F4F6FA",
+  line: "#D3DAE6",
+  strong: "#A9B5C8",
+  text: "#0F172A",
+  muted: "#5B677A",
+  accent: "#1F4FD8",
   onAccent: "#FFFFFF",
-  radius: 6,
-  head: "Inter, 'Helvetica Neue', Arial, system-ui, sans-serif",
-  body: "Inter, 'Helvetica Neue', Arial, system-ui, sans-serif",
-  mono: "'IBM Plex Mono', ui-monospace, Menlo, monospace",
+  radius: 3,
+  head: MONO,
+  body: MONO,
+  mono: MONO,
   headWeight: 700,
   headCase: "none",
 };
 
-/** The colours and faces a document draws in: greyscale, or its standard. */
+/* The app's live accent, so a wireframe carries whichever colour Bom is
+   wearing (the theme picker changes it). Cobalt outside a browser, or when
+   the value is not a plain colour. */
+let accentCache = null;
+function appAccent() {
+  if (typeof document === "undefined" || typeof getComputedStyle !== "function") return WIRE.accent;
+  const value = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(value)) return WIRE.accent;
+  if (accentCache?.accent !== value) {
+    accentCache = { ...WIRE, accent: value.toUpperCase(), onAccent: inkOn(value) };
+  }
+  return accentCache;
+}
+
+/** The colours and faces a document draws in: Bom's kit, or its standard. */
 export function palette(doc, fallbackTheme) {
-  if (doc?.fidelity !== "styled") return WIRE;
+  if (doc?.fidelity !== "styled") {
+    const live = appAccent();
+    return typeof live === "string" ? WIRE : live;
+  }
   const t = resolveTheme(doc.theme, fallbackTheme);
   return {
     bg: t.background,
@@ -831,4 +851,85 @@ export function toDeck(doc) {
       board: { fidelity: doc.fidelity, frame },
     })),
   };
+}
+
+/* -- export: a sheet and a document --------------------------------------------- */
+
+// What each element is called in a spec, by what it is rather than its type id.
+function describeLayer(layer) {
+  const text = String(layer.text ?? "").replace(/\s+/g, " ").trim();
+  switch (layer.type) {
+    case "text": return [(layer.size || 16) >= 24 ? "Heading" : "Text", text];
+    case "button": return [`Button (${layer.variant || "primary"})`, text];
+    case "input": return ["Input", text ? `placeholder "${text}"` : ""];
+    case "checkbox": return [`Checkbox${layer.checked ? " (on)" : ""}`, text];
+    case "toggle": return [`Toggle${layer.checked ? " (on)" : ""}`, text];
+    case "nav": return ["Nav bar", [text, ...(layer.items || [])].filter(Boolean).join(" · ")];
+    case "card": return ["Card", text];
+    case "lines": return ["Body text", `${layer.count || 3} lines`];
+    case "image": return ["Image", layer.name || (layer.image ? "from the library" : "placeholder")];
+    case "avatar": return ["Avatar", text];
+    case "icon": return ["Icon", layer.icon || "star"];
+    case "ellipse": return ["Circle", text];
+    case "line": return ["Divider", ""];
+    default: return ["Box", text];
+  }
+}
+
+// A frame's visible layers in reading order: top to bottom, then left to right.
+const readingOrder = (frame) =>
+  frame.layers
+    .filter((l) => !l.hidden)
+    .slice()
+    .sort((a, b) => (Math.abs(a.y - b.y) < 8 ? a.x - b.x : a.y - b.y));
+
+/** The wireframe as a sheet: every element of every screen, one row each --
+ *  an inventory to plan content, copy and build work against. */
+export function toSheet(doc) {
+  const names = Object.fromEntries(doc.frames.map((f) => [f.id, f.name]));
+  const rows = [];
+  for (const frame of doc.frames) {
+    readingOrder(frame).forEach((layer, i) => {
+      const [element, content] = describeLayer(layer);
+      rows.push([
+        frame.name, i + 1, element, content, layer.link ? names[layer.link] || "" : "",
+        Math.round(layer.x), Math.round(layer.y), Math.round(layer.w), Math.round(layer.h),
+      ]);
+    });
+  }
+  return {
+    version: 1,
+    columns: ["Screen", "Order", "Element", "Content", "Goes to", "X", "Y", "W", "H"],
+    formats: ["text", "integer", "text", "text", "text", "integer", "integer", "integer", "integer"],
+    rows,
+    theme: doc.fidelity === "styled" ? doc.theme || {} : {},
+  };
+}
+
+/** The wireframe as a written spec: each screen, what is on it in reading
+ *  order, and where each link goes -- then the flow as a whole. */
+export function toDocument(doc, title = "Wireframe") {
+  const names = Object.fromEntries(doc.frames.map((f) => [f.id, f.name]));
+  const md = (text) => String(text).replace(/([\\`*_[\]<>#|])/g, "\\$1");
+  const out = [
+    `# ${md(title)}`,
+    "",
+    `${doc.frames.length} screen${doc.frames.length === 1 ? "" : "s"} · ${doc.fidelity === "styled" ? "styled" : "wireframe"}`,
+  ];
+  const flow = [];
+  doc.frames.forEach((frame, n) => {
+    const layers = readingOrder(frame);
+    const targets = [...new Set(layers.filter((l) => names[l.link]).map((l) => names[l.link]))];
+    out.push("", `## ${n + 1}. ${md(frame.name)}`, "");
+    out.push(`${Math.round(frame.w)} × ${Math.round(frame.h)}${targets.length ? ` · leads to ${targets.map(md).join(", ")}` : ""}`, "");
+    if (!layers.length) out.push("_Empty screen._");
+    for (const layer of layers) {
+      const [element, content] = describeLayer(layer);
+      const link = names[layer.link] ? ` → ${md(names[layer.link])}` : "";
+      out.push(`- **${element}**${content ? ` — ${md(content)}` : ""}${link}`);
+      if (link) flow.push(`- ${md(frame.name)} → ${md(names[layer.link])}${content ? ` (${md(content)})` : ""}`);
+    }
+  });
+  if (flow.length) out.push("", "## Flow", "", ...flow);
+  return `${out.join("\n")}\n`;
 }

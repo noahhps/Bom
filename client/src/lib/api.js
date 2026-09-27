@@ -379,7 +379,8 @@ export function createApi(token, onUnauthorized = () => {}) {
       // For a brand-new conversation only: "chat" or "design", and a design
       // standard chosen on the empty screen. The server ignores both once the
       // session exists.
-      { mode = null, design = null } = {},
+      // `make` is per message: the composer's Make menu, or null for auto.
+      { mode = null, design = null, make = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -395,6 +396,7 @@ export function createApi(token, onUnauthorized = () => {}) {
           agent_id: agentId,
           mode,
           design,
+          make,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

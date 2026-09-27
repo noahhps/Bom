@@ -116,6 +116,10 @@ class ChatRequest(BaseModel):
     # from before a backend existed should degrade to the router's judgement,
     # not to a 422 on every message.
     provider: str | None = None
+    # What the composer's Make menu pinned this message to ("wireframe",
+    # "slides", "sheet", "page", "document", "image"), or None / "auto" to let
+    # the model choose. Unknown values are treated as auto.
+    make: str | None = Field(default=None, max_length=40)
     # Three shapes, because the families disagree: an effort word for gpt-oss,
     # a switch for deepseek and qwen, a token budget for Claude. Which one is
     # valid is a property of the live model, and /status says which -- so this
@@ -992,6 +996,7 @@ def build_router(
                 attached=attached,
                 prefer=body.provider,
                 think=body.think,
+                make=body.make,
             ):
                 if await request.is_disconnected():
                     break

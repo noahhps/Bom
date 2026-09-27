@@ -111,7 +111,9 @@ def _default_size(kind: str, layer: dict, avail: float) -> tuple[float, float]:
     if kind == "text":
         text = layer.get("text", "")
         width = avail
-        per_line = max(1, int(width / (size * 0.55)))
+        # 0.62em a character: wireframes are set in Bom's monospace, which is
+        # wider than a proportional face and would otherwise be clipped.
+        per_line = max(1, int(width / (size * 0.62)))
         lines = sum(max(1, math.ceil(len(part) / per_line)) for part in (text.split("\n") or [""]))
         return width, round(lines * size * 1.35 + 2)
     return {

@@ -39,7 +39,15 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
-from .design_mode import DESIGN, DESIGN_PREAMBLE
+from .design_mode import (
+    DESIGN,
+    DESIGN_PREAMBLE,
+    MAX_PIN_NUDGES,
+    blocked_by,
+    pin_instruction,
+    pin_nudge,
+    pinned,
+)
 from .design_presets import tokens_for
 from .skills.design import (
     NO_DESIGN,
@@ -91,8 +99,13 @@ CARRIED_REASONING_CHARS = 400   # the tail of the deliberation
 
 # A skill's result is trimmed here rather than in build_window, because the
 # window trims from the *head* -- so an unbounded result would push out the
-# user's actual question rather than itself.
-MAX_RESULT_CHARS = 4000
+# user's actual question rather than itself. The fallback when settings carry
+# no RESULT_CHARS; a skill whose result is the work itself (read_canvas, the
+# design standard) sets `max_result_chars` of its own.
+MAX_RESULT_CHARS = 12_000
+
+#: Skills that answer with a picture, offered only to a model that can see one.
+PICTURE_SKILLS = {"view_canvas"}
 
 
 #: How many rounds a turn may lose to unparseable tool calls before it
@@ -122,7 +135,9 @@ class Orchestrator:
         self.choices = Choices()
         self._session_grants: dict[str, set[str]] = {}
 
-    def _skill_schemas(self, allowed: set[str] | None = None) -> list[dict] | None:
+    def _skill_schemas(
+        self, allowed: set[str] | None = None, blocked: set[str] = frozenset()
+    ) -> list[dict] | None:
         """What the model is told it can call, or None when it can call nothing.
 
         `enabled()` rather than `all()`: a skill switched off is still listed on
@@ -141,7 +156,7 @@ class Orchestrator:
         schemas = [
             skill.schema()
             for name, skill in self.registry.enabled()
-            if allowed is None or name in allowed
+            if (allowed is None or name in allowed) and name not in blocked
         ]
         return schemas or None
 
@@ -311,6 +326,29 @@ class Orchestrator:
         """
         return self.store.get_settings(MEMORY_DEFAULTS)["memory.between_chats"]
 
+    async def _window_budget(self, provider, tools: list[dict] | None) -> int:
+        """Tokens the prompt and history may fill for this backend.
+
+        The backend's own window when it can say what that is -- a cloud model
+        holds far more than a local runner, and a local model trained on less
+        than CONTEXT_TOKENS holds less -- less the reply's headroom and the
+        tool shelf. The shelf is sent with every request and used to go
+        uncounted, which on a design turn is five thousand tokens the window
+        builder thought it still had.
+        """
+        window = self.settings.context_tokens
+        measure = getattr(provider, "context_window", None)
+        if callable(measure):
+            try:
+                window = int(await measure()) or window
+            except Exception:  # noqa: BLE001 -- the configured budget stands
+                pass
+        # A quarter at most, so a small window configured by hand is not
+        # handed entirely to a reply it was never going to need.
+        reply = min(self.settings.reply_tokens, window // 4)
+        shelf = estimate_tokens(json.dumps(tools)) if tools else 0
+        return max(1024, window - reply - shelf)
+
     def build_window(
         self,
         history: list[StoredMessage],
@@ -386,6 +424,7 @@ class Orchestrator:
         attached: list[files.IncomingFile] | None = None,
         think: ThinkingLevel | None = None,
         prefer: str | None = None,
+        make: str | None = None,
     ) -> AsyncIterator[str]:
         """Yield SSE frames for one turn.
 
@@ -408,7 +447,44 @@ class Orchestrator:
         # Bytes, not just names: this is the one call that needs them.
         stored_files = self.store.attachments_for_session(session_id, with_data=True)
         system, fact_ids = self.build_system_prompt(session_id)
-        window = self.build_window(history, stored_files, system=system)
+        # The composer's Make menu: a pinned format is said to the model and
+        # the other ways of making a document are taken away for this turn.
+        # Only when the pinned tool is actually offered -- a pin to a skill that
+        # is switched off would be an instruction the model cannot follow.
+        requested = pinned(make)
+        choice: dict | None = None
+        blocked: set[str] = set()
+        if requested and self.registry is not None:
+            offered = {name for name, _ in self.registry.enabled()}
+            if requested["tool"] in offered:
+                choice = requested
+                blocked = blocked_by(choice)
+                system = f"{system}\n\n{pin_instruction(choice)}"
+        # The agent's skill subset, if the conversation is assigned to one.
+        # `parsed_skills()` is None for "every enabled skill" and a list --
+        # possibly empty -- for a restriction; the set is passed on to both
+        # what the model is offered and what it is allowed to actually run.
+        # Settled before the window, because the shelf it offers is sent with
+        # every request and has to be paid for out of the same budget.
+        agent = self.store.session_agent(session_id)
+        allowed_skills = (
+            set(agent.parsed_skills())
+            if agent and agent.parsed_skills() is not None
+            else None
+        )
+        tools = self._skill_schemas(allowed_skills, blocked)
+        # Whether this backend's model can look at a picture. A skill that
+        # answers with one is offered only when it can; a picture sent to a
+        # model that cannot see is dropped without a word.
+        sees = await self._sees_images(provider)
+        if tools and not sees:
+            tools = [t for t in tools if t["name"] not in PICTURE_SKILLS] or None
+        window = self.build_window(
+            history,
+            stored_files,
+            system=system,
+            budget=await self._window_budget(provider, tools),
+        )
         # One batched update, not one statement per fact per turn. This is what
         # "12 answers" under a fact on the memory page is counting, and what
         # keeps an unused inferred fact fading rather than lingering forever.
@@ -430,6 +506,14 @@ class Orchestrator:
                 "provider": provider.name,
                 "model": provider.model,
                 "source": route.reason,
+                # The Make menu, as the server took it: what was asked for, and
+                # whether it is being enforced. A pin to a skill that is off is
+                # asked-for but not applied, and the client says so.
+                "make": {
+                    "requested": requested["id"] if requested else None,
+                    "applied": choice["id"] if choice else None,
+                    "label": requested["label"] if requested else None,
+                },
             },
         )
 
@@ -443,17 +527,6 @@ class Orchestrator:
         saved = False
         try:
             thinking_level = think or self.settings.ollama_think
-            # The agent's skill subset, if the conversation is assigned to one.
-            # `parsed_skills()` is None for "every enabled skill" and a list --
-            # possibly empty -- for a restriction; the set is passed on to both
-            # what the model is offered and what it is allowed to actually run.
-            agent = self.store.session_agent(session_id)
-            allowed_skills = (
-                set(agent.parsed_skills())
-                if agent and agent.parsed_skills() is not None
-                else None
-            )
-            tools = self._skill_schemas(allowed_skills)
             max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)
 
             # One pass per round. A round ends when the model stops; if it
@@ -469,11 +542,19 @@ class Orchestrator:
             # ask_for_design or by the gate below. Once is enough: a turn that
             # writes a deck and then a sheet should not ask twice.
             design_settled = False
+            # A pinned turn is finished only when the pinned format exists:
+            # a canvas of that kind written this turn (or, for an image, a
+            # picture made). Until then a model that stops is sent back.
+            pin_done = choice is None
+            pin_nudges = 0
 
             for _ in range(max_rounds):
                 final = None
                 round_text: list[str] = []
                 round_state = {"garbled": False}
+                # Pictures a skill handed back this round, for the model to
+                # look at once every result of the round is in.
+                round_images: list = []
 
                 async for chunk in self._stream_tolerating_garbled(
                     provider, window, thinking_level, tools, round_state
@@ -522,7 +603,24 @@ class Orchestrator:
                     )
                     continue
                 if final is None or not final.tool_calls:
-                    break
+                    if pin_done or pin_nudges >= MAX_PIN_NUDGES:
+                        break
+                    # Stopped without making what the user pinned -- answered
+                    # in text, or had its other tool refused. Said back as a
+                    # user turn, the way the garbled-call retry is, and the
+                    # round goes again.
+                    pin_nudges += 1
+                    # What it wrote instead is withdrawn from the reply: the
+                    # round is being redone, and a reply that keeps every
+                    # attempt reads as the same answer pasted three times.
+                    # The client is handed the whole reply to redraw.
+                    if round_text:
+                        del parts[len(parts) - len(round_text):]
+                        yield _sse("replace", {"text": "".join(parts)})
+                    yield _sse("make", {"status": "retry", "make": choice["id"], "attempt": pin_nudges})
+                    window.append(Message(role="assistant", content="".join(round_text)))
+                    window.append(Message(role="user", content=pin_nudge(choice)))
+                    continue
 
                 # What the model said on its way to asking, plus the asking
                 # itself. Both have to go back or the next round replays a
@@ -561,9 +659,14 @@ class Orchestrator:
                     # it is always-registered like recall. Refuse it before the
                     # approval prompt so a restricted agent cannot reach past its
                     # set, and tell the model plainly rather than silently.
-                    if allowed_skills is not None and call.name not in allowed_skills:
+                    refused = allowed_skills is not None and call.name not in allowed_skills
+                    if refused or call.name in blocked:
                         result = (
-                            f"{call.name} is not one of this agent's skills, so it "
+                            f"{call.name} did not run: the user chose "
+                            f"{choice['label']} in the Make menu for this message. "
+                            f"Use {choice['tool']} instead."
+                            if not refused
+                            else f"{call.name} is not one of this agent's skills, so it "
                             "did not run. Answer without it."
                         )
                         record["result"] = result
@@ -720,9 +823,19 @@ class Orchestrator:
                             defaults = tokens_for(self.store.session_design(session_id))
                             if defaults:
                                 extra.setdefault("design_defaults", defaults)
-                        result = await self._run_skill(call, session_id, extra=extra)
+                        # A pin to a kind of canvas holds the kind too: a
+                        # pinned document cannot come out as a web page.
+                        if choice and choice.get("kind") and call.name == choice["tool"]:
+                            extra["kind"] = choice["kind"]
+                            extra["kind_pinned"] = True
+                        before = self._canvas_marks(session_id) if choice and not pin_done else None
+                        result = await self._run_skill(
+                            call, session_id, extra=extra, images=round_images if sees else None
+                        )
                         result += _gated_note(self.store, gated, extra, call.name)
                         record["result"] = result
+                        if before is not None and call.name in (choice["tool"], choice.get("edit")):
+                            pin_done = self._pin_met(choice, session_id, before, result)
 
                     yield _sse(
                         "tool_result",
@@ -760,6 +873,37 @@ class Orchestrator:
                             tool_name=call.name,
                         )
                     )
+                # After the round's results, not among them: every backend
+                # wants a call's result straight after the call, and a
+                # picture is not a result any of them can carry. For this
+                # round only -- the next turn gets the words, not the bytes.
+                if round_images:
+                    window.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "The picture you asked for is attached. Look at it "
+                                "before deciding what to change."
+                            ),
+                            images=tuple(round_images),
+                        )
+                    )
+            # How the pin went, said once at the end. A miss is also written
+            # into the reply itself, so reopening the conversation still shows
+            # that this answer is not what was picked.
+            if choice is not None:
+                if not pin_done:
+                    note = (
+                        f"\n\n*No {choice['label'].lower()} was made: the model did not "
+                        f"use {choice['tool']} for this message, even when asked again. "
+                        "Try once more, or switch to a model that handles tools better.*"
+                    )
+                    parts.append(note)
+                    yield _sse("delta", {"text": note})
+                yield _sse(
+                    "make",
+                    {"status": "done" if pin_done else "missed", "make": choice["id"], "label": choice["label"]},
+                )
         except ProviderError as exc:
             self.router.invalidate_health()
             # Keep whatever arrived before the failure rather than dropping it.
@@ -889,8 +1033,44 @@ class Orchestrator:
         elif decision == ALLOW_SESSION and session_id:
             self._session_grants.setdefault(session_id, set()).add(name)
 
+    def _canvas_marks(self, session_id: str | None) -> dict[str, tuple]:
+        """What each canvas in the conversation is, to tell afterwards which
+        one a skill wrote. Content is part of it, because timestamps are whole
+        seconds and a rewrite can land in the same one."""
+        if not session_id:
+            return {}
+        return {
+            c.id: (c.kind, c.updated_at, hash(c.content))
+            for c in self.store.session_canvases(session_id)
+        }
+
+    def _pin_met(self, choice: dict, session_id: str | None, before: dict, result: str) -> bool:
+        """Whether the pinned tool produced what was pinned. By the effect,
+        not the model's word: a canvas of the pinned kind that is new or
+        changed. An image has no canvas, so its result is read instead."""
+        if choice["makes"] is None:
+            return result.startswith("Generated img_")
+        after = self._canvas_marks(session_id)
+        return any(
+            mark[0] == choice["makes"] and before.get(cid) != mark
+            for cid, mark in after.items()
+        )
+
+    async def _sees_images(self, provider) -> bool:
+        check = getattr(provider, "sees_images", None)
+        if not callable(check):
+            return False
+        try:
+            return bool(await check())
+        except Exception:  # noqa: BLE001 -- unknown means no
+            return False
+
     async def _run_skill(
-        self, call, session_id: str | None = None, extra: dict | None = None
+        self,
+        call,
+        session_id: str | None = None,
+        extra: dict | None = None,
+        images: list | None = None,
     ) -> str:
         """One skill call, reduced to text the model can read.
 
@@ -928,7 +1108,20 @@ class Orchestrator:
             return f"{call.name} was called wrongly: {exc}"
         except Exception as exc:
             return f"{call.name} failed: {type(exc).__name__}: {exc}"
-        return str(result)[:MAX_RESULT_CHARS]
+        limit = getattr(skill, "max_result_chars", None) or getattr(
+            self.settings, "result_chars", MAX_RESULT_CHARS
+        )
+        text = clip_result(str(result), limit)
+        pictures = tuple(getattr(result, "images", ()) or ())
+        if pictures:
+            if images is None:
+                text += (
+                    " (The picture could not be shown: this model cannot see "
+                    "images. check_design reviews the source instead.)"
+                )
+            else:
+                images.extend(pictures)
+        return text
 
     def _persist(
         self,
@@ -999,6 +1192,22 @@ class Orchestrator:
 
         self.store.rename_session(session_id, title)
         return title
+
+
+def clip_result(text: str, limit: int) -> str:
+    """A skill's result cut to `limit` characters, saying that it was.
+
+    The note matters more than the cut. A result that simply stops reads as
+    the whole of it, and a model revising a page it saw the top of rewrites
+    the top and loses the rest.
+    """
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return (
+        text[:limit]
+        + f"\n… [cut: the result was {len(text)} characters; only the first "
+        f"{limit} are shown]"
+    )
 
 
 def _gated_note(store: Store, gated: str | None, extra: dict, tool: str) -> str:

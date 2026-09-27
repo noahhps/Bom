@@ -157,6 +157,10 @@ class AskForDesign(Skill):
     #: for an approval. See `run_turn`.
     asks = "design"
     wants_session = True
+    #: A standard of the reader's own can run well past the presets' two
+    #: thousand characters, and the instruction that follows it -- "now make
+    #: the thing" -- is the part a cut would lose first.
+    max_result_chars = 40_000
 
     def __init__(self, store: Store) -> None:
         super().__init__(

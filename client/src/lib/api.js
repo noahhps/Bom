@@ -118,6 +118,15 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "PUT",
         body: JSON.stringify({ key }),
       }),
+    // An Ollama on another machine on this network. Empty disconnects; the
+    // server checks it is local and that Ollama answers before keeping it.
+    setNetworkOllama: (url) =>
+      json("/providers/network/url", {
+        method: "PUT",
+        body: JSON.stringify({ url }),
+      }),
+    // A scan of this server's own subnet for the Ollama port.
+    discoverNetworkOllama: () => json("/providers/network/discover"),
     // The sign-in. The server mints the URL; opening it is this side's job,
     // because the server has no browser and is often not even on the device
     // being used. `callback_base` is this origin -- how the browser reached
@@ -321,6 +330,15 @@ export function createApi(token, onUnauthorized = () => {}) {
       }),
     deleteCanvas: (id) =>
       request("/canvases/" + encodeURIComponent(id), { method: "DELETE" }),
+    // Every canvas in every conversation, without content -- the list "open
+    // from another conversation" chooses from -- and a copy of one into this
+    // conversation, pictures and all.
+    listAllCanvases: () => json("/canvases"),
+    copyCanvas: (id, sessionId) =>
+      json("/canvases/" + encodeURIComponent(id) + "/copy", {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId }),
+      }),
     // -- images ----------------------------------------------------------
     // A conversation's own pictures, cleaned by the server on the way in and
     // referenced by id from decks and pages. Blobs rather than URLs for the
@@ -370,7 +388,8 @@ export function createApi(token, onUnauthorized = () => {}) {
       // For a brand-new conversation only: "chat" or "design", and a design
       // standard chosen on the empty screen. The server ignores both once the
       // session exists.
-      { mode = null, design = null } = {},
+      // `make` is per message: the composer's Make menu, or null for auto.
+      { mode = null, design = null, make = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -386,6 +405,7 @@ export function createApi(token, onUnauthorized = () => {}) {
           agent_id: agentId,
           mode,
           design,
+          make,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

@@ -174,6 +174,27 @@ export default function App() {
   // Its standard: the stored one, or -- before the first message, and until
   // the list catches up with the session it created -- the pick being sent.
   const look = current ? current.design ?? null : newDesign;
+
+  // The composer's Make menu, remembered per conversation. A design chat
+  // starts on Wireframe -- design projects begin as screens -- and a chat on
+  // Auto. What was picked before the first message follows the conversation
+  // once the server gives it an id.
+  const [makeBy, setMakeBy] = useState({});
+  const makeKey = chat.sessionId || (designing ? "new-design" : "new-chat");
+  const make = makeBy[makeKey] ?? (designing ? "wireframe" : "auto");
+  const setMake = useCallback((value) => setMakeBy((m) => ({ ...m, [makeKey]: value })), [makeKey]);
+  const lastMakeKey = useRef(makeKey);
+  useEffect(() => {
+    const was = lastMakeKey.current;
+    lastMakeKey.current = makeKey;
+    if (was.startsWith("new-") && !makeKey.startsWith("new-")) {
+      setMakeBy((m) => {
+        if (m[was] === undefined) return m;
+        const { [was]: carried, ...rest } = m;
+        return { ...rest, [makeKey]: carried };
+      });
+    }
+  }, [makeKey]);
   // What the canvas falls back to for a sheet or a deck with no theme of its
   // own: the conversation's standard, when that is a preset with tokens.
   const lookTokens = useMemo(
@@ -550,7 +571,9 @@ export default function App() {
                 // Whichever side is actually answering describes its own
                 // reasoning control; the composer draws what it is handed.
                 thinking={thinking}
-                onSend={chat.send}
+                onSend={(text, files, effort) => chat.send(text, files, effort, make)}
+                make={make}
+                onMake={setMake}
                 agents={chat.sessionId ? [] : agents.agents}
                 agentId={newAgentId}
                 onAgent={setNewAgentId}
@@ -646,6 +669,7 @@ export default function App() {
             onClose={canvas.closePanel}
             onSave={canvas.save}
             onCreate={canvas.create}
+            onImport={canvas.importCanvas}
             onDelete={canvas.remove}
             fallbackTheme={lookTokens}
             resizable={canvasSize.enabled}

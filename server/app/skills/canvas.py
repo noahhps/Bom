@@ -21,13 +21,16 @@ the exception, and only because revising something means seeing it first.
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 
+from .. import design_check
 from ..store import Store
 from . import sheet as sheets
-from .args import plain_text
+from .args import as_dict, plain_text
 from . import slides as decks
+from .patch import apply_edits, parse_edits, set_css_variables
 from .skill import Skill
 
 # A full HTML document, or a fragment that opens with a structural tag. Used to
@@ -108,10 +111,11 @@ def _host_of(url: str) -> str:
 # and a canvas it cannot render is worse than one labelled plainly.
 KINDS = {"markdown", "code", "html"}
 
-# How much of a canvas read_canvas hands back. A canvas longer than this is cut
-# with a note saying so: the model is revising, and the whole point of the
-# panel is that the reader can see the parts the window cannot hold.
-MAX_READ_CHARS = 6000
+# How much of a canvas read_canvas hands back in one call, when the server does
+# not say otherwise (CANVAS_READ_CHARS). Enough for the whole of a typical page:
+# a revision that sees only the top of what it is revising loses the rest. A
+# longer canvas is read in pages, by line.
+MAX_READ_CHARS = 60_000
 
 
 def _normalize_kind(kind: str | None, language: str | None) -> str:
@@ -125,6 +129,62 @@ def _normalize_kind(kind: str | None, language: str | None) -> str:
     if value in KINDS:
         return value
     return "code" if (language or "").strip() else "markdown"
+
+
+def _content_notes(store: Store, session: str, body: str) -> str:
+    """What the model should hear about a canvas it has just written or edited:
+    pictures that are not in the library, and pictures fetched from the web.
+    """
+    note = ""
+    # The user's pictures, by id. One that is not in the library is a
+    # picture that will not appear, so the model hears about it now.
+    from .images import REFERENCE, known_ids
+
+    named = set(REFERENCE.findall(body))
+    unknown = sorted(named - known_ids(store, session)) if named else []
+    if unknown:
+        note += (
+            f" WARNING: {', '.join(unknown)} "
+            f"{'is' if len(unknown) == 1 else 'are'} not in this conversation's "
+            "images, so nothing will show there. Call list_images for the real ids."
+        )
+    # Said in the result as well as the description, because the
+    # description is read once before the model has written anything and
+    # this arrives holding the actual page. It is a report, not a refusal:
+    # the canvas is already saved, and a URL the user supplied is a good
+    # reason to keep it. What it buys is the model finding out now, while
+    # it can still fix it, rather than the reader finding out from a gap
+    # where the picture should be.
+    remote = _remote_assets(body)
+    if remote:
+        hosts: list[str] = []
+        for url in remote:
+            host = _host_of(url)
+            if host not in hosts:
+                hosts.append(host)
+        named = ", ".join(hosts[:_NAMED_HOSTS])
+        if len(hosts) > _NAMED_HOSTS:
+            named += f" and {len(hosts) - _NAMED_HOSTS} more"
+        note += (
+            f" WARNING: {len(remote)} "
+            f"{'image' if len(remote) == 1 else 'images'} in this canvas "
+            f"{'loads' if len(remote) == 1 else 'load'} from the internet "
+            f"({named}), so the user is most likely seeing "
+            "blank gaps where they should be. Unless they gave you those "
+            "exact URLs, replace them now with edit_canvas, drawing the "
+            "pictures inline -- an SVG, a CSS gradient, or a data: URI -- so "
+            "the page stands on its own."
+        )
+    return note
+
+
+def _check_note(kind: str, body: str) -> str:
+    """The design check's plain breakages, for a page or a document."""
+    if kind == "html":
+        return design_check.summary(design_check.check_html(body))
+    if kind == "markdown":
+        return design_check.summary(design_check.check_markdown(body))
+    return ""
 
 
 class WriteCanvas(Skill):
@@ -163,9 +223,10 @@ class WriteCanvas(Skill):
                 "![alt](bom-image:ID) in markdown). Link a remote image only "
                 "when the user gave you that exact URL. Pass the raw "
                 "content itself, not wrapped in a code fence. Writing to a title "
-                "that already exists replaces that canvas whole, so read_canvas "
-                "first if you mean to revise rather than start over. Keep your "
-                "chat reply short when you do this; the work is in the panel."
+                "that already exists replaces that canvas whole -- to revise "
+                "one, use edit_canvas, which changes only the parts you name. "
+                "Keep your chat reply short when you do this; the work is in "
+                "the panel."
             ),
             parameters={
                 "type": "object",
@@ -250,7 +311,9 @@ class WriteCanvas(Skill):
         # Rescue a page the model wrote but labelled prose: stored as markdown
         # it would render escaped, as source. Only upgrades markdown -- an
         # explicit `code` kind means the user wants to see the HTML as text.
-        if resolved_kind == "markdown" and _looks_like_html(body):
+        # Not when the kind was pinned by the user's Make menu: a document
+        # they asked for stays a document, whatever the model put in it.
+        if resolved_kind == "markdown" and _looks_like_html(body) and not extra.get("kind_pinned"):
             resolved_kind = "html"
 
         existing = self.store.find_canvas_by_title(session, name)
@@ -269,66 +332,32 @@ class WriteCanvas(Skill):
             verb = "Updated"
 
         lines = body.count("\n") + 1 if body else 0
-        note = ""
-        # The user's pictures, by id. One that is not in the library is a
-        # picture that will not appear, so the model hears about it now.
-        from .images import REFERENCE, known_ids
-
-        named = set(REFERENCE.findall(body))
-        unknown = sorted(named - known_ids(self.store, session)) if named else []
-        if unknown:
-            note += (
-                f" WARNING: {', '.join(unknown)} "
-                f"{'is' if len(unknown) == 1 else 'are'} not in this conversation's "
-                "images, so nothing will show there. Call list_images for the real ids."
-            )
-        # Said in the result as well as the description, because the
-        # description is read once before the model has written anything and
-        # this arrives holding the actual page. It is a report, not a refusal:
-        # the canvas is already saved, and a URL the user supplied is a good
-        # reason to keep it. What it buys is the model finding out now, while
-        # it can still fix it, rather than the reader finding out from a gap
-        # where the picture should be.
-        remote = _remote_assets(body)
-        if remote:
-            hosts: list[str] = []
-            for url in remote:
-                host = _host_of(url)
-                if host not in hosts:
-                    hosts.append(host)
-            named = ", ".join(hosts[:_NAMED_HOSTS])
-            if len(hosts) > _NAMED_HOSTS:
-                named += f" and {len(hosts) - _NAMED_HOSTS} more"
-            note += (
-                f" WARNING: {len(remote)} "
-                f"{'image' if len(remote) == 1 else 'images'} in this canvas "
-                f"{'loads' if len(remote) == 1 else 'load'} from the internet "
-                f"({named}), so the user is most likely seeing "
-                "blank gaps where they should be. Unless they gave you those "
-                "exact URLs, rewrite the canvas now with the pictures drawn "
-                "inline -- an SVG, a CSS gradient, or a data: URI -- so the "
-                "page stands on its own."
-            )
-
+        note = _content_notes(self.store, session, body)
+        note += _check_note(resolved_kind, body)
         return (
             f"{verb} the canvas {canvas.title!r} ({lines} line"
             f"{'' if lines == 1 else 's'}). It is open in the side panel for the "
-            "user to read and edit. Update it by calling write_canvas with the "
-            f"same title, or read it back first with read_canvas.{note}"
+            "user to read and edit. Change part of it with edit_canvas, or "
+            f"replace it by calling write_canvas with the same title.{note}"
         )
 
 
 class ReadCanvas(Skill):
     wants_session = True
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, max_chars: int = MAX_READ_CHARS) -> None:
         super().__init__(
             name="read_canvas",
             description=(
                 "Read a canvas back, so you can revise it without guessing at "
                 "what it holds. Call with no title to see which canvases this "
                 "conversation has; call with a title to get its current "
-                "contents. The user may have edited it since you last wrote it."
+                "contents -- exactly as stored, so text you copy from it will "
+                "match in edit_canvas. A wireframe comes back as its frames and "
+                "layers with their ids, a deck as numbered slides, a sheet as a "
+                "grid. The user may have edited it since you last wrote it. A "
+                "long canvas comes back in parts: call again with `offset` for "
+                "the rest."
             ),
             parameters={
                 "type": "object",
@@ -336,13 +365,21 @@ class ReadCanvas(Skill):
                     "title": {
                         "type": "string",
                         "description": "Which canvas to read. Omit to list them.",
-                    }
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "The line to start from, for a long canvas. Default 1.",
+                    },
                 },
             },
         )
         self.store = store
+        self.max_chars = max(1000, int(max_chars))
+        # The whole read has to survive the turn loop's cut on results, or the
+        # paging here would be undone by the loop truncating the page.
+        self.max_result_chars = self.max_chars + 2000
 
-    async def use(self, session: str, title=None, **extra) -> str:
+    async def use(self, session: str, title=None, offset=1, **extra) -> str:
         canvases = self.store.session_canvases(session)
         if not canvases:
             return (
@@ -368,7 +405,7 @@ class ReadCanvas(Skill):
         body = canvas.content or "(empty)"
         header = f"{canvas.title} ({canvas.kind}" + (
             f", {canvas.language}" if canvas.language else ""
-        ) + "):"
+        ) + ")"
         # The structured kinds are stored as JSON, which is a poor way to read a
         # deck and a worse way to read a sheet. Both come back in the shape the
         # model would write them: an outline, and a grid with its addresses.
@@ -376,15 +413,314 @@ class ReadCanvas(Skill):
             loaded = sheets.load(canvas.content)
             if loaded is not None:
                 body = sheets.as_text(loaded)
+        elif canvas.kind == "wireframe":
+            from .wireframe import outline as wireframe_outline
+
+            try:
+                body = wireframe_outline(json.loads(canvas.content or "{}"))
+            except (ValueError, AttributeError, KeyError):
+                pass
         elif canvas.kind == decks.KIND:
             try:
                 body = decks.outline(json.loads(canvas.content or "{}"))
             except (ValueError, AttributeError):
                 pass
-        if len(body) > MAX_READ_CHARS:
-            body = (
-                body[:MAX_READ_CHARS]
-                + f"\n… cut here — the canvas is {len(canvas.content)} characters "
-                "and the whole of it is in the panel."
+
+        if len(body) <= self.max_chars and _as_int(offset, 1) <= 1:
+            return f"{header}:\n{body}"
+
+        # Paged by whole lines, so a page never ends halfway through the text
+        # the model is about to quote back in an edit.
+        lines = body.split("\n")
+        start = min(max(1, _as_int(offset, 1)), len(lines))
+        kept, used = [], 0
+        for line in lines[start - 1:]:
+            if kept and used + len(line) + 1 > self.max_chars:
+                break
+            kept.append(line[: self.max_chars])
+            used += len(line) + 1
+        end = start + len(kept) - 1
+        page = "\n".join(kept)
+        said = f"{header}, lines {start}-{end} of {len(lines)}:\n{page}"
+        if end < len(lines):
+            said += (
+                f"\n… more below. Call read_canvas again with offset={end + 1} "
+                "for the rest; the whole canvas is in the panel."
             )
-        return f"{header}\n{body}"
+        return said
+
+
+def _as_int(value, default: int) -> int:
+    try:
+        return int(plain_text(value) if not isinstance(value, int) else value)
+    except (TypeError, ValueError):
+        return default
+
+
+#: What each structured kind is edited with, for a call that reached the wrong tool.
+_EDITED_WITH = {
+    "slides": "edit_slides",
+    "wireframe": "edit_wireframe",
+    "sheet": "edit_sheet",
+}
+
+
+def _find_canvas(store: Store, session: str, name: str, kinds: set[str]):
+    """The canvas `name` names, or the only one of `kinds` when none is named."""
+    canvas = store.find_canvas_by_title(session, name) if name else None
+    if canvas is None and not name:
+        only = [c for c in store.session_canvases(session) if c.kind in kinds]
+        canvas = only[0] if len(only) == 1 else None
+    return canvas
+
+
+def _line_change(before: str, after: str) -> str:
+    added = removed = 0
+    for line in difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm="", n=0):
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return f"+{added}/-{removed} lines"
+
+
+class EditCanvas(Skill):
+    """Part of a page, a document or a program, changed in place."""
+
+    surfaces = "canvas"
+    wants_session = True
+
+    def __init__(self, store: Store) -> None:
+        super().__init__(
+            name="edit_canvas",
+            description=(
+                "Change part of a canvas -- a web page, a document or code -- "
+                "without writing it all again. Use this, not write_canvas, for "
+                "any revision short of starting over: only the text you name "
+                "changes, so nothing else can be lost or garbled. Each edit is "
+                "{find, replace}: `find` is text copied exactly from the canvas "
+                "(read_canvas shows it) and must occur exactly once -- include "
+                "enough around it to be unique, or set `all` to true to change "
+                "every occurrence. {after: anchor, insert: text} or {before: "
+                "anchor, insert: text} adds new text beside an anchor, and "
+                "{delete: text} removes text. For an HTML page, `css_vars` sets "
+                "custom properties on :root, e.g. {\"--accent\": \"#0B5FFF\"} -- "
+                "the quickest way to restyle a page built on tokens. Edits apply "
+                "in order; one that does not match is reported with the closest "
+                "text in the canvas, so you can correct it and try again."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Which canvas to edit."},
+                    "edits": {
+                        "type": "array",
+                        "description": "The changes, applied in order.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "find": {"type": "string", "description": "Exact text to change."},
+                                "replace": {"type": "string", "description": "What it becomes."},
+                                "all": {"type": "boolean", "description": "Change every occurrence."},
+                                "after": {"type": "string", "description": "Anchor to insert after."},
+                                "before": {"type": "string", "description": "Anchor to insert before."},
+                                "insert": {"type": "string", "description": "Text to insert at the anchor."},
+                                "delete": {"type": "string", "description": "Exact text to remove."},
+                            },
+                        },
+                    },
+                    "css_vars": {
+                        "type": "object",
+                        "description": "For a page: custom properties to set on :root, by name.",
+                        "additionalProperties": {"type": "string"},
+                    },
+                },
+                "required": ["title"],
+            },
+        )
+        self.store = store
+
+    async def use(self, session: str, title=None, edits=None, css_vars=None, **extra) -> str:
+        name = plain_text(title or extra.get("name"))
+        canvas = _find_canvas(self.store, session, name, KINDS)
+        if canvas is None:
+            here = [c.title for c in self.store.session_canvases(session) if c.kind in KINDS]
+            listed = ", ".join(repr(t) for t in here) or "none yet"
+            return f"There is no canvas called {name!r} to edit. Pages and documents here: {listed}."
+        if canvas.kind in _EDITED_WITH:
+            return (
+                f"{canvas.title!r} is a {canvas.kind}, which is edited with "
+                f"{_EDITED_WITH[canvas.kind]} rather than as text."
+            )
+
+        before = canvas.content or ""
+        parsed, problems = parse_edits(edits if edits is not None else extra.get("changes"), extra)
+        patched = apply_edits(before, parsed)
+        after = patched.text
+        applied = list(patched.applied)
+        failed = problems + patched.failed
+
+        variables = as_dict(css_vars) if css_vars is not None else None
+        if variables:
+            if canvas.kind == "html":
+                after, changed = set_css_variables(after, variables)
+                if changed:
+                    applied.append("set " + ", ".join(changed))
+            else:
+                failed.append("css_vars only applies to an HTML page")
+
+        if not parsed and not variables:
+            return (
+                "No edits were given. Pass `edits` as a list of {find, replace}, "
+                "with `find` copied from the canvas."
+            )
+        if after == before:
+            said = f"Nothing changed in {canvas.title!r}."
+            if failed:
+                said += " " + " ".join(f"{f}." if not f.endswith("\n") else f for f in failed)
+            return said.rstrip()
+
+        self.store.update_canvas(canvas.id, content=after)
+        count = len(applied)
+        said = (
+            f"Edited the canvas {canvas.title!r}: {count} change{'' if count == 1 else 's'} "
+            f"({_line_change(before, after)}) -- " + "; ".join(applied) + "."
+        )
+        if failed:
+            said += " Not applied: " + " ".join(
+                f if f.endswith("\n") else f + "." for f in failed
+            )
+        if canvas.kind == "html":
+            # Said on its own when this edit is what broke the markup: a patch
+            # that drops a closing tag is the one way this tool can make a page
+            # worse, and the model should hear that it was this edit.
+            if design_check.balance_problems(after) > design_check.balance_problems(before):
+                said += (
+                    " This edit left the markup unbalanced -- check the tags "
+                    "around what you changed."
+                )
+        said += _content_notes(self.store, session, after)
+        said += _check_note(canvas.kind, after)
+        return said
+
+
+class CheckDesign(Skill):
+    """A design review of anything in the canvas panel."""
+
+    wants_session = True
+
+    def __init__(self, store: Store) -> None:
+        super().__init__(
+            name="check_design",
+            description=(
+                "Review a canvas the way a designer would before showing it: "
+                "contrast, markup that does not balance, placeholder copy, "
+                "layers off the edge of a screen or on top of each other, text "
+                "too long for its box, too many typefaces, missing alt text, a "
+                "deck that is all bullets. Run it on a page, wireframe or deck "
+                "before you tell the user it is done, then fix what it finds "
+                "with edit_canvas, edit_wireframe or edit_slides."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Which canvas to check."},
+                },
+            },
+        )
+        self.store = store
+
+    async def use(self, session: str, title=None, **extra) -> str:
+        name = plain_text(title or extra.get("name"))
+        kinds = KINDS | set(_EDITED_WITH)
+        canvas = _find_canvas(self.store, session, name, kinds)
+        if canvas is None:
+            here = [c.title for c in self.store.session_canvases(session)]
+            listed = ", ".join(repr(t) for t in here) or "none yet"
+            return f"There is no canvas called {name!r}. Canvases here: {listed}."
+        findings = check_canvas(canvas.kind, canvas.content or "")
+        if findings is None:
+            return f"{canvas.title!r} is {canvas.kind}, which has no design to check."
+        return f"Design check of {canvas.title!r} ({canvas.kind}):\n" + design_check.report(findings)
+
+
+def check_canvas(kind: str, content: str) -> list | None:
+    """Every finding for a canvas of `kind`, or None for a kind with no look."""
+    if kind == "html":
+        return design_check.check_html(content)
+    if kind == "markdown":
+        return design_check.check_markdown(content)
+    if kind in ("wireframe", decks.KIND):
+        try:
+            doc = json.loads(content or "{}")
+        except ValueError:
+            return [design_check.Finding(design_check.FIX, "the document could not be read")]
+        if kind == "wireframe":
+            return design_check.check_wireframe(doc)
+        return design_check.check_deck(doc)
+    return None
+
+
+class OpenCanvas(Skill):
+    """Put a canvas in front of the user -- this conversation's, or a copy of
+    one from another conversation."""
+
+    surfaces = "canvas"
+    wants_session = True
+
+    def __init__(self, store: Store) -> None:
+        super().__init__(
+            name="open_canvas",
+            description=(
+                "Open a canvas in the side panel for the user: a document, deck, "
+                "sheet, page or wireframe. Use it to show them something you are "
+                "about to discuss or change, or to bring back work from another "
+                "conversation -- a canvas found elsewhere is copied into this one "
+                "(with its pictures) so it can be edited here. Call with no title "
+                "to list the canvases in every conversation."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The canvas to open."},
+                },
+            },
+        )
+        self.store = store
+
+    async def use(self, session: str, title=None, **extra) -> str:
+        name = plain_text(title or extra.get("name"))
+        if not name:
+            everything = self.store.all_canvases(limit=40)
+            if not everything:
+                return "There are no canvases in any conversation yet."
+            lines = [
+                f"- {c['title']} ({c['kind']}) in "
+                + ("this conversation" if c["session_id"] == session
+                   else f"\"{c['session_title'] or 'Untitled'}\"")
+                for c in everything
+            ]
+            return "Canvases, newest first:\n" + "\n".join(lines)
+        here = self.store.find_canvas_by_title(session, name)
+        if here is not None:
+            self.store.touch_canvas(here.id)
+            return f"Opened {here.title!r} ({here.kind}) in the canvas panel."
+        lowered = name.lower()
+        match = next(
+            (c for c in self.store.all_canvases(limit=500) if c["title"].lower() == lowered),
+            None,
+        ) or next(
+            (c for c in self.store.all_canvases(limit=500) if lowered in c["title"].lower()),
+            None,
+        )
+        if match is None:
+            return (
+                f"There is no canvas called {name!r} in any conversation. Call "
+                "open_canvas with no title to see what there is."
+            )
+        copy = self.store.copy_canvas(match["id"], session)
+        return (
+            f"Opened a copy of {match['title']!r} ({match['kind']}) from the conversation "
+            f"\"{match['session_title'] or 'Untitled'}\" as {copy.title!r} in this "
+            "conversation's canvas panel. Edits here do not change the original."
+        )

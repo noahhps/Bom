@@ -21,13 +21,21 @@ from .mcp import MCPManager
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
-from .providers import OAuthFlows, ProviderError, ProviderRouter, model_setting_key
+from .providers import (
+    NETWORK_URL_SETTING,
+    OAuthFlows,
+    ProviderError,
+    ProviderRouter,
+    model_setting_key,
+)
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
-from .skills.canvas import ReadCanvas, WriteCanvas
+from .skills.canvas import CheckDesign, EditCanvas, OpenCanvas, ReadCanvas, WriteCanvas
 from .imagegen import Generator
 from .skills.images import GenerateImage, ListImages
 from .skills.sheet import EditSheet, WriteSheet
-from .skills.slides import WriteSlides
+from .skills.slides import EditSlides, WriteSlides
+from .skills.view import ViewCanvas
+from .skills.wireframe import EditWireframe, WireframeToSlides, WriteWireframe
 from .skills.design import AskForDesign
 from .device.mac_calendar import available as device_calendar_available
 from .device.mac_photos import available as device_photos_available
@@ -103,7 +111,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.db_path)
     store = Store(db)
-    providers = ProviderRouter(settings)
+    # The network Ollama's address: what someone set in Settings, else the
+    # environment's.
+    providers = ProviderRouter(
+        settings, network_url=store.get_text_setting(NETWORK_URL_SETTING) or None
+    )
     # A model chosen in the picker outlives the process it was chosen in. The
     # environment still sets the starting point; this is what someone actually
     # picked, so it wins over the default and loses to nothing.
@@ -171,12 +183,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # a side panel. write_canvas surfaces it to the client; read_canvas lets a
     # revision see what it is revising.
     registry.register(WriteCanvas(store))
-    registry.register(ReadCanvas(store))
+    registry.register(ReadCanvas(store, max_chars=settings.canvas_read_chars))
+    registry.register(OpenCanvas(store))
+    # Revising in place: a patch names what changes and leaves the rest
+    # exactly as it was, where a rewrite has to reproduce all of it.
+    registry.register(EditCanvas(store))
     # The work tools: a deck and a spreadsheet, both drawn in the canvas panel
     # from structured data and styled from the conversation's design standard.
     registry.register(WriteSlides(store))
+    registry.register(EditSlides(store))
     registry.register(WriteSheet(store))
     registry.register(EditSheet(store))
+    # Figma-style wireframes: frames of layers, editable and exportable.
+    registry.register(WriteWireframe(store))
+    registry.register(EditWireframe(store))
+    registry.register(WireframeToSlides(store))
+    # A design review of whatever is in the panel: the model cannot see what
+    # it drew, so this reads it back the way a designer would.
+    registry.register(CheckDesign(store))
+    # And a picture of it, for a model that can see: drawn with a browser or
+    # Quick Look already on this machine, and not offered where there is none.
+    registry.register(ViewCanvas(store))
     # The user's own pictures, by id, for those tools to place.
     registry.register(ListImages(store))
     # Pictures made on a generator the operator points at (IMAGE_GEN_URL).

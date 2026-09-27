@@ -55,6 +55,10 @@ _CATALOGUE_TTL_SECONDS = 600.0
 
 _REASONING_EFFORTS = frozenset(("low", "medium", "high"))
 
+# The window for a model whose own is not known -- `openrouter/auto`, or one
+# the catalogue has not listed. Most tool-capable models hold at least this.
+_UNKNOWN_WINDOW = 128_000
+
 
 class OpenRouterProvider:
     def __init__(
@@ -64,6 +68,7 @@ class OpenRouterProvider:
         *,
         base_url: str = DEFAULT_URL,
         max_tokens: int | None = None,
+        context_tokens: int = 200_000,
         referer: str = "https://github.com/noahhps/Bom",
         title: str = "Bom",
     ) -> None:
@@ -72,6 +77,7 @@ class OpenRouterProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = (api_key or "").strip()
         self.max_tokens = max_tokens
+        self.context_tokens = context_tokens
         # Attribution headers. Optional, and worth sending: they are what puts
         # this app's name on the OpenRouter activity page, so a bill can be
         # read back as "Bom did this" rather than as an anonymous total.
@@ -303,6 +309,36 @@ class OpenRouterProvider:
         self._catalogue = models
         self._catalogue_at = now
         return models
+
+    async def context_window(self) -> int:
+        """The window budget for the current model.
+
+        The catalogue states each model's context length, so a 32k model is
+        not sent a 200k conversation it will refuse. `openrouter/auto`, or a
+        model the catalogue does not list, may be routed anywhere, so it gets
+        a window most of the tool-capable models it could land on will hold.
+        """
+        try:
+            listed = await self.list_models()
+        except ProviderError:
+            listed = self._catalogue
+        known = next((m.get("context") for m in listed if m.get("id") == self.model), None)
+        try:
+            window = int(known or 0)
+        except (TypeError, ValueError):
+            window = 0
+        return min(self.context_tokens, window or _UNKNOWN_WINDOW)
+
+    async def sees_images(self) -> bool:
+        """What the catalogue says about the current model. `openrouter/auto`
+        is routed by what the prompt carries, pictures included."""
+        if self.model == DEFAULT_MODEL:
+            return True
+        try:
+            listed = await self.list_models()
+        except ProviderError:
+            listed = self._catalogue
+        return bool(next((m.get("vision") for m in listed if m.get("id") == self.model), False))
 
     async def aclose(self) -> None:
         await self._client.aclose()

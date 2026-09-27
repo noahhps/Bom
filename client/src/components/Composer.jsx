@@ -99,6 +99,47 @@ function ThinkingControl({ control, value, onChange, disabled }) {
   );
 }
 
+/* What the Make menu can pin a message to. Each is one tool on the server
+   (see design_mode.MAKE); Auto leaves the choice to the model. */
+export const MAKES = [
+  { id: "auto", label: "Auto", icon: "design" },
+  { id: "wireframe", label: "Wireframe", icon: "wireframe" },
+  { id: "slides", label: "Presentation", icon: "slides" },
+  { id: "sheet", label: "Sheet", icon: "sheet" },
+  { id: "document", label: "Document", icon: "document" },
+  { id: "page", label: "Web page", icon: "canvas" },
+  { id: "image", label: "Image", icon: "image" },
+];
+
+/* The Make menu: which tool the model must use for the next message. Said
+   out loud rather than hidden -- the chip shows the pinned format, and it
+   stays until changed. */
+function MakeControl({ value, onChange, disabled }) {
+  const current = MAKES.find((m) => m.id === value) || MAKES[0];
+  return (
+    <label
+      className="composer-make"
+      data-pinned={current.id !== "auto" ? "" : undefined}
+      title="What the model makes with this message. Auto lets it choose."
+    >
+      <span className="composer-agent-label mi">Make</span>
+      <span className="composer-agent-control">
+        <Icon name={current.icon} />
+        <select
+          value={current.id}
+          aria-label="What to make"
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value)}
+        >
+          {MAKES.map((m) => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+      </span>
+    </label>
+  );
+}
+
 export function Composer({
   disabled,
   focusToken,
@@ -110,6 +151,8 @@ export function Composer({
   agents = [],
   agentId = null,
   onAgent,
+  make = null,
+  onMake = null,
   placeholder = "Ask me. Task me.",
 }) {
   const [value, setValue] = useState("");
@@ -592,6 +635,8 @@ export function Composer({
           >
             <Icon name="attachment" />
           </button>
+
+          {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
 
           {sessionLabel ? <span className="chip">{sessionLabel}</span> : null}
 

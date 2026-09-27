@@ -1462,6 +1462,62 @@ class Store:
         )
         return self.get_canvas(canvas_id)
 
+    def touch_canvas(self, canvas_id: str) -> None:
+        """Bring a canvas to the front of its conversation's list -- which is
+        the one the panel shows -- without changing it."""
+        # Timestamps are whole seconds, so "now" can tie with a canvas written
+        # this same second and leave the order to chance. One past the newest
+        # in the conversation is always in front.
+        self.db.execute(
+            """
+            UPDATE canvases SET updated_at = MAX(?, 1 + (
+                SELECT MAX(updated_at) FROM canvases
+                 WHERE session_id = (SELECT session_id FROM canvases WHERE id = ?)
+            ))
+             WHERE id = ?
+            """,
+            (_now(), canvas_id, canvas_id),
+        )
+
+    def all_canvases(self, limit: int = 200) -> list[dict]:
+        """Every canvas in every conversation, newest first, without content --
+        what "open a canvas from another conversation" chooses from."""
+        rows = self.db.query(
+            """
+            SELECT c.id, c.title, c.kind, c.session_id, c.updated_at,
+                   s.title AS session_title
+              FROM canvases c JOIN sessions s ON s.id = c.session_id
+             ORDER BY c.updated_at DESC LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in rows]
+
+    def copy_canvas(self, canvas_id: str, session_id: str) -> StoredCanvas | None:
+        """A copy of a canvas in another conversation. Its pictures are copied
+        too, since image ids belong to the conversation they were added to."""
+        source = self.get_canvas(canvas_id)
+        if source is None:
+            return None
+        content = source.content
+        if source.session_id != session_id:
+            for image_id in set(re.findall(r"img_[A-Za-z0-9]+", content or "")):
+                image = self.get_image(image_id, with_data=True)
+                if image is None or image.session_id != source.session_id:
+                    continue
+                copy = self.add_image(
+                    session_id, name=image.name, mime=image.mime, width=image.width,
+                    height=image.height, data=image.data, alt=image.alt,
+                    source=image.source, prompt=image.prompt,
+                )
+                content = content.replace(image_id, copy.id)
+        title = source.title
+        if self.find_canvas_by_title(session_id, title) is not None:
+            title = f"{title} (copy)"
+        return self.create_canvas(
+            session_id, title, content=content, kind=source.kind, language=source.language
+        )
+
     def delete_canvas(self, canvas_id: str) -> bool:
         existed = self.get_canvas(canvas_id) is not None
         self.db.execute("DELETE FROM canvases WHERE id = ?", (canvas_id,))

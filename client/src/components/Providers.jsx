@@ -12,6 +12,7 @@ import { useState } from "react";
 
 const LABELS = {
   local: { name: "Local", blurb: "Ollama, on this machine" },
+  network: { name: "Network", blurb: "Ollama, on another machine on your network" },
   cloud: { name: "Cloud", blurb: "Anthropic, when a key is in the environment" },
   openrouter: { name: "OpenRouter", blurb: "One key, several hundred models" },
 };
@@ -60,7 +61,13 @@ export function Providers({ models, provider, onProvider, serving }) {
               {/* Three states, not two: a backend with no key at all is not
                   the same as one whose key stopped working, and the label is
                   short because it is set in the small caps of a card head. */}
-              {entry.healthy ? "reachable" : entry.configured ? "unreachable" : "no key"}
+              {entry.healthy
+                ? "reachable"
+                : entry.configured
+                  ? "unreachable"
+                  : entry.id === "network"
+                    ? "not connected"
+                    : "no key"}
             </span>
           </div>
 
@@ -68,6 +75,8 @@ export function Providers({ models, provider, onProvider, serving }) {
 
           {entry.id === "openrouter" ? (
             <OpenRouterConnection models={models} entry={entry} />
+          ) : entry.id === "network" ? (
+            <NetworkConnection models={models} entry={entry} />
           ) : (
             <p>{entry.error || LABELS[entry.id]?.blurb}</p>
           )}
@@ -97,8 +106,8 @@ export function Providers({ models, provider, onProvider, serving }) {
         ))}
       </div>
       <p className="caveat" style={{ margin: 0 }}>
-        Auto uses the local model and falls back to a cloud backend only when it
-        cannot be reached. Whichever one answers, it answers with the model
+        Auto uses the local model and, when it cannot be reached, falls back to
+        the network Ollama first and a cloud backend only after that. Whichever one answers, it answers with the model
         chosen above — and that choice is kept on the server, so it is the same
         on every device.
       </p>
@@ -162,6 +171,128 @@ function ModelRow({ entry, onChoose }) {
       )}
       {problem ? <span className="mi provider-problem">{problem}</span> : null}
     </div>
+  );
+}
+
+/**
+ * Connecting an Ollama on another machine: type its address, or find it.
+ *
+ * The server does the checking -- that the address is on this network and
+ * that Ollama answers there -- so this only has to say what it was told.
+ * "Find" scans the server's own subnet, which is the network that matters:
+ * the server is what will be talking to it, not this browser.
+ */
+function NetworkConnection({ models, entry }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState("");
+  const [problem, setProblem] = useState("");
+  const [found, setFound] = useState(null);
+
+  const connect = async (address) => {
+    setBusy("connect");
+    setProblem("");
+    try {
+      await models.setNetworkUrl(address.trim());
+      setUrl("");
+      setFound(null);
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const find = async () => {
+    setBusy("find");
+    setProblem("");
+    try {
+      const result = await models.discoverNetwork();
+      setFound(result);
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  if (entry.configured) {
+    return (
+      <>
+        <p>
+          Answering from <code>{entry.url}</code>. Models are the ones pulled on that
+          machine; conversations go to it over your network and nowhere else.
+        </p>
+        <div className="skill-needs">
+          <span className="mi">{entry.healthy ? "Connected" : "Saved, but not answering"}</span>
+          <button type="button" className="mi" disabled={Boolean(busy)} onClick={() => connect("")}>
+            disconnect
+          </button>
+        </div>
+        {problem ? <p className="provider-problem">{problem}</p> : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p>
+        Use Ollama running on another computer on your network — a desktop with a
+        bigger GPU, a home server. On that machine, set{" "}
+        <code>OLLAMA_HOST=0.0.0.0</code> and restart Ollama so it listens on the
+        network.
+      </p>
+      <form
+        className="skill-key"
+        onSubmit={(event) => {
+          event.preventDefault();
+          connect(url);
+        }}
+      >
+        <input
+          value={url}
+          autoComplete="off"
+          spellCheck="false"
+          placeholder="192.168.1.20 or gpu-box:11434"
+          aria-label="Network Ollama address"
+          onChange={(event) => setUrl(event.target.value)}
+        />
+        <button type="submit" className="btnp" disabled={!url.trim() || Boolean(busy)}>
+          {busy === "connect" ? "Checking…" : "Connect"}
+        </button>
+      </form>
+      <div className="side-actions" style={{ marginTop: "10px" }}>
+        <button type="button" className="btn" disabled={Boolean(busy)} onClick={find}>
+          {busy === "find" ? "Looking…" : "Find on my network"}
+        </button>
+      </div>
+      {found ? (
+        found.servers.length ? (
+          <ul className="network-found">
+            {found.servers.map((server) => (
+              <li key={server.url}>
+                <span>
+                  <code>{server.url}</code>
+                  <span className="mi">
+                    {server.self ? "this machine · " : ""}
+                    {server.models.length} model{server.models.length === 1 ? "" : "s"}
+                    {server.version ? ` · Ollama ${server.version}` : ""}
+                  </span>
+                </span>
+                <button type="button" className="btn" disabled={Boolean(busy)} onClick={() => connect(server.url)}>
+                  Use
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="caveat">
+            No Ollama answered on {found.scanned?.length ? found.scanned.map((ip) => ip.replace(/\.\d+$/, ".x")).join(", ") : "this network"}.
+            Check that it listens on the network, or type its address.
+          </p>
+        )
+      ) : null}
+      {problem ? <p className="provider-problem">{problem}</p> : null}
+    </>
   );
 }
 

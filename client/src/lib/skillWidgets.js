@@ -81,10 +81,18 @@ const SOURCES = {
   create_album: { source: "Photos", icon: "apps" },
   add_to_album: { source: "Photos", icon: "apps" },
   write_canvas: { source: "Canvas", icon: "document" },
+  edit_canvas: { source: "Canvas", icon: "document" },
   read_canvas: { source: "Canvas", icon: "document" },
+  view_canvas: { source: "Canvas", icon: "image" },
+  check_design: { source: "Design", icon: "design" },
   write_slides: { source: "Slides", icon: "slides" },
+  edit_slides: { source: "Slides", icon: "slides" },
   write_sheet: { source: "Sheet", icon: "sheet" },
   edit_sheet: { source: "Sheet", icon: "sheet" },
+  write_wireframe: { source: "Wireframe", icon: "wireframe" },
+  edit_wireframe: { source: "Wireframe", icon: "wireframe" },
+  wireframe_to_slides: { source: "Wireframe", icon: "slides" },
+  open_canvas: { source: "Canvas", icon: "document" },
   ask_for_design: { source: "Design", icon: "design" },
   list_images: { source: "Images", icon: "image" },
   generate_image: { source: "Images", icon: "image" },
@@ -107,11 +115,19 @@ const TITLE_KEYS = {
   find_events: ["query"],
   list_events: [],
   write_canvas: ["title"],
+  edit_canvas: ["title"],
   generate_image: ["prompt"],
   read_canvas: ["title"],
+  view_canvas: ["title"],
+  check_design: ["title"],
   write_slides: ["title"],
+  edit_slides: ["title"],
   write_sheet: ["title"],
   edit_sheet: ["title"],
+  write_wireframe: ["title"],
+  edit_wireframe: ["title"],
+  wireframe_to_slides: ["title"],
+  open_canvas: ["title"],
   ask_for_design: ["name"],
   run_python: ["code"],
   run_shell: ["command"],
@@ -123,6 +139,7 @@ const ROW_KEYS = {
   update_event: [["starts_at", "Starts"], ["ends_at", "Ends"], ["on", "On"]],
   list_events: [["days", "Days ahead"]],
   write_canvas: [["kind", "Kind"], ["language", "Language"]],
+  view_canvas: [["device", "Device"]],
   generate_image: [["shape", "Shape"]],
   read_file: [["offset", "From line"]],
   web_search: [["count", "Results"]],
@@ -159,6 +176,17 @@ export function describeSkill(skill) {
   const rows = rowsFrom(args, ROW_KEYS[name] || []);
   if (name === "write_slides" && Array.isArray(args.slides)) {
     rows.push({ label: "Slides", value: String(args.slides.length) });
+  }
+  if (name === "write_wireframe" && Array.isArray(args.frames)) {
+    rows.push({ label: "Screens", value: String(args.frames.length) });
+  }
+  // An edit is counted by what it changes, not quoted: the finds and
+  // replacements are the document's own text.
+  if (name === "edit_canvas" && Array.isArray(args.edits)) {
+    rows.push({ label: "Changes", value: String(args.edits.length) });
+  }
+  if ((name === "edit_wireframe" || name === "edit_slides") && Array.isArray(args.ops)) {
+    rows.push({ label: "Changes", value: String(args.ops.length) });
   }
   if (name === "write_sheet" && Array.isArray(args.columns)) {
     const count = Array.isArray(args.rows) ? args.rows.length : 0;
@@ -200,9 +228,17 @@ const DOING = {
   read_file: "Reading",
   read_canvas: "Reading",
   write_canvas: "Drafting",
+  edit_canvas: "Revising",
+  view_canvas: "Looking it over",
+  check_design: "Reviewing",
   write_slides: "Building slides",
+  edit_slides: "Editing slides",
   write_sheet: "Building sheet",
   edit_sheet: "Editing sheet",
+  write_wireframe: "Wireframing",
+  edit_wireframe: "Editing screens",
+  wireframe_to_slides: "Building slides",
+  open_canvas: "Opening canvas",
   ask_for_design: "Choosing a look",
   list_images: "Finding images",
   generate_image: "Drawing image",

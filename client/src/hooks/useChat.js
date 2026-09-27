@@ -134,7 +134,7 @@ export function useChat(
   // -- the turn -------------------------------------------------------------
 
   const send = useCallback(
-    async (text, files = [], thinkingLevel = null) => {
+    async (text, files = [], thinkingLevel = null, make = null) => {
       if (streaming || (!text.trim() && !files.length)) return;
       setStreaming(true);
 
@@ -188,7 +188,8 @@ export function useChat(
           controller.signal,
           // Likewise what a new conversation is started as: a design chat,
           // and the look picked on its empty screen before anything was sent.
-          sessionId ? {} : { mode, design },
+          // And, every message, what the Make menu pinned it to.
+          { ...(sessionId ? {} : { mode, design }), make: make && make !== "auto" ? make : null },
         );
 
         for await (const { event, data } of readEvents(response)) {
@@ -207,6 +208,26 @@ export function useChat(
                   : data.model,
               tone: data.source === "fallback" ? "warn" : null,
             });
+            // The Make menu as the server took it. Asked for but not applied
+            // means the pinned skill is switched off -- said on the answer,
+            // since the model was then free to make anything.
+            if (data.make?.requested && !data.make.applied) {
+              const pin = { status: "off", label: data.make.label };
+              setMessages((prev) => prev.map((m) => (m.key === answer.key ? { ...m, pin } : m)));
+            }
+          } else if (event === "replace") {
+            // The server withdrew text from a round it is redoing; this is the
+            // whole reply as it now stands.
+            content = data.text || "";
+            pending.current = { key: answer.key, text: content, reasoning };
+            schedule();
+          } else if (event === "make") {
+            // How a pinned message is going: sent back to the model, made,
+            // or not made after all.
+            const pin = { status: data.status, label: data.label, attempt: data.attempt };
+            setMessages((prev) =>
+              prev.map((m) => (m.key === answer.key ? { ...m, pin: { ...m.pin, ...pin, label: pin.label || m.pin?.label } } : m)),
+            );
           } else if (event === "thinking") {
             if (!announced) {
               announced = true;

@@ -20,8 +20,12 @@ import { lineText, plainText } from "./plainText.js";
 
 export const LAYOUTS = [
   "title", "section", "bullets", "content", "two_column",
-  "stat", "quote", "image", "table", "closing", "photo", "split",
+  "stat", "quote", "image", "table", "closing", "photo", "split", "board",
 ];
+
+/** Layouts that only arrive with their content -- a wireframe frame on a
+ *  "board" slide -- and so are never offered as a blank layout to switch to. */
+export const MADE_LAYOUTS = new Set(["board"]);
 
 /** The layouts that show one of the user's pictures. */
 export const IMAGE_LAYOUTS = new Set(["photo", "split", "image"]);
@@ -157,6 +161,18 @@ function cleanSlide(raw) {
     );
   }
   if ("visual" in raw && typeof raw.visual !== "string") delete slide.visual;
+  // A wireframe frame, drawn by lib/wireframe. Kept whole: it is cleaned
+  // again where it is drawn, and a board without one falls back to bullets.
+  if ("board" in raw) {
+    const board = raw.board && typeof raw.board === "object" ? raw.board : null;
+    const frame = board?.frame && typeof board.frame === "object" ? board.frame : null;
+    if (frame && Array.isArray(frame.layers)) {
+      slide.board = { fidelity: board.fidelity === "styled" ? "styled" : "wireframe", frame };
+    } else {
+      delete slide.board;
+    }
+  }
+  if (slide.layout === "board" && !slide.board) slide.layout = "bullets";
   // A picture is an id from the library and nothing else: an address that is
   // not one -- a web URL a model slipped in -- is dropped, never fetched.
   if ("image" in raw) {
@@ -336,6 +352,14 @@ export const SLIDE_CSS = `
 .deck-split-copy .deck-bullets { max-width: none; }
 .deck-split-copy .deck-bullets li { font-size: 2cqw; }
 .deck-split-copy .deck-body { max-width: none; font-size: 2cqw; }
+
+/* A wireframe frame on a slide: the frame's own pixels, scaled to fit the room
+   under the title by an SVG viewBox, so it is the same drawing at any size. */
+.deck-slide[data-layout="board"] { padding: 4cqw 5cqw 6.5cqw; background: var(--d-surface); }
+.deck-slide[data-layout="board"] .deck-title-top { font-size: 2.6cqw; margin-bottom: 2cqw; }
+.deck-board { position: relative; flex: 1; min-height: 0; }
+.deck-board > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.deck-board-frame { filter: drop-shadow(0 0.3cqw 1.2cqw rgba(0,0,0,.18)); }
 
 .deck-slide[data-layout="image"] .deck-visual .deck-pic { max-height: 100%; object-fit: contain; }
 

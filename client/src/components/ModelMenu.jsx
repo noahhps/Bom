@@ -26,6 +26,7 @@ const AUTO = {
 
 const LABELS = {
   local: { name: "Local", blurb: "On this machine" },
+  network: { name: "Network", blurb: "Ollama on your network" },
   cloud: { name: "Cloud", blurb: "Anthropic" },
   openrouter: { name: "OpenRouter", blurb: "Any model, one key" },
 };
@@ -115,7 +116,7 @@ export function ModelMenu({
     }
     const found = backend(id);
     if (!found) return "";
-    if (id === "openrouter" && !found.configured) return "not connected";
+    if ((id === "openrouter" || id === "network") && !found.configured) return "not connected";
     if (!found.healthy) return found.model ? `${found.model} · unreachable` : "unreachable";
     return found.model || LABELS[id]?.blurb || "";
   };

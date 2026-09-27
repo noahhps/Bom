@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DeckView, exportDeck } from "./DeckView";
 import { Icon } from "./Icon";
 import { SheetView } from "./SheetView";
+import { WireframeView } from "./WireframeView";
 import { useImageUrls } from "../hooks/useImages";
 import { useApi } from "../lib/api-context";
 import { fileStem, saveFile } from "../lib/files";
@@ -10,6 +11,7 @@ import { inlinePageImages, textImageIds } from "../lib/images";
 import { renderMarkdown } from "../lib/markdown";
 import { blankSheet, parseSheet, serializeSheet, toCsv } from "../lib/sheet";
 import { blankDeck, parseDeck, serializeDeck } from "../lib/slides";
+import { blankWireframe, parseWireframe, serializeWireframe } from "../lib/wireframe";
 
 // How long after the last keystroke the panel saves. Long enough that a fast
 // typist is not firing a request per word, short enough that a glance away and
@@ -18,12 +20,12 @@ const SAVE_DEBOUNCE = 700;
 
 // The kinds that have something to preview. A code canvas is only ever the
 // editor -- there is nothing to render it into -- so it never shows the toggle.
-const PREVIEWABLE = new Set(["markdown", "html", "sheet", "slides"]);
+const PREVIEWABLE = new Set(["markdown", "html", "sheet", "slides", "wireframe"]);
 
 // Stored as JSON and drawn by a component of their own. Their "preview" is the
 // real working view -- the grid, the deck -- and the text editor is the
 // escape hatch, labelled Source rather than Edit.
-const STRUCTURED = new Set(["sheet", "slides"]);
+const STRUCTURED = new Set(["sheet", "slides", "wireframe"]);
 
 /* What the + menu can make, in the order a person reaches for them. Each
    starts with something in it: an empty grid with a header, a deck with a
@@ -32,13 +34,20 @@ export const CANVAS_KINDS = [
   { kind: "markdown", label: "Document", icon: "document", title: "Untitled document", content: () => "" },
   { kind: "sheet", label: "Sheet", icon: "sheet", title: "Untitled sheet", content: () => serializeSheet(blankSheet()) },
   { kind: "slides", label: "Slides", icon: "slides", title: "Untitled deck", content: () => serializeDeck(blankDeck()) },
+  { kind: "wireframe", label: "Wireframe", icon: "wireframe", title: "Untitled wireframe", content: () => serializeWireframe(blankWireframe()) },
   { kind: "html", label: "Web page", icon: "canvas", title: "Untitled page", content: () => "" },
   { kind: "code", label: "Code", icon: "code", title: "Untitled code", content: () => "" },
 ];
 
 // How each kind is named in the header. "markdown" and "html" are how they are
 // stored, not how anyone refers to them.
-const KIND_LABEL = { markdown: "document", html: "page", sheet: "sheet", slides: "slides" };
+const KIND_LABEL = { markdown: "document", html: "page", sheet: "sheet", slides: "slides", wireframe: "wireframe" };
+
+// What each structured kind's working view is called.
+const VIEW_LABEL = { sheet: "Grid", slides: "Deck", wireframe: "Design" };
+
+// How serializing each structured kind's document works.
+const SERIALIZE = { sheet: serializeSheet, slides: serializeDeck, wireframe: serializeWireframe };
 
 // The file a code canvas saves as, by the language it says it is in.
 const EXTENSIONS = {
@@ -55,6 +64,56 @@ function KindChoices({ onPick }) {
       {k.label}
     </button>
   ));
+}
+
+/* Another conversation's canvases, to copy one into this conversation. The
+   same thing the model does with open_canvas, by hand. */
+function OpenElsewhere({ sessionId, onPick, onBack }) {
+  const api = useApi();
+  const [list, setList] = useState(null);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    let live = true;
+    api.listAllCanvases().then(
+      (data) => live && setList((data.canvases || []).filter((c) => c.session_id !== sessionId)),
+      () => live && setList([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, sessionId]);
+  const q = query.trim().toLowerCase();
+  const shown = (list || []).filter(
+    (c) => !q || `${c.title} ${c.session_title || ""}`.toLowerCase().includes(q),
+  );
+  const icon = (kind) => CANVAS_KINDS.find((k) => k.kind === kind)?.icon || "document";
+  return (
+    <div className="canvas-open-list">
+      <div className="canvas-open-head">
+        <button type="button" className="icon-btn" aria-label="Back" onClick={onBack}>‹</button>
+        <input
+          autoFocus
+          value={query}
+          placeholder="Find a canvas…"
+          aria-label="Find a canvas"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {list === null ? <p className="canvas-open-note mi">Loading…</p> : null}
+      {list && !shown.length ? (
+        <p className="canvas-open-note mi">{list.length ? "Nothing matches." : "No canvases in other conversations yet."}</p>
+      ) : null}
+      {shown.slice(0, 60).map((c) => (
+        <button key={c.id} type="button" className="canvas-kind-choice canvas-open-item" role="menuitem" onClick={() => onPick(c)}>
+          <Icon name={icon(c.kind)} />
+          <span className="canvas-open-text">
+            <span>{c.title}</span>
+            <span className="mi">{c.session_title || "Untitled conversation"}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // Strip a single wrapping code fence, which a model often puts around canvas
@@ -111,6 +170,7 @@ export function Canvas({
   onClose,
   onSave,
   onCreate,
+  onImport,
   onDelete,
   fallbackTheme = null,
   resizable = false,
@@ -148,14 +208,26 @@ export function Canvas({
   // server timestamp so the reader's own keystrokes (which do not move it until
   // the save resolves) never yank the cursor back.
   const lastId = useRef(activeId);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   useEffect(() => {
     const switched = lastId.current !== activeId;
     lastId.current = activeId;
-    if (!switched && sent.current !== null && active?.content === sent.current) {
+    // An echo of our own save, or a rename: the body on screen is already
+    // right, and nothing pending should be cancelled.
+    if (
+      !switched &&
+      ((sent.current !== null && active?.content === sent.current) || active?.content === draftRef.current)
+    ) {
       setTitleDraft(active?.title ?? "");
       return;
     }
     sent.current = null;
+    // A rewrite from outside (the model) replaces what is shown, so an edit
+    // still waiting on the debounce must not land after it: it would put the
+    // older document back on the server under the one on screen.
+    // (A switch to another canvas keeps it: that save is for the one left.)
+    if (!switched) clearTimeout(timer.current);
     setDraft(active?.content ?? "");
     setTitleDraft(active?.title ?? "");
   }, [activeId, stamp]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -209,9 +281,14 @@ export function Canvas({
   // A sheet or a deck edited in its own view. The view hands back the whole
   // new document; it is written into the draft (so Source shows it) and saved
   // on the same debounce as typing.
+  // The last document handed up, with its text: reading that text back would
+  // make an equal but new object, and the wireframe editor keys its caches
+  // (and its idea of "changed underneath") on identity.
+  const handed = useRef(null);
   const onStructured = useCallback(
     (data) => {
-      const text = active?.kind === "sheet" ? serializeSheet(data) : serializeDeck(data);
+      const text = (SERIALIZE[active?.kind] || serializeDeck)(data);
+      handed.current = { text, data };
       setDraft(text);
       scheduleSave({ content: text });
     },
@@ -239,6 +316,11 @@ export function Canvas({
   const kind = active?.kind;
   const sheet = useMemo(() => (kind === "sheet" ? parseSheet(draft) : null), [kind, draft]);
   const deck = useMemo(() => (kind === "slides" ? parseDeck(draft) : null), [kind, draft]);
+  const wireframe = useMemo(() => {
+    if (kind !== "wireframe") return null;
+    if (handed.current?.text === draft) return handed.current.data;
+    return parseWireframe(draft);
+  }, [kind, draft]);
 
   // A sheet copies as tab-separated values, which is what a spreadsheet
   // splits into cells on paste. Everything else copies as its text.
@@ -323,7 +405,7 @@ export function Canvas({
   // What the two views are called. For a sheet or a deck the rendered view is
   // where the work happens and comes first; the text is its source.
   const views = structured
-    ? [["preview", active.kind === "sheet" ? "Grid" : "Deck"], ["edit", "Source"]]
+    ? [["preview", VIEW_LABEL[active.kind]], ["edit", "Source"]]
     : [["edit", "Edit"], ["preview", "Preview"]];
 
   return (
@@ -439,9 +521,29 @@ export function Canvas({
           >
             <Icon name="plus" />
           </button>
-          {menu ? (
+          {menu === "open" ? (
+            <div className="canvas-new-menu" role="menu" aria-label="Open a canvas">
+              <OpenElsewhere
+                sessionId={active?.session_id || null}
+                onBack={() => setMenu(true)}
+                onPick={(c) => {
+                  setMenu(false);
+                  onImport?.(c.id).catch(() => {});
+                }}
+              />
+            </div>
+          ) : menu ? (
             <div className="canvas-new-menu" role="menu" aria-label="New canvas">
               <KindChoices onPick={make} />
+              {onImport ? (
+                <>
+                  <div className="canvas-new-sep" role="separator" />
+                  <button type="button" className="canvas-kind-choice" role="menuitem" onClick={() => setMenu("open")}>
+                    <Icon name="folder" />
+                    From another conversation…
+                  </button>
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -462,6 +564,16 @@ export function Canvas({
             {structured && mode === "preview" ? (
               sheet ? (
                 <SheetView sheet={sheet} fallbackTheme={fallbackTheme} onChange={onStructured} />
+              ) : wireframe ? (
+                <WireframeView
+                  key={activeId}
+                  doc={wireframe}
+                  fallbackTheme={fallbackTheme}
+                  onChange={onStructured}
+                  sessionId={active.session_id}
+                  onMakeCanvas={onCreate}
+                  title={titleDraft || active.title}
+                />
               ) : deck ? (
                 <DeckView
                   deck={deck}
@@ -511,6 +623,9 @@ export function Canvas({
             <button type="button" className="canvas-foot-btn" onClick={copy}>
               {copied ? "Copied" : "Copy"}
             </button>
+            {kind === "wireframe" ? (
+              <span className="canvas-foot-note mi">Export from the toolbar above</span>
+            ) : (
             <button
               type="button"
               className="canvas-foot-btn"
@@ -521,6 +636,7 @@ export function Canvas({
             >
               {sheet ? "CSV" : deck ? "Export" : "Download"}
             </button>
+            )}
             <div className="spacer" />
             <button
               type="button"

@@ -49,6 +49,21 @@ IMAGE_GEN_API_KEY=                       # only for a backend that needs one
 ```
 A generator on this machine or your local network runs without asking. One anywhere else is sent your prompt, so Bom asks before every request. Generated pictures are labelled "AI-generated" wherever they appear.
 
+### Design work: context and revisions
+Design turns are long, so the window is sized for them. Every value is optional:
+```
+CONTEXT_TOKENS=65536        # Ollama's num_ctx; capped at what the model was trained on
+CLOUD_CONTEXT_TOKENS=200000 # the window for Anthropic / OpenRouter, capped at the model's own
+REPLY_TOKENS=8192           # headroom kept for a reply (a whole page arrives as one tool call)
+CLOUD_MAX_TOKENS=64000      # the longest cloud reply
+CANVAS_READ_CHARS=60000     # how much of a canvas read_canvas returns before paging
+RESULT_CHARS=12000          # how much of any other tool result the model sees
+MAX_TOOL_ROUNDS=24
+```
+Lower `CONTEXT_TOKENS` if the local model runs short of memory: the KV cache grows with it.
+
+Work in the canvas is revised in place rather than rewritten: `edit_canvas` (find and replace, or `css_vars` to restyle a page built on tokens), `edit_wireframe` (layers and frames by id), `edit_slides` and `edit_sheet`. Every write and edit reports plain breakages -- contrast, unbalanced markup, layers off the screen -- and `check_design` gives a fuller review. For a model that can see, `view_canvas` shows it a picture of a page or a wireframe, drawn with Chrome/Chromium/Edge/Brave if one is installed (or `CHROME_PATH`) and otherwise Quick Look on a Mac; scripts don't run and nothing is fetched from the internet.
+
 All interactions stay on‑device; nothing is sent to external services (unless you want it to).
 
 ## 🤝 Contributing

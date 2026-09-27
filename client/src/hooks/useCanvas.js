@@ -118,6 +118,19 @@ export function useCanvas(api, sessionId) {
     [api, sessionId],
   );
 
+  // Another conversation's canvas, copied into this one and opened.
+  const importCanvas = useCallback(
+    async (id) => {
+      if (!sessionId) return null;
+      const canvas = await api.copyCanvas(id, sessionId);
+      setCanvases((prev) => [canvas, ...prev.filter((c) => c.id !== canvas.id)]);
+      setActiveId(canvas.id);
+      setOpen(true);
+      return canvas;
+    },
+    [api, sessionId],
+  );
+
   const remove = useCallback(
     async (id) => {
       await api.deleteCanvas(id);
@@ -146,6 +159,7 @@ export function useCanvas(api, sessionId) {
     toggle,
     save,
     create,
+    importCanvas,
     remove,
   };
 }

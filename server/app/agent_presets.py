@@ -31,7 +31,7 @@ PRESETS: list[dict] = [
         ),
         "skills": [
             "web_search", "search_history", "current_time", "read_canvas",
-            "write_canvas", "write_slides", "ask_for_design",
+            "write_canvas", "edit_canvas", "write_slides", "edit_slides", "ask_for_design",
         ],
     },
     {
@@ -46,7 +46,7 @@ PRESETS: list[dict] = [
             "that answers the need."
         ),
         "skills": [
-            "run_python", "run_shell", "read_canvas", "write_canvas",
+            "run_python", "run_shell", "read_canvas", "write_canvas", "edit_canvas",
             "list_directory", "read_file", "search_files",
         ],
     },
@@ -60,7 +60,7 @@ PRESETS: list[dict] = [
             "voice, cut what does not earn its place, and when you change "
             "something substantive say what you changed and why in a line."
         ),
-        "skills": ["read_canvas", "write_canvas", "search_history"],
+        "skills": ["read_canvas", "write_canvas", "edit_canvas", "search_history"],
     },
     {
         "id": "planner",
@@ -74,7 +74,7 @@ PRESETS: list[dict] = [
             "an estimate is a guess."
         ),
         "skills": [
-            "write_canvas", "read_canvas", "write_sheet", "edit_sheet",
+            "write_canvas", "edit_canvas", "read_canvas", "write_sheet", "edit_sheet",
             "current_time", "search_history",
         ],
     },
@@ -92,7 +92,8 @@ PRESETS: list[dict] = [
         ),
         "skills": [
             "run_python", "read_file", "list_directory", "read_canvas", "write_canvas",
-            "write_sheet", "edit_sheet", "write_slides", "ask_for_design",
+            "edit_canvas", "write_sheet", "edit_sheet", "write_slides", "edit_slides",
+            "ask_for_design",
         ],
     },
     {
@@ -105,12 +106,16 @@ PRESETS: list[dict] = [
             "for numbers, write_canvas with kind html for a page -- styled to "
             "that standard. Keep a clear hierarchy, one accent, a type scale and "
             "a spacing scale, and draw visuals inline rather than linking them. "
-            "Reply briefly with the decisions that matter and what you would "
-            "refine next."
+            "Check your work before calling it done -- check_design, and "
+            "view_canvas to see it -- and revise in place with the edit tools "
+            "rather than starting over. Reply briefly with the decisions that "
+            "matter and what you would refine next."
         ),
         "skills": [
-            "ask_for_design", "write_slides", "write_sheet", "edit_sheet",
-            "write_canvas", "read_canvas", "list_images", "generate_image",
+            "ask_for_design", "write_slides", "edit_slides", "write_sheet", "edit_sheet",
+            "write_canvas", "edit_canvas", "read_canvas", "list_images", "generate_image",
+            "write_wireframe", "edit_wireframe", "wireframe_to_slides", "open_canvas",
+            "check_design", "view_canvas",
         ],
     },
     {

@@ -26,14 +26,22 @@ from .openrouter import OpenRouterProvider
 _HEALTH_TTL_SECONDS = 15.0
 
 LOCAL = "local"
+NETWORK = "network"
 CLOUD = "cloud"
 OPENROUTER = "openrouter"
+
+# Where the network Ollama's address is kept in `app_settings`.
+NETWORK_URL_SETTING = "ollama.network_url"
 
 # The order auto walks when local is not answering. OpenRouter before Anthropic
 # on purpose: it is only ever configured by someone doing so deliberately in
 # this app, where ANTHROPIC_API_KEY is an environment variable that may be
 # there for something else entirely.
-FALLBACK_ORDER = (OPENROUTER, CLOUD)
+#
+# The network Ollama comes first of all: it is the user's own hardware on
+# their own network, so falling back to it keeps a conversation off the
+# internet when this machine's Ollama is down.
+FALLBACK_ORDER = (NETWORK, OPENROUTER, CLOUD)
 
 # Where a picked model is kept, per backend, in `app_settings`. Namespaced like
 # the theme and the memory switches beside it, because that table is shared.
@@ -55,21 +63,38 @@ class Route:
 
 
 class ProviderRouter:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, network_url: str | None = None) -> None:
         self.local = OllamaProvider(
             settings.ollama_url,
             settings.ollama_model,
             embed_model=settings.embed_model,
             context_tokens=settings.context_tokens,
         )
-        self.cloud = AnthropicProvider()
+        # Named apart from the local one because `provider.name` is what a
+        # message is stored with, and "which Ollama answered" is worth keeping.
+        self.network = OllamaProvider(
+            network_url if network_url is not None else getattr(settings, "network_ollama_url", ""),
+            settings.ollama_model,
+            embed_model=settings.embed_model,
+            context_tokens=settings.context_tokens,
+            name="ollama-network",
+        )
+        # The cloud backends get their own, larger window: it costs nothing in
+        # memory here, and each still caps it at what its model holds.
+        cloud_window = getattr(settings, "cloud_context_tokens", 200_000)
+        self.cloud = AnthropicProvider(
+            max_tokens=getattr(settings, "cloud_max_tokens", 64_000),
+            context_tokens=cloud_window,
+        )
         self.openrouter = OpenRouterProvider(
             settings.openrouter_api_key,
             settings.openrouter_model,
             base_url=settings.openrouter_url,
+            context_tokens=cloud_window,
         )
         self.by_id: dict[str, ModelProvider] = {
             LOCAL: self.local,
+            NETWORK: self.network,
             CLOUD: self.cloud,
             OPENROUTER: self.openrouter,
         }
@@ -122,4 +147,5 @@ class ProviderRouter:
 
     async def aclose(self) -> None:
         await self.local.aclose()
+        await self.network.aclose()
         await self.openrouter.aclose()

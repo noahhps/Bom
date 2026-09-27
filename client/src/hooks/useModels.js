@@ -96,6 +96,18 @@ export function useModels(api) {
     [api, load, patch],
   );
 
+  /** Connect an Ollama elsewhere on the network, by address. Empty disconnects. */
+  const setNetworkUrl = useCallback(
+    async (url) => {
+      const state = await api.setNetworkOllama(url);
+      patch("network", state);
+      // The other machine has its own models; list them.
+      await load();
+      return state;
+    },
+    [api, load, patch],
+  );
+
   /**
    * Sign in at openrouter.ai, in a tab this page opens.
    *
@@ -162,6 +174,8 @@ export function useModels(api) {
     refresh: load,
     choose,
     setKey,
+    setNetworkUrl,
+    discoverNetwork: () => api.discoverNetworkOllama(),
     signIn,
     startSignIn,
     dismissSignIn,

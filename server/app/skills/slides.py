@@ -476,7 +476,8 @@ class WriteSlides(Skill):
                 "Write a deck a designer would: open with a title slide, one idea "
                 "per slide, titles that state the point, at most five short "
                 "bullets, and vary the layouts. Reusing a title replaces that "
-                "deck whole. Keep your chat reply short; the deck is in the panel."
+                "deck whole -- to revise one, use edit_slides. Keep your chat "
+                "reply short; the deck is in the panel."
             ),
             parameters={
                 "type": "object",
@@ -569,8 +570,8 @@ class WriteSlides(Skill):
         said = (
             f"{verb} the deck {name!r} ({count} slide{'' if count == 1 else 's'}). "
             "It is open in the canvas panel, where the user can page through, "
-            "edit, present and export it. Update it by calling write_slides with "
-            "the same title, or read it back first with read_canvas."
+            "edit, present and export it. Change it with edit_slides (read_canvas "
+            "shows the slides by number)."
         )
         flags = advice(deck)
         if missing:
@@ -578,4 +579,268 @@ class WriteSlides(Skill):
                          + ", ".join(missing) + " -- call list_images for the real ids")
         if flags:
             said += " Before you finish, consider: " + "; ".join(flags) + "."
+        return said
+
+
+# -- editing in place ------------------------------------------------------------
+
+_SLIDE_OPS = ("update", "add", "remove", "move", "duplicate", "theme")
+_SLIDE_OP_ALIASES = {
+    "set": "update", "edit": "update", "change": "update", "replace": "update",
+    "insert": "add", "append": "add", "new": "add", "create": "add",
+    "delete": "remove", "drop": "remove", "reorder": "move", "copy": "duplicate",
+    "set_theme": "theme", "restyle": "theme",
+}
+_SLIDE_OP_KEYS = {"op", "action", "slide", "at", "after", "before", "to", "set", "changes",
+                  "props", "fields", "number", "index"}
+
+
+def _slide_number(value) -> int | None:
+    try:
+        return int(plain_text(value) if not isinstance(value, int) else value)
+    except (TypeError, ValueError):
+        return None
+
+
+def apply_slide_ops(deck: dict, ops) -> tuple[list[str], list[str]]:
+    """Apply `ops` to `deck` in place. Returns (what was done, what was not).
+
+    Slide numbers mean the deck as it was read, before any of these ops ran:
+    "remove 3, then update 5" means the fifth slide the model was looking at,
+    not whatever slid into fifth place once the third had gone.
+    """
+    listed = _as_list(ops)
+    slides: list[dict] = deck.setdefault("slides", [])
+    original = list(slides)
+    done: list[str] = []
+    failed: list[str] = []
+
+    def find(value, number: int) -> dict | str:
+        n = _slide_number(value)
+        if n is None or not 1 <= n <= len(original):
+            return f"op {number}: there is no slide {plain_text(value) or '?'} (the deck has {len(original)})"
+        slide = original[n - 1]
+        if not any(s is slide for s in slides):
+            return f"op {number}: slide {n} was already removed"
+        return slide
+
+    def position(slide: dict) -> int:
+        return next(i for i, s in enumerate(slides) if s is slide)
+
+    for number, raw in enumerate(listed[:60], start=1):
+        item = raw if isinstance(raw, dict) else as_dict(raw)
+        if not isinstance(item, dict):
+            failed.append(f"op {number} is not an object")
+            continue
+        verb = plain_text(item.get("op") or item.get("action")).lower().replace(" ", "_")
+        verb = _SLIDE_OP_ALIASES.get(verb, verb)
+        if not verb:
+            verb = "add" if isinstance(item.get("slide"), dict) else "update"
+
+        if verb == "update":
+            target = find(item.get("slide", item.get("number", item.get("index"))), number)
+            if isinstance(target, str):
+                failed.append(target)
+                continue
+            changes = next(
+                (item[k] for k in ("set", "changes", "props", "fields") if isinstance(item.get(k), dict)),
+                None,
+            ) or {k: v for k, v in item.items() if k not in _SLIDE_OP_KEYS}
+            if not changes:
+                failed.append(f"op {number}: nothing to set -- put the fields under `set`")
+                continue
+            merged = dict(target)
+            for key, value in changes.items():
+                if value is None:
+                    merged.pop(_ALIASES.get(key, key), None)
+                    merged.pop(key, None)
+                else:
+                    merged[key] = value
+            at = position(target)
+            cleaned = normalize_slide(merged, at)
+            if cleaned is None:
+                failed.append(f"op {number}: that would leave slide {at + 1} empty -- remove it instead")
+                continue
+            slides[at] = cleaned
+            original[original.index(target)] = cleaned
+            done.append(f"updated slide {at + 1} ({cleaned['layout']})")
+
+        elif verb in ("add", "duplicate"):
+            if verb == "duplicate":
+                source = find(item.get("slide"), number)
+                if isinstance(source, str):
+                    failed.append(source)
+                    continue
+                new = json.loads(json.dumps(source))
+                anchor = ("after", source)
+            else:
+                spec = item.get("slide") if isinstance(item.get("slide"), dict) else as_dict(item.get("slide"))
+                if spec is None:
+                    spec = {k: v for k, v in item.items() if k not in _SLIDE_OP_KEYS}
+                new = normalize_slide(spec, len(slides))
+                if new is None:
+                    failed.append(f"op {number}: that slide had nothing on it")
+                    continue
+                anchor = None
+                for side in ("after", "before"):
+                    if item.get(side) not in (None, ""):
+                        found = find(item[side], number)
+                        if isinstance(found, str):
+                            failed.append(found)
+                            anchor = "bad"
+                        else:
+                            anchor = (side, found)
+                        break
+                if anchor == "bad":
+                    continue
+                if anchor is None and _slide_number(item.get("at")) is not None:
+                    # `at` is where it should end up, 1 for first.
+                    at = max(1, min(len(slides) + 1, _slide_number(item["at"])))
+                    slides.insert(at - 1, new)
+                    done.append(f"added slide {at} ({new['layout']})")
+                    continue
+            if len(slides) >= MAX_SLIDES:
+                failed.append(f"op {number}: a deck holds at most {MAX_SLIDES} slides")
+                continue
+            if anchor is None:
+                slides.append(new)
+                at = len(slides)
+            else:
+                at = position(anchor[1]) + (1 if anchor[0] == "after" else 0)
+                slides.insert(at, new)
+                at += 1
+            done.append(f"{'duplicated as' if verb == 'duplicate' else 'added'} slide {at} ({new['layout']})")
+
+        elif verb == "remove":
+            targets = item.get("slides") if isinstance(item.get("slides"), list) else [item.get("slide")]
+            for value in targets:
+                target = find(value, number)
+                if isinstance(target, str):
+                    failed.append(target)
+                    continue
+                if len(slides) == 1:
+                    failed.append(f"op {number}: that is the only slide")
+                    continue
+                slides.pop(position(target))
+                done.append(f"removed slide {plain_text(value)} of the original")
+
+        elif verb == "move":
+            target = find(item.get("slide"), number)
+            if isinstance(target, str):
+                failed.append(target)
+                continue
+            to = _slide_number(item.get("to") or item.get("at"))
+            if to is None:
+                failed.append(f"op {number}: say where it goes with `to` (1 for first)")
+                continue
+            slides.pop(position(target))
+            to = max(1, min(len(slides) + 1, to))
+            slides.insert(to - 1, target)
+            done.append(f"moved a slide to position {to}")
+
+        elif verb == "theme":
+            changes = item.get("set") if isinstance(item.get("set"), dict) else {
+                k: v for k, v in item.items() if k not in _SLIDE_OP_KEYS
+            }
+            cleaned = clean_theme(changes)
+            if not cleaned:
+                failed.append(f"op {number}: no theme values could be read")
+                continue
+            deck["theme"] = {**(deck.get("theme") or {}), **cleaned}
+            done.append("theme: " + ", ".join(f"{k} {v}" for k, v in cleaned.items()))
+
+        else:
+            failed.append(f"op {number}: unknown op {verb!r} -- use one of {', '.join(_SLIDE_OPS)}")
+    return done, failed
+
+
+class EditSlides(Skill):
+    surfaces = "canvas"
+    wants_session = True
+
+    def __init__(self, store: Store) -> None:
+        super().__init__(
+            name="edit_slides",
+            description=(
+                "Change an existing deck without rewriting it: edit some slides' "
+                "fields, add, remove, reorder or duplicate slides, or restyle the "
+                "theme. Prefer this to write_slides for any revision -- slides "
+                "you do not name stay exactly as they are, including the user's "
+                "own edits. Slides are numbered from 1 as read_canvas shows them, "
+                "and every number in one call means the deck as it was before "
+                "the call. `ops`, applied in order: {op: 'update', slide, set: "
+                "{title, bullets, body, layout, stats, image, notes, ...}} -- "
+                "null removes a field; {op: 'add', slide: {layout, ...}, after "
+                "or before: a number, or at: the position it should take}; "
+                "{op: 'remove', slide}; {op: 'move', slide, to}; {op: "
+                "'duplicate', slide}; {op: 'theme', set: {accent, background, "
+                "...}}."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Which deck."},
+                    "ops": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {"type": "string", "enum": list(_SLIDE_OPS)},
+                                "slide": {
+                                    "type": ["integer", "object"],
+                                    "description": "A slide number, or for add the new slide.",
+                                },
+                                "set": {"type": "object", "description": "Fields to set."},
+                                "after": {"type": "integer"},
+                                "before": {"type": "integer"},
+                                "at": {"type": "integer"},
+                                "to": {"type": "integer"},
+                            },
+                        },
+                    },
+                },
+                "required": ["title", "ops"],
+            },
+        )
+        self.store = store
+
+    async def use(self, session: str, title=None, ops=None, **extra) -> str:
+        name = plain_text(title or extra.get("name"))
+        canvas = self.store.find_canvas_by_title(session, name) if name else None
+        if canvas is None or canvas.kind != KIND:
+            decks = [c for c in self.store.session_canvases(session) if c.kind == KIND]
+            if len(decks) == 1 and not name:
+                canvas = decks[0]
+            else:
+                listed = ", ".join(repr(c.title) for c in decks) or "none"
+                return f"There is no deck called {name!r}. Decks here: {listed}."
+        try:
+            deck = json.loads(canvas.content or "{}")
+        except ValueError:
+            return f"{canvas.title!r} could not be read as a deck."
+        if ops is None:
+            ops = next((extra[k] for k in ("operations", "changes", "edits") if k in extra), None)
+        if not ops:
+            return "No ops were given. Pass `ops`, e.g. [{op: 'update', slide: 2, set: {title: '...'}}]."
+
+        done, failed = apply_slide_ops(deck, ops)
+        if not done:
+            return "Nothing changed. " + " ".join(f + "." for f in failed)
+        from .images import generated_ids, known_ids  # local: avoids an import cycle
+
+        missing = check_images(deck, known_ids(self.store, session), generated_ids(self.store, session))
+        self.store.update_canvas(canvas.id, content=json.dumps(deck, ensure_ascii=False, indent=1))
+        count = len(deck["slides"])
+        said = (
+            f"Edited the deck {canvas.title!r}, now {count} slide{'' if count == 1 else 's'}: "
+            + "; ".join(done) + "."
+        )
+        if failed:
+            said += " Not applied: " + " ".join(f + "." for f in failed)
+        if missing:
+            said += (" These images do not exist and were left off: " + ", ".join(missing)
+                     + " -- call list_images for the real ids.")
+        from ..design_check import check_theme, summary
+
+        said += summary(check_theme(deck.get("theme")))
         return said

@@ -116,3 +116,19 @@ class Skill(ABC):
             "description": self.description,
             "parameters": params,
         }
+
+class Pictured(str):
+    """A skill's text answer with pictures for the model to look at.
+
+    A `str`, so everything that reads a result as text -- the stored record,
+    the trace in the client, the carried recap -- still can, and never sees the
+    bytes. The turn loop is the only reader of `images`: it hands them to a
+    model that can see, beside the text, for that round only.
+    """
+
+    images: tuple = ()
+
+    def __new__(cls, text: str, images=()):
+        made = super().__new__(cls, text)
+        made.images = tuple(images)
+        return made

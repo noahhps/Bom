@@ -99,8 +99,13 @@ CARRIED_REASONING_CHARS = 400   # the tail of the deliberation
 
 # A skill's result is trimmed here rather than in build_window, because the
 # window trims from the *head* -- so an unbounded result would push out the
-# user's actual question rather than itself.
-MAX_RESULT_CHARS = 4000
+# user's actual question rather than itself. The fallback when settings carry
+# no RESULT_CHARS; a skill whose result is the work itself (read_canvas, the
+# design standard) sets `max_result_chars` of its own.
+MAX_RESULT_CHARS = 12_000
+
+#: Skills that answer with a picture, offered only to a model that can see one.
+PICTURE_SKILLS = {"view_canvas"}
 
 
 #: How many rounds a turn may lose to unparseable tool calls before it
@@ -321,6 +326,29 @@ class Orchestrator:
         """
         return self.store.get_settings(MEMORY_DEFAULTS)["memory.between_chats"]
 
+    async def _window_budget(self, provider, tools: list[dict] | None) -> int:
+        """Tokens the prompt and history may fill for this backend.
+
+        The backend's own window when it can say what that is -- a cloud model
+        holds far more than a local runner, and a local model trained on less
+        than CONTEXT_TOKENS holds less -- less the reply's headroom and the
+        tool shelf. The shelf is sent with every request and used to go
+        uncounted, which on a design turn is five thousand tokens the window
+        builder thought it still had.
+        """
+        window = self.settings.context_tokens
+        measure = getattr(provider, "context_window", None)
+        if callable(measure):
+            try:
+                window = int(await measure()) or window
+            except Exception:  # noqa: BLE001 -- the configured budget stands
+                pass
+        # A quarter at most, so a small window configured by hand is not
+        # handed entirely to a reply it was never going to need.
+        reply = min(self.settings.reply_tokens, window // 4)
+        shelf = estimate_tokens(json.dumps(tools)) if tools else 0
+        return max(1024, window - reply - shelf)
+
     def build_window(
         self,
         history: list[StoredMessage],
@@ -432,7 +460,31 @@ class Orchestrator:
                 choice = requested
                 blocked = blocked_by(choice)
                 system = f"{system}\n\n{pin_instruction(choice)}"
-        window = self.build_window(history, stored_files, system=system)
+        # The agent's skill subset, if the conversation is assigned to one.
+        # `parsed_skills()` is None for "every enabled skill" and a list --
+        # possibly empty -- for a restriction; the set is passed on to both
+        # what the model is offered and what it is allowed to actually run.
+        # Settled before the window, because the shelf it offers is sent with
+        # every request and has to be paid for out of the same budget.
+        agent = self.store.session_agent(session_id)
+        allowed_skills = (
+            set(agent.parsed_skills())
+            if agent and agent.parsed_skills() is not None
+            else None
+        )
+        tools = self._skill_schemas(allowed_skills, blocked)
+        # Whether this backend's model can look at a picture. A skill that
+        # answers with one is offered only when it can; a picture sent to a
+        # model that cannot see is dropped without a word.
+        sees = await self._sees_images(provider)
+        if tools and not sees:
+            tools = [t for t in tools if t["name"] not in PICTURE_SKILLS] or None
+        window = self.build_window(
+            history,
+            stored_files,
+            system=system,
+            budget=await self._window_budget(provider, tools),
+        )
         # One batched update, not one statement per fact per turn. This is what
         # "12 answers" under a fact on the memory page is counting, and what
         # keeps an unused inferred fact fading rather than lingering forever.
@@ -475,17 +527,6 @@ class Orchestrator:
         saved = False
         try:
             thinking_level = think or self.settings.ollama_think
-            # The agent's skill subset, if the conversation is assigned to one.
-            # `parsed_skills()` is None for "every enabled skill" and a list --
-            # possibly empty -- for a restriction; the set is passed on to both
-            # what the model is offered and what it is allowed to actually run.
-            agent = self.store.session_agent(session_id)
-            allowed_skills = (
-                set(agent.parsed_skills())
-                if agent and agent.parsed_skills() is not None
-                else None
-            )
-            tools = self._skill_schemas(allowed_skills, blocked)
             max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)
 
             # One pass per round. A round ends when the model stops; if it
@@ -511,6 +552,9 @@ class Orchestrator:
                 final = None
                 round_text: list[str] = []
                 round_state = {"garbled": False}
+                # Pictures a skill handed back this round, for the model to
+                # look at once every result of the round is in.
+                round_images: list = []
 
                 async for chunk in self._stream_tolerating_garbled(
                     provider, window, thinking_level, tools, round_state
@@ -785,10 +829,12 @@ class Orchestrator:
                             extra["kind"] = choice["kind"]
                             extra["kind_pinned"] = True
                         before = self._canvas_marks(session_id) if choice and not pin_done else None
-                        result = await self._run_skill(call, session_id, extra=extra)
+                        result = await self._run_skill(
+                            call, session_id, extra=extra, images=round_images if sees else None
+                        )
                         result += _gated_note(self.store, gated, extra, call.name)
                         record["result"] = result
-                        if before is not None and call.name == choice["tool"]:
+                        if before is not None and call.name in (choice["tool"], choice.get("edit")):
                             pin_done = self._pin_met(choice, session_id, before, result)
 
                     yield _sse(
@@ -825,6 +871,21 @@ class Orchestrator:
                             content=result,
                             tool_call_id=call.id,
                             tool_name=call.name,
+                        )
+                    )
+                # After the round's results, not among them: every backend
+                # wants a call's result straight after the call, and a
+                # picture is not a result any of them can carry. For this
+                # round only -- the next turn gets the words, not the bytes.
+                if round_images:
+                    window.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "The picture you asked for is attached. Look at it "
+                                "before deciding what to change."
+                            ),
+                            images=tuple(round_images),
                         )
                     )
             # How the pin went, said once at the end. A miss is also written
@@ -995,8 +1056,21 @@ class Orchestrator:
             for cid, mark in after.items()
         )
 
+    async def _sees_images(self, provider) -> bool:
+        check = getattr(provider, "sees_images", None)
+        if not callable(check):
+            return False
+        try:
+            return bool(await check())
+        except Exception:  # noqa: BLE001 -- unknown means no
+            return False
+
     async def _run_skill(
-        self, call, session_id: str | None = None, extra: dict | None = None
+        self,
+        call,
+        session_id: str | None = None,
+        extra: dict | None = None,
+        images: list | None = None,
     ) -> str:
         """One skill call, reduced to text the model can read.
 
@@ -1034,7 +1108,20 @@ class Orchestrator:
             return f"{call.name} was called wrongly: {exc}"
         except Exception as exc:
             return f"{call.name} failed: {type(exc).__name__}: {exc}"
-        return str(result)[:MAX_RESULT_CHARS]
+        limit = getattr(skill, "max_result_chars", None) or getattr(
+            self.settings, "result_chars", MAX_RESULT_CHARS
+        )
+        text = clip_result(str(result), limit)
+        pictures = tuple(getattr(result, "images", ()) or ())
+        if pictures:
+            if images is None:
+                text += (
+                    " (The picture could not be shown: this model cannot see "
+                    "images. check_design reviews the source instead.)"
+                )
+            else:
+                images.extend(pictures)
+        return text
 
     def _persist(
         self,
@@ -1105,6 +1192,22 @@ class Orchestrator:
 
         self.store.rename_session(session_id, title)
         return title
+
+
+def clip_result(text: str, limit: int) -> str:
+    """A skill's result cut to `limit` characters, saying that it was.
+
+    The note matters more than the cut. A result that simply stops reads as
+    the whole of it, and a model revising a page it saw the top of rewrites
+    the top and loses the rest.
+    """
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return (
+        text[:limit]
+        + f"\n… [cut: the result was {len(text)} characters; only the first "
+        f"{limit} are shown]"
+    )
 
 
 def _gated_note(store: Store, gated: str | None, extra: dict, tool: str) -> str:

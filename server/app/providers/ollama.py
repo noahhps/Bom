@@ -43,10 +43,55 @@ class OllamaProvider:
         self.context_tokens = context_tokens
         self.base_url = (base_url or "").rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=_TIMEOUT)
+        # What /api/show says about each model: the context it was trained
+        # on and whether it can see. Keyed by the full tag -- two tags of one
+        # model can differ -- and only ever filled with an answer, so an
+        # Ollama that was down is asked again next time.
+        self._shown: dict[str, dict] = {}
 
     @property
     def configured(self) -> bool:
         return bool(self.base_url)
+
+    async def context_window(self) -> int:
+        """The num_ctx this model is run with: the configured budget, or what
+        the model was trained on when that is less.
+
+        Asking for more than the model's own window buys nothing but a bigger
+        KV cache -- positions past it are ones the model never learned -- so a
+        64k budget on an 8k model is an 8k window.
+        """
+        trained = (await self._show(self.model)).get("context")
+        return min(self.context_tokens, trained) if trained else self.context_tokens
+
+    async def sees_images(self) -> bool:
+        """Whether the current model takes pictures. Only a yes from Ollama
+        counts: a picture sent to a model that cannot see is dropped without a
+        word, and the model then answers about an image it never had."""
+        return bool((await self._show(self.model)).get("vision"))
+
+    def _num_ctx(self) -> int:
+        trained = self._shown.get(self.model, {}).get("context")
+        return min(self.context_tokens, trained) if trained else self.context_tokens
+
+    async def _show(self, model: str) -> dict:
+        if model in self._shown or not self.base_url:
+            return self._shown.get(model, {})
+        try:
+            response = await self._client.post(
+                "/api/show", json={"model": model}, timeout=httpx.Timeout(5.0)
+            )
+        except httpx.HTTPError:
+            return {}
+        if response.status_code >= 400:
+            return {}
+        try:
+            body = response.json()
+        except ValueError:
+            return {}
+        facts = {"context": trained_context(body), "vision": sees(body)}
+        self._shown[model] = facts
+        return facts
 
     async def set_base_url(self, url: str) -> None:
         """Point at another Ollama. The old client is closed after the swap,
@@ -72,7 +117,7 @@ class OllamaProvider:
             "model": self.model,
             "messages": [_encode(m) for m in messages],
             "stream": True,
-            "options": {"num_ctx": self.context_tokens},
+            "options": {"num_ctx": self._num_ctx()},
         }
         # Thinking and vision do not mix on the local runner. With a reasoning
         # pass on, gemma4 answered image prompts with "no image was provided" --
@@ -235,6 +280,38 @@ def _encode(message: Message) -> dict:
     if message.tool_name:
         encoded["tool_name"] = message.tool_name
     return encoded
+
+
+def trained_context(show: dict) -> int | None:
+    """The context length a model was trained on, from an /api/show body.
+
+    Ollama reports it under the architecture's own prefix --
+    `llama.context_length`, `qwen3moe.context_length` -- so the key is found
+    by its suffix rather than guessed from the model's name.
+    """
+    info = (show or {}).get("model_info") or {}
+    for key, value in info.items():
+        if str(key).endswith(".context_length"):
+            try:
+                length = int(value)
+            except (TypeError, ValueError):
+                continue
+            if length > 0:
+                return length
+    return None
+
+
+def sees(show: dict) -> bool:
+    """Whether an /api/show body describes a model that takes images.
+
+    `capabilities` is the answer on any recent Ollama; before it existed, a
+    vision model was the one carrying a vision tower in its metadata.
+    """
+    capabilities = (show or {}).get("capabilities")
+    if isinstance(capabilities, list):
+        return "vision" in {str(c).lower() for c in capabilities}
+    info = (show or {}).get("model_info") or {}
+    return any(".vision." in str(key) for key in info)
 
 
 def _parse_call(raw: dict, index: int) -> ToolCall:

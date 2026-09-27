@@ -21,11 +21,45 @@ _EFFORT = os.environ.get("ANTHROPIC_EFFORT", "medium")
 
 
 class AnthropicProvider:
-    def __init__(self, model: str = "claude-opus-5", max_tokens: int = 8192) -> None:
+    def __init__(
+        self,
+        model: str = "claude-opus-5",
+        max_tokens: int = 64_000,
+        *,
+        context_tokens: int = 200_000,
+    ) -> None:
         self.name = "anthropic"
         self.model = model
+        # Generous because the reply is streamed: a large cap costs nothing
+        # until it is used, and a whole page arriving as one tool call used to
+        # be cut off at 8k tokens.
         self.max_tokens = max_tokens
+        self.context_tokens = context_tokens
+        # Each model's input window, from the Models API. Only answers are
+        # kept, so a failed lookup is tried again on the next turn.
+        self._windows: dict[str, int] = {}
         self._client = None
+
+    async def context_window(self) -> int:
+        """The window budget: the configured one, or the model's when smaller.
+
+        The Models API reports `max_input_tokens` per model, which is what
+        tells a 200k Haiku from a 1M Opus without a table kept here.
+        """
+        window = self._windows.get(self.model)
+        if window is None:
+            try:
+                client = self._ensure_client()
+                entry = await client.models.retrieve(self.model)
+                window = int(getattr(entry, "max_input_tokens", 0) or 0)
+            except Exception:  # noqa: BLE001 -- the configured budget stands
+                window = 0
+            if window:
+                self._windows[self.model] = window
+        return min(self.context_tokens, window) if window else self.context_tokens
+
+    async def sees_images(self) -> bool:
+        return True  # every current Claude model takes images
 
     def _ensure_client(self):
         if self._client is None:
@@ -201,7 +235,21 @@ def _build_turns(messages: Sequence[Message]) -> list[dict[str, Any]]:
             turns.append({"role": "assistant", "content": blocks or m.content})
 
         elif m.role == "user":
-            turns.append({"role": "user", "content": _content(m)})
+            content = _content(m)
+            # Straight after tool results -- a render handed back to look at
+            # -- the picture joins the results' turn rather than opening a
+            # second user turn of its own.
+            if (
+                m.images
+                and turns
+                and turns[-1]["role"] == "user"
+                and isinstance(turns[-1]["content"], list)
+            ):
+                turns[-1]["content"].extend(content if isinstance(content, list) else [
+                    {"type": "text", "text": content}
+                ])
+            else:
+                turns.append({"role": "user", "content": content})
 
     return turns
 

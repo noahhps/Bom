@@ -254,11 +254,42 @@ class Settings:
         default_factory=lambda: _env_int("SANDBOX_OUTPUT_CHARS", 6_000)
     )
 
-    # Rough working-context budget in tokens. The window builder trims to fit;
-    # real compaction (summarise the middle, keep head and tail) is phase 5.
-    context_tokens: int = field(default_factory=lambda: _env_int("CONTEXT_TOKENS", 32768))
+    # Working-context budget in tokens for an Ollama backend, sent as num_ctx.
+    # The window builder trims to fit; real compaction (summarise the middle,
+    # keep head and tail) is phase 5.
+    #
+    # 64k because design work is long: a page is 5-15k tokens, the design
+    # standard and the tool shelf are another 6k, and at 32k a conversation
+    # that had made one page could not hold the page while revising it. The KV
+    # cache grows with this, so a machine short on memory should lower it; a
+    # model trained on less is capped at what it was trained on, whatever this
+    # says (see OllamaProvider.context_window).
+    context_tokens: int = field(default_factory=lambda: _env_int("CONTEXT_TOKENS", 65536))
+    # The same budget for a cloud backend (Anthropic, OpenRouter), which holds
+    # far more than a local runner and costs nothing in memory here. Still
+    # capped at the model's own window where the backend reports it -- and it
+    # is a ceiling, not a target: a short conversation sends what it has.
+    cloud_context_tokens: int = field(
+        default_factory=lambda: _env_int("CLOUD_CONTEXT_TOKENS", 200_000)
+    )
     # Headroom reserved for the reply so a full window can't crowd it out.
-    reply_tokens: int = field(default_factory=lambda: _env_int("REPLY_TOKENS", 2048))
+    # Sized for a deliverable, not a chat line: a whole page or a deck arrives
+    # as one tool call, and a reply squeezed to 2k tokens was cut off mid-page.
+    reply_tokens: int = field(default_factory=lambda: _env_int("REPLY_TOKENS", 8192))
+    # The most a cloud reply may run to. The Anthropic backend streams, so a
+    # large value costs nothing until it is used, and a long page is no longer
+    # cut off at 8k tokens.
+    cloud_max_tokens: int = field(default_factory=lambda: _env_int("CLOUD_MAX_TOKENS", 64_000))
+    # How much of a skill's result goes back to the model, in characters,
+    # unless the skill says otherwise. Skills whose result is the thing being
+    # worked on -- read_canvas, the design standard -- set their own, larger.
+    result_chars: int = field(default_factory=lambda: _env_int("RESULT_CHARS", 12_000))
+    # How much of a canvas read_canvas returns in one call. Longer canvases
+    # are read in pages by line. ~15k tokens: the whole of a typical page, so a
+    # revision sees everything it is revising.
+    canvas_read_chars: int = field(
+        default_factory=lambda: _env_int("CANVAS_READ_CHARS", 60_000)
+    )
 
     # How many times a turn may go back to the model after running skills before
     # it is cut off. The circuit-breaker on a local model that loops on
@@ -267,8 +298,9 @@ class Settings:
     # overflow CONTEXT_TOKENS and force the reduced-context retry, which throws
     # away the earlier work. The Continue button in the client is the deliberate
     # extension past this, so it does not need to cover the worst case alone --
-    # 16 is a sane default; raise CONTEXT_TOKENS alongside it if you raise this.
-    max_tool_rounds: int = field(default_factory=lambda: _env_int("MAX_TOOL_ROUNDS", 16))
+    # 24 leaves room for a design turn's read, write, check and fix passes;
+    # raise CONTEXT_TOKENS alongside it if you raise this.
+    max_tool_rounds: int = field(default_factory=lambda: _env_int("MAX_TOOL_ROUNDS", 24))
 
     # Carry a compact recap of each past turn's working -- the tools it called
     # with a trimmed line of each result, and the tail of its reasoning -- into

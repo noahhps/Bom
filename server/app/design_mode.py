@@ -26,24 +26,29 @@ MAKE = {
     # `makes` is the canvas kind that proves the pin was honoured: a turn
     # pinned to a wireframe is done when a wireframe canvas was written, not
     # when the model says so. An image has no canvas; its result says.
-    "wireframe": {"id": "wireframe", "label": "Wireframe", "tool": "write_wireframe", "makes": "wireframe",
-                  "keep": {"read_canvas", "open_canvas"}},
-    "slides": {"id": "slides", "label": "Presentation", "tool": "write_slides", "makes": "slides",
-               "keep": {"wireframe_to_slides", "read_canvas", "open_canvas"}},
-    "sheet": {"id": "sheet", "label": "Sheet", "tool": "write_sheet", "makes": "sheet",
+    # `edit` is the tool that revises that kind in place, which honours the
+    # pin as well as a rewrite does -- "move the button" should not be pushed
+    # into redrawing the whole wireframe.
+    "wireframe": {"id": "wireframe", "label": "Wireframe", "tool": "write_wireframe", "edit": "edit_wireframe", "makes": "wireframe",
+                  "keep": {"edit_wireframe", "read_canvas", "open_canvas"}},
+    "slides": {"id": "slides", "label": "Presentation", "tool": "write_slides", "edit": "edit_slides", "makes": "slides",
+               "keep": {"edit_slides", "wireframe_to_slides", "read_canvas", "open_canvas"}},
+    "sheet": {"id": "sheet", "label": "Sheet", "tool": "write_sheet", "edit": "edit_sheet", "makes": "sheet",
               "keep": {"edit_sheet", "read_canvas", "open_canvas"}},
-    "page": {"id": "page", "label": "Web page", "tool": "write_canvas", "kind": "html", "makes": "html",
-             "keep": {"read_canvas", "open_canvas"}},
-    "document": {"id": "document", "label": "Document", "tool": "write_canvas", "kind": "markdown",
-                 "makes": "markdown", "keep": {"read_canvas", "open_canvas"}},
+    "page": {"id": "page", "label": "Web page", "tool": "write_canvas", "edit": "edit_canvas", "kind": "html", "makes": "html",
+             "keep": {"edit_canvas", "read_canvas", "open_canvas"}},
+    "document": {"id": "document", "label": "Document", "tool": "write_canvas", "edit": "edit_canvas", "kind": "markdown",
+                 "makes": "markdown", "keep": {"edit_canvas", "read_canvas", "open_canvas"}},
     "image": {"id": "image", "label": "Image", "tool": "generate_image", "makes": None, "keep": set()},
 }
 
-#: The tools that make a whole piece of work. Pinning one takes the others
-#: away for that turn; everything else (search, memory, images) is untouched.
+#: The tools that make or change a whole piece of work. Pinning one takes the
+#: others away for that turn; everything else (search, memory, images, the
+#: design check) is untouched.
 CREATORS = {
-    "write_wireframe", "wireframe_to_slides", "write_slides", "write_sheet",
-    "edit_sheet", "write_canvas", "generate_image", "open_canvas",
+    "write_wireframe", "edit_wireframe", "wireframe_to_slides", "write_slides",
+    "edit_slides", "write_sheet", "edit_sheet", "write_canvas", "edit_canvas",
+    "generate_image", "open_canvas",
 }
 
 
@@ -172,9 +177,22 @@ a slide or page needs a picture the user has not given you and generate_image \
 is available, generate one -- no text in it, space left for the title -- and \
 never present a generated picture as a photograph of something real.
 
-5. After writing, keep the reply short: what you made, the two or three design \
+5. Check it before you say it is done. Every write and edit reports plain \
+breakages -- contrast, markup, layers off the screen -- and check_design gives a \
+fuller review. If view_canvas is available, look at a page or a wireframe as it \
+renders and judge it as a designer would: one clear focal point, even rhythm, \
+nothing crowded or stranded. Fix what you find in the same turn, with the edit \
+tools, and look again.
+
+6. After that, keep the reply short: what you made, the two or three design \
 decisions that matter, and one or two specific refinements you could make next. \
 The work is in the canvas; do not paste it into the chat.
 
-6. When asked for changes, read_canvas first if the user may have edited it, then \
-write it again with the same title so it is replaced rather than duplicated."""
+7. When asked for changes, revise in place rather than starting over: \
+edit_canvas for a page or a document (find and replace, or css_vars to restyle \
+a page built on tokens), edit_wireframe for screens, edit_slides for a deck, \
+edit_sheet for a sheet. Only what you name changes, so nothing else is lost -- \
+including edits the user made by hand. read_canvas first to see the current \
+text, ids and slide numbers. Write the whole thing again only when the user \
+wants something new, and then with the same title so it is replaced rather \
+than duplicated."""

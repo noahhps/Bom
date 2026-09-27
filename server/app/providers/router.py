@@ -79,11 +79,18 @@ class ProviderRouter:
             context_tokens=settings.context_tokens,
             name="ollama-network",
         )
-        self.cloud = AnthropicProvider()
+        # The cloud backends get their own, larger window: it costs nothing in
+        # memory here, and each still caps it at what its model holds.
+        cloud_window = getattr(settings, "cloud_context_tokens", 200_000)
+        self.cloud = AnthropicProvider(
+            max_tokens=getattr(settings, "cloud_max_tokens", 64_000),
+            context_tokens=cloud_window,
+        )
         self.openrouter = OpenRouterProvider(
             settings.openrouter_api_key,
             settings.openrouter_model,
             base_url=settings.openrouter_url,
+            context_tokens=cloud_window,
         )
         self.by_id: dict[str, ModelProvider] = {
             LOCAL: self.local,

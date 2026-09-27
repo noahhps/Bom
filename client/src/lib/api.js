@@ -118,6 +118,15 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "PUT",
         body: JSON.stringify({ key }),
       }),
+    // An Ollama on another machine on this network. Empty disconnects; the
+    // server checks it is local and that Ollama answers before keeping it.
+    setNetworkOllama: (url) =>
+      json("/providers/network/url", {
+        method: "PUT",
+        body: JSON.stringify({ url }),
+      }),
+    // A scan of this server's own subnet for the Ollama port.
+    discoverNetworkOllama: () => json("/providers/network/discover"),
     // The sign-in. The server mints the URL; opening it is this side's job,
     // because the server has no browser and is often not even on the device
     // being used. `callback_base` is this origin -- how the browser reached

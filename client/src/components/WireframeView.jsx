@@ -39,6 +39,11 @@ import {
  * and the panel saves it on its usual debounce. Undo is a stack of documents.
  */
 
+const POINTERS = [
+  { id: "move", label: "Move", key: "V", glyph: "↖" },
+  { id: "hand", label: "Hand", key: "H", glyph: "✋︎" },
+];
+
 const TOOLS = [
   { id: "move", label: "Move", key: "V", glyph: "↖" },
   { id: "frame", label: "Frame", key: "F", glyph: "#" },
@@ -51,7 +56,7 @@ const TOOLS = [
 ];
 
 const COMPONENTS = [
-  { id: "button", label: "Button" },
+  { id: "button", label: "Button", key: "B" },
   { id: "input", label: "Input" },
   { id: "checkbox", label: "Checkbox" },
   { id: "toggle", label: "Toggle" },
@@ -69,6 +74,11 @@ const TYPE_GLYPH = {
 
 const ICON_NAMES = ["menu", "search", "heart", "star", "user", "bell", "cart", "home", "settings",
   "close", "plus", "arrow", "back", "check", "mail", "play", "share", "more", "filter", "calendar"];
+
+const ALIGNS = [
+  ["left", "⇤", "Left"], ["hcenter", "↔", "Centre"], ["right", "⇥", "Right"],
+  ["top", "⤒", "Top"], ["vcenter", "↕", "Middle"], ["bottom", "⤓", "Bottom"],
+];
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const SNAP = 6;
@@ -175,6 +185,100 @@ function TextField({ label, value, onCommit, multiline = false }) {
   );
 }
 
+/* -- dropdowns ------------------------------------------------------------------------ */
+
+/* One menu in the toolbar or a panel. Which one is open is the editor's
+   `menu` state, so opening one shuts any other; picking an item shuts it. */
+function Dropdown({ id, menu, setMenu, label, title, disabled = false, right = false, compact = false, children }) {
+  const open = menu === id;
+  const anchor = useRef(null);
+  // Placed against the viewport, not its parent: a menu inside a scrolling
+  // panel would otherwise be clipped by it. It opens toward whichever side
+  // keeps it inside the editor, where nothing else draws over it, and below
+  // or above its button, whichever has the room.
+  const [place, setPlace] = useState(null);
+  const menuNode = useRef(null);
+  useLayoutEffect(() => {
+    if (!open || !anchor.current) {
+      setPlace(null);
+      return;
+    }
+    const box = anchor.current.getBoundingClientRect();
+    const bounds = anchor.current.closest(".wf")?.getBoundingClientRect() ||
+      { left: 0, right: window.innerWidth, top: 0, bottom: window.innerHeight };
+    const width = Math.max(menuNode.current?.offsetWidth || 0, 200);
+    let toRight = right;
+    if (box.left + width > bounds.right) toRight = true;
+    else if (box.right - width < bounds.left) toRight = false;
+    const left = toRight ? Math.max(bounds.left + 4, box.right - width) : Math.min(box.left, bounds.right - width - 4);
+    const below = window.innerHeight - box.bottom - 12;
+    const above = box.top - 12;
+    const up = below < 240 && above > below;
+    setPlace({
+      left,
+      ...(up ? { bottom: window.innerHeight - box.top + 4 } : { top: box.bottom + 4 }),
+      maxHeight: Math.min(560, up ? above : below),
+    });
+  }, [open, right]);
+  return (
+    <div className="wf-menu-anchor" ref={anchor}>
+      <button
+        type="button"
+        className="wf-drop"
+        data-compact={compact ? "" : undefined}
+        data-on={open ? "" : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={title}
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          setMenu(open ? null : id);
+        }}
+      >
+        {label}
+        <span className="wf-caret" aria-hidden="true">▾</span>
+      </button>
+      {open ? (
+        <div
+          className="wf-menu"
+          role="menu"
+          ref={menuNode}
+          data-fixed=""
+          style={place ? { ...place, visibility: "visible" } : { visibility: "hidden" }}
+          onClick={(event) => {
+            if (event.target.closest?.("[role^=menuitem]:not(:disabled)")) setMenu(null);
+          }}
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* A row in a dropdown: its mark, its name, its shortcut, and a tick when it
+   is the current choice. */
+function Item({ glyph, icon, keys, on, disabled, onClick, children }) {
+  return (
+    <button
+      type="button"
+      role={on === undefined ? "menuitem" : "menuitemcheckbox"}
+      aria-checked={on === undefined ? undefined : Boolean(on)}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {icon ? <Icon name={icon} /> : <span className="wf-tree-glyph">{glyph ?? ""}</span>}
+      <span className="wf-item-label">{children}</span>
+      {keys ? <kbd className="wf-kbd">{keys}</kbd> : null}
+      {on ? <span className="wf-tick" aria-hidden="true">✓</span> : null}
+    </button>
+  );
+}
+
+const MenuLabel = ({ children }) => <span className="wf-menu-label mi">{children}</span>;
+const MenuRule = () => <div className="wf-menu-rule" role="separator" />;
+
 /* -- the prototype player ------------------------------------------------------------ */
 
 function Prototype({ doc, P, images, start, onClose }) {
@@ -271,10 +375,22 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
   const [hover, setHover] = useState(null);
   const [editing, setEditing] = useState(null);
   const [menu, setMenu] = useState(null);
+  // An open dropdown shuts on a press anywhere outside it.
+  useEffect(() => {
+    if (!menu) return undefined;
+    const away = (event) => {
+      if (!event.target.closest?.(".wf-menu-anchor")) setMenu(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [menu]);
   const [proto, setProto] = useState(null);
   const [full, setFull] = useState(false);
   const [wide, setWide] = useState(true);
+  // Which side panels show. Narrow, they are overlays and start shut; wide,
+  // they are columns and start open. Either way the View menu switches them.
   const [panels, setPanels] = useState({ layers: false, design: false });
+  const [hidden, setHidden] = useState({ layers: false, design: false });
   const [busy, setBusy] = useState("");
   const clipboard = useRef([]);
   const space = useRef(false);
@@ -798,6 +914,39 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
     setView({ z, x: cx - ((cx - v.x) / v.z) * z, y: cy - ((cy - v.y) / v.z) * z });
   };
 
+  /* -- commands shared by the menus and the keys ------------------------------- */
+
+  const copySelection = () => {
+    clipboard.current = selectedLayers.map((l) => ({ ...l }));
+  };
+  const paste = () => {
+    const frame = currentFrame || workRef.current.frames[0];
+    if (!frame || !clipboard.current.length) return false;
+    const copies = clipboard.current.map((l) => ({ ...l, id: newId("l"), x: l.x + 16, y: l.y + 16 }));
+    clipboard.current = copies;
+    commit(mapFrame(workRef.current, frame.id, (f) => ({ ...f, layers: [...f.layers, ...copies] })));
+    setSel({ frame: frame.id, layers: copies.map((c) => c.id), frameSelected: false });
+    return true;
+  };
+  const selectAll = () => {
+    const frame = currentFrame || workRef.current.frames[0];
+    if (!frame) return false;
+    setSel({ frame: frame.id, layers: frame.layers.filter((l) => !l.locked && !l.hidden).map((l) => l.id), frameSelected: false });
+    return true;
+  };
+  // A new screen of a preset size, to the right of the last one.
+  const addScreen = (preset) => {
+    const doc = workRef.current;
+    const right = doc.frames.length ? Math.max(...doc.frames.map((f) => f.x + f.w)) + 80 : 0;
+    const top = doc.frames.length ? Math.min(...doc.frames.map((f) => f.y)) : 0;
+    const frame = { id: newId("f"), name: preset.name, x: right, y: top, w: preset.w, h: preset.h, layers: [] };
+    commit({ ...doc, frames: [...doc.frames, frame] });
+    setSel({ frame: frame.id, layers: [], frameSelected: true });
+    requestAnimationFrame(() => fit([...doc.frames, frame]));
+  };
+  const toggleLayer = (frameId, layerId, key) =>
+    commit(mapLayers(workRef.current, frameId, [layerId], (l) => ({ ...l, [key]: !l[key] || undefined })));
+
   /* -- keys ------------------------------------------------------------------------ */
 
   const onKeyDown = (event) => {
@@ -813,24 +962,9 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
     if (cmd && key === "z") { event.preventDefault(); (event.shiftKey ? redo : undo)(); return; }
     if (cmd && key === "y") { event.preventDefault(); redo(); return; }
     if (cmd && key === "d") { event.preventDefault(); duplicate(); return; }
-    if (cmd && key === "c") { clipboard.current = selectedLayers.map((l) => ({ ...l })); return; }
-    if (cmd && key === "v") {
-      const frame = currentFrame || workRef.current.frames[0];
-      if (!frame || !clipboard.current.length) return;
-      event.preventDefault();
-      const copies = clipboard.current.map((l) => ({ ...l, id: newId("l"), x: l.x + 16, y: l.y + 16 }));
-      clipboard.current = copies;
-      commit(mapFrame(workRef.current, frame.id, (f) => ({ ...f, layers: [...f.layers, ...copies] })));
-      setSel({ frame: frame.id, layers: copies.map((c) => c.id), frameSelected: false });
-      return;
-    }
-    if (cmd && key === "a") {
-      const frame = currentFrame || workRef.current.frames[0];
-      if (!frame) return;
-      event.preventDefault();
-      setSel({ frame: frame.id, layers: frame.layers.filter((l) => !l.locked && !l.hidden).map((l) => l.id), frameSelected: false });
-      return;
-    }
+    if (cmd && key === "c") { copySelection(); return; }
+    if (cmd && key === "v") { if (paste()) event.preventDefault(); return; }
+    if (cmd && key === "a") { if (selectAll()) event.preventDefault(); return; }
     if (cmd && (key === "]" || key === "[")) {
       event.preventDefault();
       arrange(key === "]" ? (event.shiftKey ? "front" : "forward") : event.shiftKey ? "back" : "backward");
@@ -842,7 +976,8 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
     if (event.shiftKey && key === "1") { fit(); return; }
     if (key === "backspace" || key === "delete") { event.preventDefault(); removeSelection(); return; }
     if (key === "escape") {
-      if (tool !== "move") setTool("move");
+      if (menu) setMenu(null);
+      else if (tool !== "move") setTool("move");
       else setSel({ frame: null, layers: [], frameSelected: false });
       return;
     }
@@ -974,6 +1109,14 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
   let grid = 22 * z;
   while (grid < 10) grid *= 5;
 
+  const pointer = POINTERS.find((t) => t.id === tool) || POINTERS[0];
+  const drawing = TOOLS.find((t) => t.id === tool && !POINTERS.some((p) => p.id === t.id)) ||
+    COMPONENTS.find((c) => c.id === tool) || null;
+  const showLayers = wide ? !hidden.layers : panels.layers;
+  const showDesign = wide ? !hidden.design : panels.design;
+  const togglePanel = (which) =>
+    wide ? setHidden((h) => ({ ...h, [which]: !h[which] })) : setPanels((p) => ({ ...p, [which]: !p[which] }));
+
   const layersPanel = (
     <aside className="wf-panel wf-layers" aria-label="Layers">
       <div className="wf-panel-head mi">Layers</div>
@@ -1012,30 +1155,29 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
               <span className="wf-tree-glyph">{TYPE_GLYPH[layer.type] || "▢"}</span>
               <span className="wf-tree-name">{layerLabel(layer)}</span>
               {layer.link ? <span className="wf-tree-link" title="Prototype link">⇢</span> : null}
-              <button
-                type="button"
-                className="wf-tree-toggle"
-                title={layer.locked ? "Unlock" : "Lock"}
-                data-on={layer.locked ? "" : undefined}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  commit(mapLayers(workRef.current, frame.id, [layer.id], (l) => ({ ...l, locked: !l.locked || undefined })));
-                }}
-              >
-                {layer.locked ? "🔒︎" : "⊙"}
-              </button>
-              <button
-                type="button"
-                className="wf-tree-toggle"
-                title={layer.hidden ? "Show" : "Hide"}
-                data-on={layer.hidden ? "" : undefined}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  commit(mapLayers(workRef.current, frame.id, [layer.id], (l) => ({ ...l, hidden: !l.hidden || undefined })));
-                }}
-              >
-                {layer.hidden ? "◌" : "●"}
-              </button>
+              {layer.locked ? <span className="wf-tree-state" title="Locked">🔒︎</span> : null}
+              {layer.hidden ? <span className="wf-tree-state" title="Hidden">◌</span> : null}
+              <span className="wf-tree-more" onClick={(event) => event.stopPropagation()}>
+                <Dropdown id={`row:${layer.id}`} menu={menu} setMenu={setMenu} right compact
+                  title={`${layerLabel(layer)} actions`} label="⋯">
+                  <Item glyph={layer.locked ? "🔓︎" : "🔒︎"} onClick={() => toggleLayer(frame.id, layer.id, "locked")}>
+                    {layer.locked ? "Unlock" : "Lock"}
+                  </Item>
+                  <Item glyph={layer.hidden ? "●" : "◌"} onClick={() => toggleLayer(frame.id, layer.id, "hidden")}>
+                    {layer.hidden ? "Show" : "Hide"}
+                  </Item>
+                  <MenuRule />
+                  <Item glyph="⊕" onClick={() => {
+                    const copy = { ...layer, id: newId("l"), x: layer.x + 12, y: layer.y + 12 };
+                    commit(mapFrame(workRef.current, frame.id, (f) => ({ ...f, layers: [...f.layers, copy] })));
+                    setSel({ frame: frame.id, layers: [copy.id], frameSelected: false });
+                  }}>Duplicate</Item>
+                  <Item glyph="⌫" onClick={() => {
+                    commit(mapFrame(workRef.current, frame.id, (f) => ({ ...f, layers: f.layers.filter((l) => l.id !== layer.id) })));
+                    setSel((was) => ({ ...was, layers: was.layers.filter((id) => id !== layer.id) }));
+                  }}>Delete</Item>
+                </Dropdown>
+              </span>
             </div>
           ))}
         </div>
@@ -1050,15 +1192,16 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
         {sel.frameSelected ? "Frame" : single ? layerLabel(single) : selectedLayers.length ? `${selectedLayers.length} layers` : "Design"}
       </div>
 
-      {!currentFrame ? (
+      {!sel.frameSelected && !selectedLayers.length ? (
         <div className="wf-section">
-          <span className="wf-section-title mi">Fidelity</span>
-          <div className="canvas-modes" role="group" aria-label="Fidelity">
-            {[["wireframe", "Wireframe"], ["styled", "Styled"]].map(([id, label]) => (
-              <button key={id} type="button" className="canvas-mode" data-on={work.fidelity === id ? "" : undefined}
-                onClick={() => commit({ ...workRef.current, fidelity: id })}>{label}</button>
-            ))}
-          </div>
+          <label className="wf-field">
+            <span>Fidelity</span>
+            <select value={work.fidelity === "styled" ? "styled" : "wireframe"}
+              onChange={(e) => commit({ ...workRef.current, fidelity: e.target.value })}>
+              <option value="wireframe">Wireframe — Bom's kit</option>
+              <option value="styled">Styled — the design standard</option>
+            </select>
+          </label>
           <p className="wf-hint">
             Wireframe is greyscale, for structure. Styled draws in the
             conversation's design standard. Select a frame or a layer to edit it;
@@ -1095,22 +1238,29 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
             </div>
             <ColorField label="Fill" value={currentFrame.fill} placeholder={P.bg} onCommit={(fill) => patchFrame({ fill })} />
           </div>
-          <div className="wf-section wf-actions">
-            <button type="button" className="deck-tool" onClick={duplicate}>Duplicate</button>
-            <button type="button" className="deck-tool" onClick={() => setProto(currentFrame.id)}>Play from here</button>
-            <button type="button" className="deck-tool" data-danger="" onClick={removeSelection}>Delete</button>
+          <div className="wf-section">
+            <Dropdown id="frame-actions" menu={menu} setMenu={setMenu} label="Screen actions" title="Screen actions">
+              <Item glyph="⊕" keys="⌘D" onClick={duplicate}>Duplicate screen</Item>
+              <Item glyph="▶" onClick={() => setProto(currentFrame.id)}>Play from here</Item>
+              <Item glyph="▣" keys="⌘A" onClick={selectAll}>Select its layers</Item>
+              <MenuRule />
+              <Item glyph="⌫" keys="⌫" onClick={removeSelection}>Delete screen</Item>
+            </Dropdown>
           </div>
         </>
       ) : null}
 
       {selectedLayers.length > 1 ? (
         <div className="wf-section">
-          <span className="wf-section-title mi">Align</span>
-          <div className="wf-align">
-            {[["left", "⇤"], ["hcenter", "↔"], ["right", "⇥"], ["top", "⤒"], ["vcenter", "↕"], ["bottom", "⤓"], ["hdist", "⋯"], ["vdist", "⋮"]].map(([how, g]) => (
-              <button key={how} type="button" className="deck-tool" title={how} onClick={() => align(how)}>{g}</button>
-            ))}
-          </div>
+          <label className="wf-field">
+            <span>Align {selectedLayers.length} layers</span>
+            <select value="" onChange={(e) => e.target.value && align(e.target.value)}>
+              <option value="">Choose…</option>
+              {ALIGNS.map(([how, g, label]) => <option key={how} value={how}>{g}  {label}</option>)}
+              <option value="hdist" disabled={selectedLayers.length < 3}>⋯  Distribute horizontally</option>
+              <option value="vdist" disabled={selectedLayers.length < 3}>⋮  Distribute vertically</option>
+            </select>
+          </label>
         </div>
       ) : null}
 
@@ -1123,11 +1273,13 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
               <NumField label="W" value={single.w} min={1} onCommit={(w) => patchLayers({ w })} />
               <NumField label="H" value={single.h} min={1} onCommit={(h) => patchLayers({ h })} />
             </div>
-            <div className="wf-align">
-              {[["left", "⇤"], ["hcenter", "↔"], ["right", "⇥"], ["top", "⤒"], ["vcenter", "↕"], ["bottom", "⤓"]].map(([how, g]) => (
-                <button key={how} type="button" className="deck-tool" title={`Align ${how} in frame`} onClick={() => align(how)}>{g}</button>
-              ))}
-            </div>
+            <label className="wf-field">
+              <span>Align in screen</span>
+              <select value="" onChange={(e) => e.target.value && align(e.target.value)}>
+                <option value="">Choose…</option>
+                {ALIGNS.map(([how, g, label]) => <option key={how} value={how}>{g}  {label}</option>)}
+              </select>
+            </label>
             <TextField label="Name" value={single.name || ""} onCommit={(name) => patchLayers({ name: name || null })} />
           </div>
 
@@ -1150,12 +1302,14 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
                   onCommit={(text) => patchLayers({ items: text.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6) })} />
               ) : null}
               {single.type === "button" ? (
-                <div className="canvas-modes" role="group" aria-label="Variant">
-                  {["primary", "secondary", "ghost"].map((v) => (
-                    <button key={v} type="button" className="canvas-mode" data-on={(single.variant || "primary") === v ? "" : undefined}
-                      onClick={() => patchLayers({ variant: v })}>{v}</button>
-                  ))}
-                </div>
+                <label className="wf-field">
+                  <span>Style</span>
+                  <select value={single.variant || "primary"} onChange={(e) => patchLayers({ variant: e.target.value })}>
+                    <option value="primary">Primary</option>
+                    <option value="secondary">Secondary</option>
+                    <option value="ghost">Ghost</option>
+                  </select>
+                </label>
               ) : null}
               {single.type === "checkbox" || single.type === "toggle" ? (
                 <label className="wf-check">
@@ -1175,12 +1329,12 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
                     </label>
                   </div>
                   <div className="wf-grid2">
-                    <div className="canvas-modes" role="group" aria-label="Align text">
-                      {["left", "center", "right"].map((a) => (
-                        <button key={a} type="button" className="canvas-mode" data-on={(single.align || "left") === a ? "" : undefined}
-                          onClick={() => patchLayers({ align: a })}>{a[0].toUpperCase()}</button>
-                      ))}
-                    </div>
+                    <select className="wf-select" value={single.align || "left"} aria-label="Align text"
+                      onChange={(e) => patchLayers({ align: e.target.value })}>
+                      <option value="left">Left</option>
+                      <option value="center">Centre</option>
+                      <option value="right">Right</option>
+                    </select>
                     <select className="wf-select" value={single.font || "body"} aria-label="Font"
                       onChange={(e) => patchLayers({ font: e.target.value === "body" ? null : e.target.value })}>
                       <option value="body">Body</option>
@@ -1251,11 +1405,18 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
       ) : null}
 
       {selectedLayers.length ? (
-        <div className="wf-section wf-actions">
-          <button type="button" className="deck-tool" title="Bring forward (⌘])" onClick={() => arrange("forward")}>↑</button>
-          <button type="button" className="deck-tool" title="Send backward (⌘[)" onClick={() => arrange("backward")}>↓</button>
-          <button type="button" className="deck-tool" title="Duplicate (⌘D)" onClick={duplicate}>Duplicate</button>
-          <button type="button" className="deck-tool" data-danger="" title="Delete (⌫)" onClick={removeSelection}>Delete</button>
+        <div className="wf-section">
+          <Dropdown id="layer-actions" menu={menu} setMenu={setMenu} title="Layer actions"
+            label={selectedLayers.length > 1 ? `${selectedLayers.length} layers` : "Layer actions"}>
+            <Item glyph="⤒" keys="⇧⌘]" onClick={() => arrange("front")}>Bring to front</Item>
+            <Item glyph="↑" keys="⌘]" onClick={() => arrange("forward")}>Bring forward</Item>
+            <Item glyph="↓" keys="⌘[" onClick={() => arrange("backward")}>Send backward</Item>
+            <Item glyph="⤓" keys="⇧⌘[" onClick={() => arrange("back")}>Send to back</Item>
+            <MenuRule />
+            <Item glyph="⧉" keys="⌘C" onClick={copySelection}>Copy</Item>
+            <Item glyph="⊕" keys="⌘D" onClick={duplicate}>Duplicate</Item>
+            <Item glyph="⌫" keys="⌫" onClick={removeSelection}>Delete</Item>
+          </Dropdown>
         </div>
       ) : null}
     </aside>
@@ -1271,78 +1432,121 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
     >
-      <div className="wf-toolbar" role="toolbar" aria-label="Tools">
+      {/* Everything in the toolbar is a dropdown: what the pointer does,
+          what to insert, editing, arranging, the view, the prototype and the
+          exports. Each shows its current state on its face. */}
+      <div className="wf-toolbar" role="toolbar" aria-label="Wireframe">
         <div className="wf-tools">
-          {TOOLS.map((t) => (
-            <button key={t.id} type="button" className="wf-tool" data-on={tool === t.id ? "" : undefined}
-              title={`${t.label} (${t.key})`} aria-label={t.label} onClick={() => setTool(t.id)}>{t.glyph}</button>
-          ))}
-          <div className="wf-menu-anchor">
-            <button type="button" className="wf-tool" data-on={COMPONENTS.some((c) => c.id === tool) ? "" : undefined}
-              title="Components" aria-haspopup="menu" aria-expanded={menu === "components"}
-              onClick={() => setMenu(menu === "components" ? null : "components")}>◇▾</button>
-            {menu === "components" ? (
-              <div className="wf-menu" role="menu">
-                {COMPONENTS.map((c) => (
-                  <button key={c.id} type="button" role="menuitem" onClick={() => { setTool(c.id); setMenu(null); }}>
-                    <span className="wf-tree-glyph">{TYPE_GLYPH[c.id]}</span>{c.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <Dropdown id="tool" menu={menu} setMenu={setMenu} title="Pointer"
+            label={<><span className="wf-tree-glyph">{pointer.glyph}</span>{pointer.label}</>}>
+            {POINTERS.map((t) => (
+              <Item key={t.id} glyph={t.glyph} keys={t.key} on={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Item>
+            ))}
+          </Dropdown>
+
+          <Dropdown id="insert" menu={menu} setMenu={setMenu} title="Insert an element"
+            label={drawing
+              ? <><span className="wf-tree-glyph">{TYPE_GLYPH[drawing.id] || drawing.glyph}</span>{drawing.label}</>
+              : <><span className="wf-tree-glyph">＋</span>Insert</>}>
+            <MenuLabel>Shapes</MenuLabel>
+            {TOOLS.filter((t) => !POINTERS.some((p) => p.id === t.id)).map((t) => (
+              <Item key={t.id} glyph={t.glyph} keys={t.key} on={tool === t.id} onClick={() => setTool(t.id)}>{t.label}</Item>
+            ))}
+            <MenuRule />
+            <MenuLabel>Components</MenuLabel>
+            {COMPONENTS.map((c) => (
+              <Item key={c.id} glyph={TYPE_GLYPH[c.id]} keys={c.key} on={tool === c.id} onClick={() => setTool(c.id)}>{c.label}</Item>
+            ))}
+            <MenuRule />
+            <MenuLabel>New screen</MenuLabel>
+            {FRAME_PRESETS.map((preset) => (
+              <Item key={preset.id} glyph="#" onClick={() => addScreen(preset)}>
+                {preset.name} <span className="wf-dim">{preset.w}×{preset.h}</span>
+              </Item>
+            ))}
+          </Dropdown>
+
+          <Dropdown id="edit" menu={menu} setMenu={setMenu} label="Edit" title="Edit">
+            <Item glyph="↶" keys="⌘Z" disabled={!history.current.past.length} onClick={undo}>Undo</Item>
+            <Item glyph="↷" keys="⇧⌘Z" disabled={!history.current.future.length} onClick={redo}>Redo</Item>
+            <MenuRule />
+            <Item glyph="⧉" keys="⌘C" disabled={!selectedLayers.length} onClick={copySelection}>Copy</Item>
+            <Item glyph="⎘" keys="⌘V" disabled={!clipboard.current.length} onClick={paste}>Paste</Item>
+            <Item glyph="⊕" keys="⌘D" disabled={!selectedLayers.length && !sel.frameSelected} onClick={duplicate}>Duplicate</Item>
+            <Item glyph="⌫" keys="⌫" disabled={!selectedLayers.length && !sel.frameSelected} onClick={removeSelection}>Delete</Item>
+            <MenuRule />
+            <Item glyph="▣" keys="⌘A" disabled={!work.frames.length} onClick={selectAll}>Select all</Item>
+            <Item glyph="✎" keys="↵" disabled={!single || !TEXTISH.has(single?.type)}
+              onClick={() => single && setEditing({ frame: sel.frame, layer: single.id })}>Edit text</Item>
+          </Dropdown>
+
+          <Dropdown id="arrange" menu={menu} setMenu={setMenu} label="Arrange" title="Arrange the selection"
+            disabled={!selectedLayers.length}>
+            <MenuLabel>Order</MenuLabel>
+            <Item glyph="⤒" keys="⇧⌘]" onClick={() => arrange("front")}>Bring to front</Item>
+            <Item glyph="↑" keys="⌘]" onClick={() => arrange("forward")}>Bring forward</Item>
+            <Item glyph="↓" keys="⌘[" onClick={() => arrange("backward")}>Send backward</Item>
+            <Item glyph="⤓" keys="⇧⌘[" onClick={() => arrange("back")}>Send to back</Item>
+            <MenuRule />
+            <MenuLabel>{selectedLayers.length > 1 ? "Align to each other" : "Align in screen"}</MenuLabel>
+            {ALIGNS.map(([how, g, label]) => (
+              <Item key={how} glyph={g} onClick={() => align(how)}>{label}</Item>
+            ))}
+            <Item glyph="⋯" disabled={selectedLayers.length < 3} onClick={() => align("hdist")}>Distribute horizontally</Item>
+            <Item glyph="⋮" disabled={selectedLayers.length < 3} onClick={() => align("vdist")}>Distribute vertically</Item>
+          </Dropdown>
         </div>
         <div className="spacer" />
         <div className="wf-tools">
-          <button type="button" className="wf-tool" title="Undo (⌘Z)" disabled={!history.current.past.length} onClick={undo}>↶</button>
-          <button type="button" className="wf-tool" title="Redo (⇧⌘Z)" disabled={!history.current.future.length} onClick={redo}>↷</button>
-          <button type="button" className="wf-tool" title="Zoom out" onClick={() => zoomBy(0.8)}>−</button>
-          <button type="button" className="wf-zoom mi" title="Zoom to fit (⇧1)" onClick={() => fit()}>{Math.round(z * 100)}%</button>
-          <button type="button" className="wf-tool" title="Zoom in" onClick={() => zoomBy(1.25)}>+</button>
-          {!wide ? (
-            <>
-              <button type="button" className="wf-tool" data-on={panels.layers ? "" : undefined} title="Layers"
-                onClick={() => setPanels((p) => ({ ...p, layers: !p.layers }))}>☰</button>
-              <button type="button" className="wf-tool" data-on={panels.design ? "" : undefined} title="Design"
-                onClick={() => setPanels((p) => ({ ...p, design: !p.design }))}>⚙</button>
-            </>
-          ) : null}
-          <button type="button" className="wf-tool" title={full ? "Back to the panel" : "Full screen"} onClick={() => setFull((f) => !f)}>
-            {full ? "⤡" : "⤢"}
-          </button>
-          <button type="button" className="wf-tool wf-play" title="Prototype" disabled={!work.frames.length}
-            onClick={() => setProto(sel.frame || work.frames[0]?.id)}>▶</button>
-          {/* Export, presentation first: the one-click action makes a deck of
-              the screens; the caret has the other documents and the files. */}
-          <div className="wf-menu-anchor wf-export">
-            <button type="button" className="deck-present-btn" title="Make a presentation of these screens"
-              disabled={!work.frames.length || Boolean(busy) || !onMakeCanvas} onClick={exports.slides}>
-              {busy ? `${busy}…` : "Present as slides"}
-            </button>
-            <button type="button" className="wf-export-more" aria-label="More exports" aria-haspopup="menu"
-              aria-expanded={menu === "export"} disabled={!work.frames.length || Boolean(busy)}
-              onClick={() => setMenu(menu === "export" ? null : "export")}>▾</button>
-            {menu === "export" ? (
-              <div className="wf-menu" role="menu" data-right="">
-                <span className="wf-menu-label mi">Make a document</span>
-                <button type="button" role="menuitem" data-default="" onClick={exports.slides}><Icon name="slides" />Presentation</button>
-                <button type="button" role="menuitem" onClick={exports.sheet}><Icon name="sheet" />Sheet — element inventory</button>
-                <button type="button" role="menuitem" onClick={exports.document}><Icon name="document" />Document — screen spec</button>
-                <div className="wf-menu-rule" role="separator" />
-                <span className="wf-menu-label mi">Download</span>
-                <button type="button" role="menuitem" onClick={exports.zip}><Icon name="code" />HTML + CSS (.zip)</button>
-                <button type="button" role="menuitem" onClick={exports.html}><Icon name="canvas" />HTML, one file</button>
-                <button type="button" role="menuitem" onClick={exports.pdf}><Icon name="document" />PDF — every screen</button>
-                <button type="button" role="menuitem" onClick={exports.png}><Icon name="image" />PNG — {exportFrame?.name}</button>
-                <button type="button" role="menuitem" onClick={exports.pngs}><Icon name="image" />PNG — every screen (.zip)</button>
-              </div>
-            ) : null}
+          <Dropdown id="view" menu={menu} setMenu={setMenu} title="View" right
+            label={<span className="mi">{Math.round(z * 100)}%</span>}>
+            <MenuLabel>Zoom</MenuLabel>
+            <Item glyph="+" keys="⌘+" onClick={() => zoomBy(1.25)}>Zoom in</Item>
+            <Item glyph="−" keys="⌘−" onClick={() => zoomBy(0.8)}>Zoom out</Item>
+            <Item glyph="⤢" keys="⇧1" onClick={() => fit()}>Zoom to fit</Item>
+            <Item glyph="1" keys="⌘0" onClick={() => setView((v) => ({ ...v, z: 1 }))}>Actual size</Item>
+            <MenuRule />
+            <MenuLabel>Panels</MenuLabel>
+            <Item glyph="☰" on={showLayers} onClick={() => togglePanel("layers")}>Layers</Item>
+            <Item glyph="⚙" on={showDesign} onClick={() => togglePanel("design")}>Design</Item>
+            <Item glyph={full ? "⤡" : "⤢"} on={full} onClick={() => setFull((f) => !f)}>Full screen</Item>
+            <MenuRule />
+            <MenuLabel>Fidelity</MenuLabel>
+            <Item glyph="▭" on={work.fidelity !== "styled"} onClick={() => commit({ ...workRef.current, fidelity: "wireframe" })}>Wireframe</Item>
+            <Item glyph="◆" on={work.fidelity === "styled"} onClick={() => commit({ ...workRef.current, fidelity: "styled" })}>Styled</Item>
+          </Dropdown>
+
+          <Dropdown id="proto" menu={menu} setMenu={setMenu} title="Prototype" right disabled={!work.frames.length}
+            label={<><span className="wf-tree-glyph">▶</span>Play</>}>
+            <Item glyph="▶" onClick={() => setProto(work.frames[0]?.id)}>From the first screen</Item>
+            <Item glyph="▷" disabled={!currentFrame} onClick={() => setProto(currentFrame?.id)}>
+              From {currentFrame ? currentFrame.name : "the selected screen"}
+            </Item>
+          </Dropdown>
+
+          {/* Export, presentation first: it is the first item and the default. */}
+          <div className="wf-export">
+            <Dropdown id="export" menu={menu} setMenu={setMenu} right title="Export"
+              disabled={!work.frames.length || Boolean(busy)}
+              label={busy ? `${busy}…` : "Export"}>
+              <MenuLabel>Make a document</MenuLabel>
+              <Item icon="slides" disabled={!onMakeCanvas} onClick={exports.slides}>Presentation <span className="wf-dim">default</span></Item>
+              <Item icon="sheet" disabled={!onMakeCanvas} onClick={exports.sheet}>Sheet — element inventory</Item>
+              <Item icon="document" disabled={!onMakeCanvas} onClick={exports.document}>Document — screen spec</Item>
+              <MenuRule />
+              <MenuLabel>Download</MenuLabel>
+              <Item icon="code" onClick={exports.zip}>HTML + CSS (.zip)</Item>
+              <Item icon="canvas" onClick={exports.html}>HTML, one file</Item>
+              <Item icon="document" onClick={exports.pdf}>PDF — every screen</Item>
+              <Item icon="image" onClick={exports.png}>PNG — {exportFrame?.name}</Item>
+              <Item icon="image" onClick={exports.pngs}>PNG — every screen (.zip)</Item>
+            </Dropdown>
           </div>
         </div>
       </div>
 
       <div className="wf-body">
-        {wide || panels.layers ? layersPanel : null}
+        {showLayers ? layersPanel : null}
         <div
           className="wf-viewport"
           ref={vp}
@@ -1443,7 +1647,7 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
             <div className="wf-empty">Press F and click to add a frame.</div>
           ) : null}
         </div>
-        {wide || panels.design ? designPanel : null}
+        {showDesign ? designPanel : null}
       </div>
 
       {proto ? (

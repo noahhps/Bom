@@ -91,6 +91,10 @@ class Settings:
     # --- inference -------------------------------------------------------
     ollama_url: str = field(default_factory=lambda: _env("OLLAMA_URL", "http://127.0.0.1:11434"))
     ollama_model: str = field(default_factory=lambda: _env("OLLAMA_MODEL", "qwen3.6:35b-a3b"))
+    # A second Ollama, on another machine on the network. Usually set from
+    # Settings > Models, which keeps it in the database; this is for setting it
+    # up without the UI, and is taken as given (no local-network check).
+    network_ollama_url: str = field(default_factory=lambda: _env("NETWORK_OLLAMA_URL", ""))
     # gpt-oss uses a three-level reasoning effort, not a boolean. This is the
     # fallback when an API caller does not choose a level of its own.
     ollama_think: ThinkingLevel = field(

@@ -5113,6 +5113,34 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .wf-tool[data-on] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
 .wf-tool:disabled { opacity: .35; cursor: default; }
 .wf-tool:focus-visible, .wf-zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A dropdown's face: what it is, or what it is set to, and a caret. */
+.wf-drop {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 9px;
+  border: 1px solid var(--line); border-radius: var(--r-card); background: var(--ground);
+  color: var(--ink); font: 400 var(--t-xs)/1 var(--font); white-space: nowrap; cursor: pointer;
+}
+.wf-drop:hover:not(:disabled) { border-color: var(--line-strong); }
+.wf-drop[data-on] { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.wf-drop[data-on] .wf-tree-glyph, .wf-drop[data-on] .mi { color: var(--ground); }
+.wf-drop:disabled { opacity: .45; cursor: default; }
+.wf-drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wf-drop .mi { color: inherit; }
+.wf-drop[data-compact] { height: 22px; padding: 0 5px; border-color: transparent; background: none; gap: 2px; }
+.wf-drop[data-compact] .wf-caret { display: none; }
+.wf-caret { font-size: 9px; opacity: .6; }
+.wf-section .wf-menu-anchor { align-self: flex-start; }
+.wf-menu .wf-item-label { flex: 1; min-width: 0; }
+.wf-menu { max-height: min(70vh, 560px); overflow-y: auto; }
+.wf-menu[data-fixed] { position: fixed; top: auto; left: auto; right: auto; z-index: 170; }
+.wf-menu button:disabled { opacity: .4; cursor: default; }
+.wf-menu button:disabled:hover { background: none; }
+.wf-kbd { font: 400 var(--t-micro) var(--font-mono); color: var(--text-faint); letter-spacing: 0.04em; }
+.wf-tick { color: var(--accent); font-size: 11px; width: 12px; text-align: center; }
+.wf-dim { color: var(--text-faint); font-size: var(--t-micro); margin-left: 6px; }
+.wf-tree-state { font-size: 10px; color: var(--text-faint); }
+.wf-tree-more { opacity: 0; }
+.wf-tree-row:hover .wf-tree-more, .wf-tree-more:focus-within, .wf-tree-row[data-on] .wf-tree-more { opacity: 1; }
+.wf-tree-more .wf-menu { min-width: 170px; }
 .wf-zoom {
   min-width: 48px; height: 28px; border: 1px solid transparent; border-radius: var(--r-card);
   background: none; cursor: pointer;
@@ -5702,3 +5730,12 @@ tr[data-total] .sheet-cell {
 .deck-picker-gen-where { flex: 1; color: var(--text-faint); }
 .deck-picker-gen-row .deck-present-btn { margin-left: 0; }
 .deck-picker-gen-row .deck-present-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Ollama servers found on the network, each with a Use button. */
+.network-found { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.network-found li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--ground);
+}
+.network-found li > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.network-found code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

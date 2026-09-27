@@ -1465,7 +1465,19 @@ class Store:
     def touch_canvas(self, canvas_id: str) -> None:
         """Bring a canvas to the front of its conversation's list -- which is
         the one the panel shows -- without changing it."""
-        self.db.execute("UPDATE canvases SET updated_at = ? WHERE id = ?", (_now(), canvas_id))
+        # Timestamps are whole seconds, so "now" can tie with a canvas written
+        # this same second and leave the order to chance. One past the newest
+        # in the conversation is always in front.
+        self.db.execute(
+            """
+            UPDATE canvases SET updated_at = MAX(?, 1 + (
+                SELECT MAX(updated_at) FROM canvases
+                 WHERE session_id = (SELECT session_id FROM canvases WHERE id = ?)
+            ))
+             WHERE id = ?
+            """,
+            (_now(), canvas_id, canvas_id),
+        )
 
     def all_canvases(self, limit: int = 200) -> list[dict]:
         """Every canvas in every conversation, newest first, without content --

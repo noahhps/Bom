@@ -24,6 +24,8 @@ CATALOGUE = {
         {"id": "gpt-oss", "name": "gpt-oss", "reasoning": True},
         {"id": "gemma4:12b", "name": "gemma4:12b", "reasoning": False},
     ],
+    # The network Ollama starts unconnected: nothing to list.
+    "network": [],
     "cloud": [{"id": "claude-opus-5", "name": "Claude Opus 5"}],
     "openrouter": [
         {"id": "openrouter/auto", "name": "Auto"},
@@ -67,14 +69,14 @@ def client(settings: Settings) -> TestClient:
 
 def test_models_lists_every_backend_with_its_catalogue(client: TestClient):
     payload = client.get("/api/models").json()["providers"]
-    assert [p["id"] for p in payload] == ["local", "cloud", "openrouter"]
+    assert [p["id"] for p in payload] == ["local", "network", "cloud", "openrouter"]
     local = payload[0]
     assert local["healthy"] is True
     assert [m["id"] for m in local["models"]] == ["gpt-oss", "gemma4:12b"]
     # The control a model's family takes travels with it, so the composer can
     # redraw when the provider changes without keeping a name list in the browser.
     assert local["thinking"]["mode"] == "effort"
-    assert payload[2]["account"] == {"label": "courier", "usage": 1.5}
+    assert payload[3]["account"] == {"label": "courier", "usage": 1.5}
 
 
 def test_one_unreachable_backend_does_not_blank_the_others(client: TestClient, settings):
@@ -89,7 +91,7 @@ def test_status_names_which_backend_would_answer(client: TestClient):
     body = client.get("/api/status").json()
     assert body["serving"] == "local"
     assert body["local"]["url"].startswith("http")
-    assert {p["id"] for p in body["providers"]} == {"local", "cloud", "openrouter"}
+    assert {p["id"] for p in body["providers"]} == {"local", "network", "cloud", "openrouter"}
 
     # Local down and OpenRouter connected: auto walks to the fallback in the
     # same order `resolve()` does, so this is genuinely what the next turn uses.

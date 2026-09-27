@@ -21,7 +21,13 @@ from .mcp import MCPManager
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
-from .providers import OAuthFlows, ProviderError, ProviderRouter, model_setting_key
+from .providers import (
+    NETWORK_URL_SETTING,
+    OAuthFlows,
+    ProviderError,
+    ProviderRouter,
+    model_setting_key,
+)
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import OpenCanvas, ReadCanvas, WriteCanvas
 from .imagegen import Generator
@@ -104,7 +110,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.db_path)
     store = Store(db)
-    providers = ProviderRouter(settings)
+    # The network Ollama's address: what someone set in Settings, else the
+    # environment's.
+    providers = ProviderRouter(
+        settings, network_url=store.get_text_setting(NETWORK_URL_SETTING) or None
+    )
     # A model chosen in the picker outlives the process it was chosen in. The
     # environment still sets the starting point; this is what someone actually
     # picked, so it wins over the default and loses to nothing.

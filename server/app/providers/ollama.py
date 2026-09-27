@@ -1,4 +1,9 @@
-"""Ollama on 127.0.0.1. The default and, on a good day, the only provider."""
+"""Ollama: on 127.0.0.1 by default, and again for one on the local network.
+
+The same class serves both backends. The network one starts with no address
+until someone gives it one (see lan.py), so an empty `base_url` means "not
+set up" rather than an error waiting to happen.
+"""
 
 from __future__ import annotations
 
@@ -30,13 +35,26 @@ class OllamaProvider:
         *,
         embed_model: str = "nomic-embed-text",
         context_tokens: int = 32768,
+        name: str = "ollama",
     ) -> None:
-        self.name = "ollama"
+        self.name = name
         self.model = model
         self.embed_model = embed_model
         self.context_tokens = context_tokens
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (base_url or "").rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=_TIMEOUT)
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.base_url)
+
+    async def set_base_url(self, url: str) -> None:
+        """Point at another Ollama. The old client is closed after the swap,
+        so a turn already streaming from it finishes or fails on its own."""
+        old = self._client
+        self.base_url = (url or "").rstrip("/")
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=_TIMEOUT)
+        await old.aclose()
 
     async def stream(
         self,
@@ -48,6 +66,8 @@ class OllamaProvider:
         # given, which is what keeps this module importable on its own.
         tools: Sequence[dict] | None = None,
     ) -> AsyncIterator[Chunk]:
+        if not self.base_url:
+            raise ProviderError("No network Ollama is connected. Add one in Settings.")
         payload: dict = {
             "model": self.model,
             "messages": [_encode(m) for m in messages],
@@ -128,6 +148,8 @@ class OllamaProvider:
         return response.json()["embeddings"]
 
     async def health(self) -> bool:
+        if not self.base_url:
+            return False
         try:
             response = await self._client.get("/api/tags", timeout=httpx.Timeout(2.0))
             return response.status_code == 200
@@ -145,6 +167,8 @@ class OllamaProvider:
         different models with different weights on this disk -- so unlike the
         thinking table, which strips it, nothing is normalised away.
         """
+        if not self.base_url:
+            return []
         try:
             response = await self._client.get("/api/tags", timeout=httpx.Timeout(5.0))
         except httpx.HTTPError as exc:

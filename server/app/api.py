@@ -32,12 +32,15 @@ from .providers import (
     CLOUD,
     FALLBACK_ORDER,
     LOCAL,
+    NETWORK,
+    NETWORK_URL_SETTING,
     OPENROUTER,
     OAuthFlows,
     ProviderError,
     ProviderRouter,
     model_setting_key,
 )
+from .providers import lan
 from .mcp import icons as mcp_icons
 from .mcp.settings import MCP_DEFAULTS
 from .situation import Situation
@@ -155,6 +158,11 @@ class ModelChoice(BaseModel):
     # `anthropic/claude-sonnet-4.5` on OpenRouter. Never normalised here --
     # the tag and the vendor prefix are both part of the name.
     model: str = Field(min_length=1, max_length=200)
+
+
+class NetworkOllama(BaseModel):
+    # `192.168.1.20`, `gpu-box:11434` or a full http(s) URL. Empty disconnects.
+    url: str = Field(default="", max_length=300)
 
 
 class ProviderKey(BaseModel):
@@ -1235,6 +1243,8 @@ def build_router(
             # the settings page should show is different in each case.
             "configured": bool(getattr(provider, "configured", True)),
             "thinking": _thinking(provider_id),
+            # Where an Ollama is, so the page can say which machine answers.
+            **({"url": provider.base_url} if provider_id in (LOCAL, NETWORK) else {}),
         }
 
     async def _catalogue(provider_id: str) -> dict:
@@ -1302,6 +1312,8 @@ def build_router(
                 + (
                     ". Pull it first: `ollama pull " + model + "`"
                     if provider_id == LOCAL
+                    else ". Pull it on that machine first: `ollama pull " + model + "`"
+                    if provider_id == NETWORK
                     else ""
                 ),
             )
@@ -1309,6 +1321,45 @@ def build_router(
         providers.set_model(provider_id, model)
         store.set_text_setting(model_setting_key(provider_id), model)
         return {"provider": provider_id, "model": model, "thinking": _thinking(provider_id)}
+
+    @router.put("/providers/network/url")
+    async def set_network_ollama(body: NetworkOllama) -> dict:
+        """Connect an Ollama on another machine on this network, or disconnect it.
+
+        Checked in the order a person would want the answer: is it an address
+        at all, is it on this network, and is it Ollama. Only then is it kept.
+        When its first model is not the one this backend is set to, it is
+        switched to one the machine actually has, so the first message does
+        not fail on a model that was only ever pulled on the other machine.
+        """
+        try:
+            url = lan.normalize(body.url)
+            if url:
+                await lan.check_local(url)
+                info = await lan.probe(url)
+        except lan.AddressError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+        await providers.network.set_base_url(url)
+        store.set_text_setting(NETWORK_URL_SETTING, url or None)
+        if url and info["models"] and providers.network.model not in info["models"]:
+            model = info["models"][0]
+            providers.set_model(NETWORK, model)
+            store.set_text_setting(model_setting_key(NETWORK), model)
+        return {
+            **await _provider_state(NETWORK),
+            "version": info["version"] if url else "",
+        }
+
+    @router.get("/providers/network/discover")
+    async def discover_network_ollama() -> dict:
+        """Ollama servers on this machine's own subnet, to pick from.
+
+        One port on one /24 per interface, with short timeouts -- a couple of
+        seconds on a home network. Nothing found is an answer, not an error.
+        """
+        found = await lan.discover()
+        return {"servers": found, "scanned": lan.own_addresses()}
 
     @router.put("/providers/openrouter/key")
     async def set_openrouter_key(body: ProviderKey) -> dict:
@@ -1887,6 +1938,7 @@ def build_router(
         )
         return {
             "local": {**states[LOCAL], "url": providers.local.base_url},
+            "network": states[NETWORK],
             "cloud": states[CLOUD],
             "openrouter": states[OPENROUTER],
             "providers": [states[i] for i in providers.by_id],

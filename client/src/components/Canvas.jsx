@@ -208,14 +208,26 @@ export function Canvas({
   // server timestamp so the reader's own keystrokes (which do not move it until
   // the save resolves) never yank the cursor back.
   const lastId = useRef(activeId);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   useEffect(() => {
     const switched = lastId.current !== activeId;
     lastId.current = activeId;
-    if (!switched && sent.current !== null && active?.content === sent.current) {
+    // An echo of our own save, or a rename: the body on screen is already
+    // right, and nothing pending should be cancelled.
+    if (
+      !switched &&
+      ((sent.current !== null && active?.content === sent.current) || active?.content === draftRef.current)
+    ) {
       setTitleDraft(active?.title ?? "");
       return;
     }
     sent.current = null;
+    // A rewrite from outside (the model) replaces what is shown, so an edit
+    // still waiting on the debounce must not land after it: it would put the
+    // older document back on the server under the one on screen.
+    // (A switch to another canvas keeps it: that save is for the one left.)
+    if (!switched) clearTimeout(timer.current);
     setDraft(active?.content ?? "");
     setTitleDraft(active?.title ?? "");
   }, [activeId, stamp]); // eslint-disable-line react-hooks/exhaustive-deps

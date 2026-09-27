@@ -249,8 +249,11 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
 
   // An outside rewrite -- the model's, or Source -- replaces the working copy,
   // unless a gesture is under way, when it would yank the thing being dragged.
+  // One that arrives mid-gesture is held and wins when the gesture ends.
+  const incoming = useRef(null);
   useEffect(() => {
-    if (!gesture.current) setWork(doc);
+    if (gesture.current) incoming.current = doc;
+    else setWork(doc);
   }, [doc]);
 
   const [tool, setTool] = useState("move");
@@ -703,6 +706,15 @@ export function WireframeView({ doc, fallbackTheme, onChange, sessionId, onMakeC
     setGuides([]);
     setMarquee(null);
     if (!g) return;
+    if (incoming.current) {
+      // The document was rewritten under the drag: the drag was of something
+      // that is no longer there, so it is dropped rather than saved over it.
+      const next = incoming.current;
+      incoming.current = null;
+      setDraft(null);
+      setWork(next);
+      return;
+    }
     if ((g.kind === "move" || g.kind === "moveFrame" || g.kind === "resize") && g.moved) {
       commit(workRef.current, g.start);
       return;

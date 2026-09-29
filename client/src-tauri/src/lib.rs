@@ -160,9 +160,13 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&open, &quick, &code, &design, &quit])?;
 
             TrayIconBuilder::with_id("bom-tray")
-                // The app icon, for now. Next event and reachability replace
-                // this once there is a server to ask.
-                .icon(app.default_window_icon().unwrap().clone())
+                // The flower as a template image: black on transparent, so the
+                // menu bar tints it for light, dark and the highlighted state.
+                // The full-colour app icon is for the Dock, not for here. Next
+                // event and reachability replace this once there is a server
+                // to ask.
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
+                .icon_as_template(true)
                 .menu(&menu)
                 // macOS convention: the icon is a menu, not a button. Left
                 // click opening the window instead would make the menu

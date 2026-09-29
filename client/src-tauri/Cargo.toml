@@ -18,7 +18,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 # tray-icon is the whole reason this is a desktop app rather than a bookmark.
-tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 # Spawns and supervises the Python server as a sidecar. Also what a future
 # "open the data folder" menu item would use.
 tauri-plugin-shell = "2"

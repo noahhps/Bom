@@ -12,7 +12,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * time, and running an incomplete stream through the renderer produces a
  * flickering mess of half-open code fences.
  */
-export function Reasoning({ text, answering }) {
+// `label` is what a finished block is called: "Thought" before a skill,
+// "Thought before answering" before the words.
+export function Reasoning({ text, answering, label = "Thought before answering" }) {
   const [open, setOpen] = useState(true);
   const body = useRef(null);
 
@@ -34,7 +36,7 @@ export function Reasoning({ text, answering }) {
         aria-expanded={open}
         onClick={() => setOpen((was) => !was)}
       >
-        {answering ? "Thought before answering" : "Thinking…"}
+        {answering ? label : "Thinking…"}
       </button>
       {open ? (
         <div className="reasoning-body" ref={body}>

@@ -65,6 +65,31 @@ def coerce_arguments(args: dict[str, Any], schema: dict[str, Any]) -> dict[str, 
     return coerced
 
 
+#: MCP servers kept out of code conversations, by what they run. The local
+#: filesystem server reads and writes the same files the code tools do, but
+#: outside the project folder's confinement, the approval prompt and the
+#: editor's reload -- and a model offered both reaches for the wrong one. The
+#: Google servers are dozens of mail, document and calendar tools with nothing
+#: to do in a codebase, and every schema is paid for in every request.
+#: Matched against the server's name and its launch command, so a preset keeps
+#: matching after it is renamed.
+_NOT_FOR_CODE = (
+    "server-filesystem",
+    "google-workspace",
+    "google-calendar",
+    "google_workspace",
+    "google_calendar",
+)
+
+
+def offered_in_code(server_name: str, command: str | None, args: list[str] | None) -> bool:
+    """Whether a server's tools belong in a code conversation."""
+    if server_name == "filesystem":
+        return False
+    seen = " ".join([server_name, command or "", *(args or [])]).lower()
+    return not any(marker in seen for marker in _NOT_FOR_CODE)
+
+
 class MCPSkill(Skill):
     """Bridge exposing an MCP tool as a native Bom Skill."""
 

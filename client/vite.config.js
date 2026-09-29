@@ -13,7 +13,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": { target: API_ORIGIN, changeOrigin: true },
+      // `ws` for the Code view's terminal, whose socket lives under /api too.
+      "/api": { target: API_ORIGIN, changeOrigin: true, ws: true },
       "/healthz": { target: API_ORIGIN, changeOrigin: true },
       // Where OpenRouter sends the browser back to after a sign-in. It is not
       // under /api because the redirect carries no bearer token, and it has to
@@ -26,6 +27,10 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // The Code view's editor (Monaco) and its language workers are several
+    // megabytes by nature. They are split out and loaded only when the Code
+    // view opens, so the warning about their size says nothing actionable.
+    chunkSizeWarningLimit: 8000,
     rollupOptions: {
       // Two entries, not one app with a route. QuickView is a 640px panel that
       // opens over another application and is dismissed in seconds; making it

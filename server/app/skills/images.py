@@ -18,7 +18,7 @@ import re
 
 from ..images import sync_from_chat
 from ..store import Store
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 #: How an image is written into an HTML page or a markdown document.
 SCHEME = "bom-image:"
@@ -34,7 +34,104 @@ def generated_ids(store: Store, session: str) -> set[str]:
     return {image.id for image in store.session_images(session) if image.generated}
 
 
+#: What a model writes when it means "no picture here, draw the placeholder".
+_NOT_A_PICTURE = {"", "none", "null", "placeholder", "empty", "blank", "x", "tbd", "-"}
+#: Words that point at the picture the user most recently gave.
+_LATEST = ("attached", "attachment", "uploaded", "latest", "last", "user", "their", "my ", "your ")
+_ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}
+#: The argument names a picture arrives under, in any of the canvas tools.
+IMAGE_KEYS = ("image", "src", "imageId", "image_id", "photo", "picture")
+
+
+def resolve_image(images, value) -> str | None:
+    """The library id `value` refers to, or None when it names no picture.
+
+    Models name a picture however it was put to them. The one in front of
+    them arrived as an image in the chat, not as an id, so what comes back is
+    its file name, "the attached photo", "image 2" -- all of which used to be
+    dropped as images that do not exist, and the wireframe drew an empty box
+    where the user's own picture should have been. In order: an id; a file
+    name, with or without its extension; an ordinal; a word that points at
+    the latest one; and, when the conversation holds exactly one picture, that
+    picture, since there is no other it could mean.
+    """
+    text = str(value or "").strip()
+    if isinstance(value, dict):
+        text = str(next((value[k] for k in ("id", *IMAGE_KEYS, "name") if value.get(k)), "")).strip()
+    if not images:
+        return None
+    by_id = {image.id: image for image in images}
+    hit = re.search(r"img_[A-Za-z0-9]+", text)
+    if hit and hit.group(0) in by_id:
+        return hit.group(0)
+    low = text.lower().removeprefix("bom-image:").strip()
+    if low in _NOT_A_PICTURE:
+        return None
+    # A web address names a picture somewhere else, not one of the user's --
+    # it is dropped downstream, as it always was, rather than guessed at.
+    if re.match(r"^(?:[a-z][a-z0-9+.-]*:)?//|^data:", low):
+        return None
+    for image in images:
+        name = (image.name or "").lower()
+        stem = name.rsplit(".", 1)[0]
+        if low and (low == name or low == stem or (len(stem) > 3 and stem in low)):
+            return image.id
+    ordinal = re.search(r"(?:^|\b)(?:image|img|picture|photo|attachment|#)?\s*#?(\d{1,2})\b", low)
+    if ordinal and not hit:
+        n = int(ordinal.group(1))
+        if 1 <= n <= len(images):
+            return images[n - 1].id
+    for word, n in _ORDINALS.items():
+        if word in low and n <= len(images):
+            return images[n - 1].id
+    if any(word in low for word in _LATEST):
+        return images[-1].id
+    if len(images) == 1:
+        return images[0].id
+    return None
+
+
+def resolve_images_in(store: Store, session: str, value) -> list[str]:
+    """Rewrite, in place, every picture reference inside a tool's arguments to
+    a library id where one can be found. Returns what was resolved, as
+    "name -> id" lines for the result, so the model learns the ids."""
+    sync_from_chat(store, session)
+    images = store.session_images(session)
+    if not images:
+        return []
+    said: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, dict):
+            return
+        for key in list(node):
+            child = node[key]
+            if key in IMAGE_KEYS and isinstance(child, (str, dict)) and child:
+                current = child.get("id") if isinstance(child, dict) else child
+                if isinstance(current, str) and ID.match(current.removeprefix("bom-image:")):
+                    continue
+                found = resolve_image(images, child)
+                if found is None:
+                    continue
+                if isinstance(child, dict):
+                    child["id"] = found
+                else:
+                    node[key] = found
+                said.append(f"{str(current)[:40]!r} -> {found}")
+            else:
+                walk(child)
+
+    walk(value)
+    return said
+
+
 class ListImages(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     wants_session = True
 
     def __init__(self, store: Store) -> None:
@@ -82,6 +179,8 @@ class ListImages(Skill):
 
 class GenerateImage(Skill):
     """Make a picture on the configured generator and add it to the library."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     wants_session = True
 
@@ -148,3 +247,37 @@ class GenerateImage(Skill):
             "AI-generated and is labelled so on the slide; do not describe it as a photo "
             "of something real."
         )
+
+
+_PAGE_REF = re.compile(r"bom-image:([^\"'\s)>]+)")
+
+
+def resolve_images_in_text(store: Store, session: str, text: str) -> tuple[str, list[str]]:
+    """`bom-image:` references in a page or a document, turned into ids where
+    they name a picture some other way -- a file name, most often."""
+    if "bom-image:" not in (text or ""):
+        return text, []
+    sync_from_chat(store, session)
+    images = store.session_images(session)
+    ids = {image.id for image in images}
+    said: list[str] = []
+
+    def swap(match) -> str:
+        ref = match.group(1)
+        if ref in ids:
+            return match.group(0)
+        found = resolve_image(images, ref)
+        if found is None:
+            return match.group(0)
+        said.append(f"{ref[:40]!r} -> {found}")
+        return f"bom-image:{found}"
+
+    return _PAGE_REF.sub(swap, text), said
+
+
+def resolution_note(said: list[str]) -> str:
+    """The line a result carries when references were turned into ids."""
+    if not said:
+        return ""
+    unique = list(dict.fromkeys(said))
+    return " Pictures matched to the conversation's images: " + ", ".join(unique[:6]) + "."

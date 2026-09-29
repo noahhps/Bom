@@ -56,6 +56,12 @@ class Skill(ABC):
     #: the model's own theme left out.
     themed: bool = False
 
+    #: The kinds of conversation this skill is offered in, or None for every
+    #: kind. A code conversation is offered the code tools instead of the
+    #: canvas and design ones, and a chat is not offered tools that edit a
+    #: project it does not have -- see `NOT_CODE` and skills/code.py.
+    modes: frozenset[str] | None = None
+
     def __init__(
         self,
         *,
@@ -131,4 +137,26 @@ class Pictured(str):
     def __new__(cls, text: str, images=()):
         made = super().__new__(cls, text)
         made.images = tuple(images)
+        return made
+
+
+#: Offered in chats and design conversations, not in a code one: the canvas,
+#: design and device-file tools, which a codebase has its own versions of.
+NOT_CODE = frozenset({"chat", "design"})
+CODE_ONLY = frozenset({"code"})
+
+
+class Touched(str):
+    """A skill's text answer, and the project files it changed.
+
+    Like `Pictured`, a `str` everywhere but the turn loop, which reads `paths`
+    to tell the editor what to reload -- "*" when a command may have changed
+    anything.
+    """
+
+    paths: tuple = ()
+
+    def __new__(cls, text: str, paths=()):
+        made = super().__new__(cls, text)
+        made.paths = tuple(paths)
         return made

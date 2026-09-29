@@ -26,7 +26,7 @@ import re
 from ..design_presets import clean_theme
 from ..store import Store
 from .args import as_dict, plain_text
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 from .slides import THEME_SCHEMA, save_canvas
 
 KIND = "sheet"
@@ -228,6 +228,8 @@ def _summary(verb: str, name: str, sheet: dict) -> str:
 
 
 class WriteSheet(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
     themed = True
@@ -324,6 +326,8 @@ class WriteSheet(Skill):
 
 
 class EditSheet(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
 

@@ -1,3 +1,5 @@
+import { BashView, EditDiff, WritePreview } from "./code/CodeParts";
+
 /**
  * A skill asking to run, and the three widths you can say yes at.
  *
@@ -29,7 +31,11 @@ export function SkillApproval({ skill, onDecide }) {
         <span className="approval-name">{skill.name}</span>
       </div>
 
-      {args ? (
+      {CODE_PREVIEWS.has(skill.name) ? (
+        <div className="approval-code">
+          <CodePreview skill={skill} />
+        </div>
+      ) : args ? (
         <dl className="approval-args">
           {Object.entries(args).map(([key, value]) => (
             <div className="approval-arg" key={key}>
@@ -88,4 +94,38 @@ export function SkillApproval({ skill, onDecide }) {
       )}
     </div>
   );
+}
+
+/* A code change is decided on the change itself: the diff, the new file, the
+   command -- not on a dump of its arguments. */
+const CODE_PREVIEWS = new Set(["code_edit", "code_write", "code_bash", "create_code_project", "import_design"]);
+
+function CodePreview({ skill }) {
+  const args = skill.arguments || {};
+  if (skill.name === "code_edit") return <EditDiff args={args} limit={40} />;
+  if (skill.name === "code_write") return <WritePreview args={args} limit={30} />;
+  if (skill.name === "code_bash") return <BashView args={args} running />;
+  if (skill.name === "create_code_project" || skill.name === "import_design") {
+    return <p className="approval-sentence">{projectSentence(skill.name, args)}</p>;
+  }
+  return null;
+}
+
+/* What a project tool will do to the disk, said in a sentence. */
+function projectSentence(name, args) {
+  const list = (value) => (Array.isArray(value) ? value : value ? [value] : []).map((v) => `"${v}"`);
+  const picked = list(args.designs || args.design);
+  const from = args.from_design || args.project;
+  const what = picked.length
+    ? `${picked.join(", ")}${from ? ` from "${from}"` : ""}`
+    : from
+      ? `every design in "${from}"`
+      : "";
+  if (name === "create_code_project") {
+    return (
+      `Make a new folder, "${args.name || "Untitled"}", in your projects folder` +
+      (what ? `, and copy ${what} into its design/ folder.` : ".")
+    );
+  }
+  return `Copy ${what || "designs"} into ${args.into || "design"}/ in this project, replacing earlier copies there.`;
 }

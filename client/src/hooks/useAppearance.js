@@ -7,6 +7,7 @@ import {
   storedAppearance,
   watchSystem,
 } from "../lib/appearance";
+import { isDesktop } from "../lib/serverOrigin";
 
 /**
  * The device's light/dark preference, and the mode it resolves to right now.
@@ -28,6 +29,17 @@ export function useAppearance() {
   useEffect(() => {
     applyAppearance(mode);
   }, [mode]);
+
+  // In the desktop app the window's own appearance follows too: the frost
+  // behind the glass empty states is a native material, pale or dark by the
+  // window's appearance, and it has to match the page drawn over it rather
+  // than the system's setting. "System" hands the choice back to macOS.
+  useEffect(() => {
+    if (!isDesktop()) return;
+    import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) => getCurrentWindow().setTheme(preference === "system" ? null : mode))
+      .catch(() => {});
+  }, [preference, mode]);
 
   const setPreference = useCallback((next) => {
     saveAppearance(next);

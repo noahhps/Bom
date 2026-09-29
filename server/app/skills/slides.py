@@ -30,7 +30,7 @@ import re
 from ..design_presets import clean_theme
 from .args import _parse_wrapped, as_dict, plain_text
 from ..store import Store
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 KIND = "slides"
 
@@ -439,6 +439,8 @@ def save_canvas(store: Store, session: str, title: str, content: str, kind: str)
 
 
 class WriteSlides(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
     #: Styled from the conversation's design standard. The turn loop passes the
@@ -549,6 +551,9 @@ class WriteSlides(Skill):
         # The deck under another name, which a model sends as often as not.
         if slides is None:
             slides = next((extra[k] for k in ("deck", "pages", "content", "items") if k in extra), None)
+        from .images import resolution_note, resolve_images_in
+
+        matched = resolve_images_in(self.store, session, slides)
         deck = normalize_deck(slides, theme, design_defaults, theme_override)
         # A missing title is not worth a failed call: the first slide's title
         # names the deck, and it can be renamed in the panel.
@@ -573,6 +578,7 @@ class WriteSlides(Skill):
             "edit, present and export it. Change it with edit_slides (read_canvas "
             "shows the slides by number)."
         )
+        said += resolution_note(matched)
         flags = advice(deck)
         if missing:
             flags.insert(0, "these images do not exist and were left off: "
@@ -755,6 +761,8 @@ def apply_slide_ops(deck: dict, ops) -> tuple[list[str], list[str]]:
 
 
 class EditSlides(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
 
@@ -823,10 +831,12 @@ class EditSlides(Skill):
         if not ops:
             return "No ops were given. Pass `ops`, e.g. [{op: 'update', slide: 2, set: {title: '...'}}]."
 
+        from .images import generated_ids, known_ids, resolution_note, resolve_images_in
+
+        matched = resolve_images_in(self.store, session, ops)
         done, failed = apply_slide_ops(deck, ops)
         if not done:
             return "Nothing changed. " + " ".join(f + "." for f in failed)
-        from .images import generated_ids, known_ids  # local: avoids an import cycle
 
         missing = check_images(deck, known_ids(self.store, session), generated_ids(self.store, session))
         self.store.update_canvas(canvas.id, content=json.dumps(deck, ensure_ascii=False, indent=1))
@@ -837,6 +847,7 @@ class EditSlides(Skill):
         )
         if failed:
             said += " Not applied: " + " ".join(f + "." for f in failed)
+        said += resolution_note(matched)
         if missing:
             said += (" These images do not exist and were left off: " + ", ".join(missing)
                      + " -- call list_images for the real ids.")

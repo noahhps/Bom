@@ -111,7 +111,10 @@ function Fact({ fact, busy, onEdit, onForget }) {
   );
 }
 
-export function Memory({ api }) {
+// `embedded`: shown on the settings window's Memory screen, whose own header
+// already says what this is -- so no header here, and the documents stacked
+// under the facts rather than beside them.
+export function Memory({ api, embedded = false }) {
   const memory = useMemory(api);
   const [filter, setFilter] = useState("All");
   const [adding, setAdding] = useState(null);
@@ -151,7 +154,8 @@ export function Memory({ api }) {
   };
 
   return (
-    <div className="page">
+    <div className="page" data-embedded={embedded ? "" : undefined}>
+      {embedded ? null : (
       <div className="page-head" data-tint="accent">
         <div className="sw" style={{ right: "-70px", top: "-120px", width: "300px", height: "300px", background: "var(--accent-field)" }} />
         <div className="sw" style={{ right: "110px", top: "-60px", width: "150px", height: "150px", background: "var(--accent-wash)" }} />
@@ -166,6 +170,7 @@ export function Memory({ api }) {
           </div>
         </div>
       </div>
+      )}
 
       {memory.error ? (
         <div className="unbacked">

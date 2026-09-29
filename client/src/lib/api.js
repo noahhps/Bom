@@ -27,6 +27,9 @@ async function reason(response) {
   try {
     const { detail } = JSON.parse(body);
     if (typeof detail === "string") return detail;
+    // A refusal that carries more than a sentence -- a save conflict says when
+    // the file on disk was written -- still leads with one.
+    if (detail && typeof detail.message === "string") return detail.message;
     if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
   } catch {
     // not JSON; the raw body is the best thing we have
@@ -249,8 +252,13 @@ export function createApi(token, onUnauthorized = () => {}) {
         body: JSON.stringify({ design }),
       }),
     listProjects: () => json("/projects"),
-    createProject: (name) =>
-      json("/projects", { method: "POST", body: JSON.stringify({ name }) }),
+    // `kind` is chat, design or code. A code project also takes `folder` (an
+    // existing one to register; otherwise a new folder is made) and the
+    // designs it is built from: `source_id` (a design project), `session_id`
+    // (a design conversation) and/or `designs` (canvas ids).
+    createProject: (name, kind = "chat", extra = {}) =>
+      json("/projects", { method: "POST", body: JSON.stringify({ name, kind, ...extra }) }),
+    designLibrary: () => json("/designs/library"),
     renameProject: (id, name) =>
       json("/projects/" + encodeURIComponent(id), {
         method: "PATCH",
@@ -385,11 +393,11 @@ export function createApi(token, onUnauthorized = () => {}) {
       provider = null,
       agentId = null,
       signal = undefined,
-      // For a brand-new conversation only: "chat" or "design", and a design
-      // standard chosen on the empty screen. The server ignores both once the
-      // session exists.
+      // For a brand-new conversation only: "chat", "design" or "code", a design
+      // standard chosen on the empty screen, and a code conversation's project
+      // folder. The server ignores all three once the session exists.
       // `make` is per message: the composer's Make menu, or null for auto.
-      { mode = null, design = null, make = null } = {},
+      { mode = null, design = null, workspace = null, make = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -405,6 +413,7 @@ export function createApi(token, onUnauthorized = () => {}) {
           agent_id: agentId,
           mode,
           design,
+          workspace,
           make,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
@@ -417,6 +426,55 @@ export function createApi(token, onUnauthorized = () => {}) {
     // A blob, not a URL: the endpoint is authenticated, so the bytes have to
     // come through fetch with the bearer header and be wrapped locally.
     attachment: async (id) => (await request("/attachments/" + id)).blob(),
+
+    // -- the project folder, for the Code view ------------------------------
+    // Every call names the folder: the server checks it each time rather than
+    // remembering which one is open.
+    browseFolders: (path = null) =>
+      json("/workspace/browse" + (path ? "?path=" + encodeURIComponent(path) : "")),
+    recentFolders: () => json("/workspace/recent"),
+    openFolder: (path) =>
+      json("/workspace/open", { method: "POST", body: JSON.stringify({ path }) }),
+    folderTree: (root, path = ".") =>
+      json(`/workspace/tree?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`),
+    folderFiles: (root) => json(`/workspace/files?root=${encodeURIComponent(root)}`),
+    readProjectFile: (root, path) =>
+      json(`/workspace/file?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`),
+    saveProjectFile: (root, path, content, mtime, force = false) =>
+      json("/workspace/file", {
+        method: "PUT",
+        body: JSON.stringify({ root, path, content, mtime, force }),
+      }),
+    createProjectEntry: (root, path, kind = "file") =>
+      json("/workspace/entry", { method: "POST", body: JSON.stringify({ root, path, kind }) }),
+    // -- the workbench: terminals and the preview ---------------------------
+    // A terminal is a WebSocket, which cannot carry the bearer header -- so
+    // the token goes as the first message rather than into the URL, where
+    // it would sit in logs. `hello` names the folder for a new shell, or the
+    // id of one to reattach to.
+    openTerminal: (hello) => {
+      const base = serverOrigin() || window.location.origin;
+      const socket = new WebSocket(base.replace(/^http/, "ws") + "/api/terminal");
+      socket.addEventListener("open", () => socket.send(JSON.stringify({ token, ...hello })));
+      return socket;
+    },
+    listTerminals: (root) => json(`/terminals?root=${encodeURIComponent(root)}`),
+    closeTerminal: (id) => json(`/terminals/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    // Where the project's own files are served for the preview frame, and the
+    // page to start on when there is an obvious one. The path is relative to
+    // the server, so it is joined to its origin here.
+    previewFiles: async (root) => {
+      const found = await json("/workspace/preview", { method: "POST", body: JSON.stringify({ root }) });
+      const base = (serverOrigin() || window.location.origin) + found.base;
+      return { base, entry: found.entry };
+    },
+    importDesigns: (root, designs, into = "design") =>
+      json("/workspace/designs", { method: "POST", body: JSON.stringify({ root, designs, into }) }),
+    setSessionWorkspace: (sessionId, workspace) =>
+      json(`/sessions/${encodeURIComponent(sessionId)}/workspace`, {
+        method: "PUT",
+        body: JSON.stringify({ workspace }),
+      }),
 
     // -- memory ---------------------------------------------------------
     // Facts, switches, document counts and index size arrive together: the

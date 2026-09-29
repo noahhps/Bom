@@ -108,9 +108,15 @@ def sync_from_chat(store: Store, session_id: str) -> int:
     """
     seen = store.imported_attachments(session_id)
     added = 0
-    for attachments in store.attachments_for_session(session_id, with_data=True).values():
-        for attachment in attachments:
-            if attachment.kind != "image" or attachment.id in seen or not attachment.data:
+    # Listed without their bytes, and only the new ones fetched whole: this
+    # runs at the start of every turn, and a conversation with a dozen photos
+    # in it should not read them all off disk to find that none are new.
+    for attachments in store.attachments_for_session(session_id).values():
+        for listed in attachments:
+            if listed.kind != "image" or listed.id in seen:
+                continue
+            attachment = store.get_attachment(listed.id)
+            if attachment is None or not attachment.data:
                 continue
             try:
                 ready = prepare(attachment.name, attachment.data)

@@ -12,12 +12,59 @@ mod quickview;
 mod server;
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
-    Manager, RunEvent, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, WebviewWindow, WindowEvent,
 };
 
 use server::ManagedServer;
+
+/// The kinds of conversation the File menu and the tray start -- a chat, a
+/// code session, a design -- as (menu id, kind). Each opens the page's one
+/// new-conversation screen with its composer set to that kind.
+const NEW_KINDS: &[(&str, &str)] = &[("new-chat", "chat"), ("new-code", "code"), ("new-design", "design")];
+
+/// The glass behind the rail.
+#[cfg(target_os = "macos")]
+fn apply_glass(window: &WebviewWindow) {
+    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+
+    // The webview paints its own opaque ground unless told not to.
+    // `transparent: true` on the window is not enough on its own -- the
+    // material ends up behind an opaque sheet of nothing.
+    if let Err(err) = window.set_background_color(None) {
+        eprintln!("[glass] could not clear the webview background: {err}");
+    }
+    // The same material QuickView uses, on purpose. `Sidebar` is the
+    // semantically correct one for this region, but it is a paler, flatter
+    // frost, and the rail is meant to look like the panel -- same glass, same
+    // room.
+    match apply_vibrancy(window, NSVisualEffectMaterial::HudWindow, Some(NSVisualEffectState::Active), None) {
+        Ok(()) => println!("[glass] sidebar vibrancy applied to the main window"),
+        // Reported, not swallowed. A silent failure here is indistinguishable
+        // from a CSS problem, which is exactly the confusion this cost once.
+        Err(err) => eprintln!("[glass] vibrancy refused: {err}"),
+    }
+    // The stylesheet keys the glass rail off `data-shell`, which the page sets
+    // for itself. Set again from here so the styling does not depend on a
+    // feature check in the page being right.
+    let _ = window.eval("document.documentElement.setAttribute('data-shell','tauri')");
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_glass(_window: &WebviewWindow) {}
+
+/// A new conversation picked from the File menu or the tray: the window
+/// comes forward and the page starts one of that kind. False for any other
+/// menu item.
+fn new_menu_event(app: &AppHandle, id: &str) -> bool {
+    let Some((_, kind)) = NEW_KINDS.iter().find(|(item, _)| *item == id) else {
+        return false;
+    };
+    present_main_window(app);
+    let _ = app.emit_to("main", "bom://new", *kind);
+    true
+}
 
 /// Bring the window back to the front, un-hiding it first if the close button
 /// put it away. Used by both the tray menu and a left-click on the icon.
@@ -47,6 +94,12 @@ pub fn run() {
                 .build(),
         )
         .manage(ManagedServer::default())
+        // New conversations, from the menu bar's File menu and from the tray
+        // alike. Checked by id, so the tray's own items -- handled on the
+        // tray -- pass straight through.
+        .on_menu_event(|app, event| {
+            new_menu_event(app, event.id().as_ref());
+        })
         .setup(|app| {
             let handle = app.handle();
 
@@ -55,42 +108,33 @@ pub fn run() {
             // way Finder's does. The sheet paints over it -- see the
             // `html[data-shell]` rules in styles.css, which pin the sheet's
             // tokens opaque so the translucency stops at the rail's edge.
-            #[cfg(target_os = "macos")]
             if let Some(main) = handle.get_webview_window("main") {
-                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+                apply_glass(&main);
+            }
 
-                // The webview paints its own opaque ground unless told not to.
-                // `transparent: true` on the window is not enough on its own --
-                // the material ends up behind an opaque sheet of nothing.
-                if let Err(err) = main.set_background_color(None) {
-                    eprintln!("[glass] could not clear the webview background: {err}");
+            // The menu bar: the system's standard menus, with a new chat, code
+            // session and design at the head of File.
+            #[cfg(target_os = "macos")]
+            {
+                let menu = Menu::default(handle)?;
+                let chat_item = MenuItem::with_id(app, "new-chat", "New Chat", true, Some("CmdOrCtrl+1"))?;
+                let code_item = MenuItem::with_id(app, "new-code", "New Code Session", true, Some("CmdOrCtrl+2"))?;
+                let design_item = MenuItem::with_id(app, "new-design", "New Design", true, Some("CmdOrCtrl+3"))?;
+                let separator = PredefinedMenuItem::separator(app)?;
+                let mut placed = false;
+                for item in menu.items()? {
+                    if let MenuItemKind::Submenu(sub) = item {
+                        if sub.text()? == "File" {
+                            sub.insert_items(&[&chat_item, &code_item, &design_item, &separator], 0)?;
+                            placed = true;
+                        }
+                    }
                 }
-
-                // The same material QuickView uses, on purpose. `Sidebar` is
-                // the semantically correct one for this region, but it is a
-                // paler, flatter frost, and the rail is meant to look like the
-                // panel -- same glass, same room.
-                match apply_vibrancy(
-                    &main,
-                    NSVisualEffectMaterial::HudWindow,
-                    Some(NSVisualEffectState::Active),
-                    None,
-                ) {
-                    Ok(()) => println!("[glass] sidebar vibrancy applied to the main window"),
-                    // Reported, not swallowed. A silent failure here is
-                    // indistinguishable from a CSS problem, which is exactly
-                    // the confusion this cost once already.
-                    Err(err) => eprintln!("[glass] vibrancy refused: {err}"),
+                if !placed {
+                    let sub = Submenu::with_items(app, "File", true, &[&chat_item, &code_item, &design_item])?;
+                    menu.insert(&sub, 1)?;
                 }
-
-                // The stylesheet keys the glass rail off `data-shell`, which
-                // the page sets for itself. Set again from here so the styling
-                // does not depend on a feature check in the page being right --
-                // if the page already set it this is a no-op, and if its check
-                // ever fails this is what saves the rail.
-                let _ = main.eval(
-                    "document.documentElement.setAttribute('data-shell','tauri')",
-                );
+                app.set_menu(menu)?;
             }
 
             quickview::setup(handle);
@@ -110,8 +154,10 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
+            let code = MenuItem::with_id(app, "new-code", "New Code Session", true, None::<&str>)?;
+            let design = MenuItem::with_id(app, "new-design", "New Design", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Bom", true, Some("Cmd+Q"))?;
-            let menu = Menu::with_items(app, &[&open, &quick, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &quick, &code, &design, &quit])?;
 
             TrayIconBuilder::with_id("bom-tray")
                 // The app icon, for now. Next event and reachability replace
@@ -126,6 +172,9 @@ pub fn run() {
                     "open" => present_main_window(app),
                     "quickview" => quickview::toggle(app),
                     "quit" => app.exit(0),
+                    // New Code Session and New Design: handled by the
+                    // app-wide listener above, which hears the tray's items
+                    // as well.
                     _ => {}
                 })
                 .build(app)?;

@@ -1,7 +1,8 @@
-import { memo } from "react";
+import { Fragment, memo, useMemo } from "react";
 
 import { useReveal } from "../hooks/useReveal";
 import { workingWord } from "../lib/skillWidgets";
+import { turnTimeline } from "../lib/timeline";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
 import { Decode } from "./Decode";
@@ -9,6 +10,17 @@ import { DesignChoice } from "./DesignChoice";
 import { Reasoning } from "./Reasoning";
 import { SkillApproval } from "./SkillApproval";
 import { SkillTrace } from "./SkillTrace";
+
+/* One stretch of the answer's words. Its own component so each stretch
+ * keeps its own fade-in state: only the one still being written is live. */
+function AnswerText({ text, live }) {
+  // renderMarkdown escapes the source before emitting a single tag, so no
+  // model output reaches the DOM as markup. That is the whole contract; see
+  // lib/markdown.js. useReveal only wraps what it is given -- it inserts its
+  // own spans after the escaping, never before it.
+  const html = useReveal(text, live);
+  return <div className="body" dangerouslySetInnerHTML={html} />;
+}
 
 /**
  * One turn.
@@ -42,12 +54,12 @@ export const Message = memo(function Message({
   model,
   pin = null,
 }) {
-  // renderMarkdown escapes the source before emitting a single tag, so no
-  // model output reaches the DOM as markup. That is the whole contract; see
-  // lib/markdown.js. useReveal only wraps what it is given -- it inserts its
-  // own spans after the escaping, never before it.
-  const revealed = useReveal(role === "assistant" ? content : "", streaming);
-  const html = role === "assistant" && content ? revealed : null;
+  // The answer in the order it happened: thinking, skills and words as they
+  // came, rather than all the thinking, then all the skills, then the words.
+  const parts = useMemo(
+    () => (role === "assistant" ? turnTimeline({ reasoning, content, skills }) : []),
+    [role, reasoning, content, skills],
+  );
 
   if (role === "user") {
     return (
@@ -108,43 +120,56 @@ export const Message = memo(function Message({
       <div className="answer">
         <AgentFlower open={Boolean(streaming)} />
 
-        {reasoning ? (
-          <Reasoning text={reasoning} answering={Boolean(content)} />
-        ) : null}
+        {parts.map((part, index) => {
+          const last = index === parts.length - 1;
+          if (part.type === "reasoning") {
+            // Folded once anything follows it -- a skill or the words -- and
+            // open while it is the last thing happening.
+            const next = parts[index + 1];
+            return (
+              <Reasoning
+                key={`reasoning-${index}`}
+                text={part.text}
+                answering={!(streaming && last)}
+                label={next?.type === "skills" ? "Thought" : "Thought before answering"}
+              />
+            );
+          }
+          if (part.type === "text") {
+            return <AnswerText key={`text-${index}`} text={part.text} live={Boolean(streaming && last)} />;
+          }
+          return (
+            <Fragment key={`skills-${index}`}>
+              {/* Anything the turn is blocked on, above the skills it came
+                  from. The server is holding the answer open until one of
+                  these is pressed, so it goes where the eye lands first
+                  rather than inside the compact list of what has run. */}
+              {part.skills
+                .filter((s) => s.approval)
+                .map((s) => (
+                  <SkillApproval key={s.approval.id} skill={s} onDecide={onDecide} />
+                ))}
+              {/* The other thing a turn can be stopped on: a question about
+                  how the result should look. Same place, same reason. */}
+              {part.skills
+                .filter((s) => s.design)
+                .map((s) => (
+                  <DesignChoice key={s.design.id} skill={s} onChoose={onChooseDesign} />
+                ))}
+              <SkillTrace skills={part.skills} />
+            </Fragment>
+          );
+        })}
 
-        {/* Anything the turn is currently blocked on, above the trace. The
-            server is holding the answer open until one of these is pressed, so
-            it goes where the eye lands first rather than inside the compact
-            list of what has already run. */}
-        {skills
-          ?.filter((s) => s.approval)
-          .map((s) => (
-            <SkillApproval key={s.approval.id} skill={s} onDecide={onDecide} />
-          ))}
-
-        {/* The other thing a turn can be stopped on: a question about how the
-            result should look. Same place, same reason -- the answer is not
-            moving until one of these is pressed. */}
-        {skills
-          ?.filter((s) => s.design)
-          .map((s) => (
-            <DesignChoice key={s.design.id} skill={s} onChoose={onChooseDesign} />
-          ))}
-
-        <SkillTrace skills={skills} />
-
-        {html ? (
-          <div className="body" dangerouslySetInnerHTML={html} />
-        ) : streaming ? (
-          // The gap between the turn starting and its first token. Without
-          // something here the answer column is simply blank. The word is
-          // read off the turn -- see workingWord -- so it says what is
-          // actually happening: the skill that is running, a prompt waiting
-          // on the reader, or the model's own thinking.
+        {streaming && parts[parts.length - 1]?.type !== "text" ? (
+          // Between the turn starting and its first word, and again while a
+          // skill runs or it thinks after one. Without something here the
+          // answer simply stops growing. The word is read off the turn -- see
+          // workingWord -- so it says what is actually happening: the skill
+          // that is running, a prompt waiting on the reader, or the model's
+          // own thinking.
           <Decode className="working" word={workingWord(skills, thinking)} />
-        ) : (
-          <div className="body">{content}</div>
-        )}
+        ) : null}
 
         {/* The model stopped because it ran out of skill rounds, not because it
             was done. One press sends another turn so it can pick up where it

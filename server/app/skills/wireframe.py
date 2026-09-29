@@ -28,7 +28,7 @@ import re
 from ..design_presets import clean_theme
 from ..store import Store
 from .args import as_dict, plain_text
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 from .slides import save_canvas
 
 KIND = "wireframe"
@@ -401,6 +401,8 @@ LAYER_SCHEMA = {
 
 
 class WriteWireframe(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
     themed = True
@@ -420,8 +422,10 @@ class WriteWireframe(Skill):
                 "weight; use a heading type -- 'h1', 'h2', 'heading' -- for "
                 "titles), button {text, variant primary|secondary|ghost}, input "
                 "{text as the placeholder}, checkbox and toggle {text, checked}, "
-                "nav {text as the brand, items[]}, card {text}, image {image: an "
-                "id from list_images, or none for a placeholder}, lines {count -- "
+                "nav {text as the brand, items[]}, card {text, image}, image {image: "
+                "the id of one of the user's pictures -- the ids of pictures "
+                "attached in the chat are given beside them, and list_images "
+                "lists every one -- or none for a placeholder}, lines {count -- "
                 "placeholder body text}, avatar, icon {icon: menu, search, "
                 "heart, star, user, bell, cart, home, settings, close, plus, "
                 "arrow}, rect, ellipse, line, and row {children[]} to put layers "
@@ -467,6 +471,9 @@ class WriteWireframe(Skill):
                   **extra) -> str:
         if frames is None:
             frames = next((extra[k] for k in ("screens", "pages", "artboards") if k in extra), None)
+        from .images import resolution_note, resolve_images_in
+
+        matched = resolve_images_in(self.store, session, frames)
         doc = normalize_wireframe(frames, fidelity, {**(theme_override or {})} or theme, design_defaults)
         if not doc["frames"]:
             return "That wireframe had no frames. Pass `frames` as a list of screens, each with layers."
@@ -490,6 +497,7 @@ class WriteWireframe(Skill):
             "export it. Change it with edit_wireframe (read_canvas shows every layer's "
             "id and position), or turn it into a deck with wireframe_to_slides."
         )
+        said += resolution_note(matched)
         if dropped:
             said += f" Left off images that do not exist: {', '.join(dropped)} -- call list_images."
         from ..design_check import check_wireframe, summary
@@ -499,6 +507,8 @@ class WriteWireframe(Skill):
 
 
 class WireframeToSlides(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
 
@@ -1142,6 +1152,8 @@ def _apply_one(wf: _Doc, name: str, item: dict):
 
 
 class EditWireframe(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
 
@@ -1231,6 +1243,9 @@ class EditWireframe(Skill):
         if not ops:
             return "No ops were given. Pass `ops` as a list, e.g. [{op: 'update', layer: 'f1_l2', set: {text: '...'}}]."
 
+        from .images import resolution_note, resolve_images_in
+
+        matched = resolve_images_in(self.store, session, ops)
         done, failed = apply_ops(doc, ops)
         if not done:
             return "Nothing changed. " + " ".join(f + "." for f in failed)
@@ -1247,6 +1262,7 @@ class EditWireframe(Skill):
         said = f"Edited the wireframe {canvas.title!r}: " + "; ".join(done) + "."
         if failed:
             said += " Not applied: " + " ".join(f + "." for f in failed)
+        said += resolution_note(matched)
         if dropped:
             said += f" Left off images that do not exist: {', '.join(dropped)} -- call list_images."
         from ..design_check import check_wireframe, summary

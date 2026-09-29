@@ -98,6 +98,19 @@ const SOURCES = {
   generate_image: { source: "Images", icon: "image" },
   run_python: { source: "Sandbox", icon: "code" },
   run_shell: { source: "Sandbox", icon: "code" },
+  code_ls: { source: "Code", icon: "folder" },
+  code_glob: { source: "Code", icon: "search" },
+  code_grep: { source: "Code", icon: "search" },
+  code_read: { source: "Code", icon: "document" },
+  code_edit: { source: "Code", icon: "pen" },
+  code_write: { source: "Code", icon: "pen" },
+  code_bash: { source: "Terminal", icon: "terminal" },
+  code_todo: { source: "Tasks", icon: "list" },
+  create_project: { source: "Projects", icon: "folder" },
+  create_code_project: { source: "Projects", icon: "code" },
+  list_designs: { source: "Designs", icon: "design" },
+  read_design: { source: "Designs", icon: "wireframe" },
+  import_design: { source: "Designs", icon: "design" },
 };
 
 /* The argument that best says what the call was for, per tool. First match
@@ -131,10 +144,29 @@ const TITLE_KEYS = {
   ask_for_design: ["name"],
   run_python: ["code"],
   run_shell: ["command"],
+  code_ls: ["path"],
+  code_glob: ["pattern"],
+  code_grep: ["pattern"],
+  code_read: ["path"],
+  // The body draws these -- a diff, a file, a command, a list -- so the title
+  // would only repeat it.
+  code_edit: [],
+  code_write: [],
+  code_bash: [],
+  code_todo: [],
+  create_project: ["name"],
+  create_code_project: ["name"],
+  list_designs: [],
+  read_design: ["design"],
+  import_design: ["design", "project"],
 };
 
 /* Extra label/value rows worth pulling out of the arguments. */
 const ROW_KEYS = {
+  create_project: [["kind", "Kind"]],
+  create_code_project: [["from_design", "From"]],
+  read_design: [["project", "In"]],
+  import_design: [["into", "Into"]],
   add_event: [["starts_at", "Starts"], ["ends_at", "Ends"], ["notes", "Notes"]],
   update_event: [["starts_at", "Starts"], ["ends_at", "Ends"], ["on", "On"]],
   list_events: [["days", "Days ahead"]],
@@ -252,6 +284,19 @@ const DOING = {
   add_to_album: "Sorting photos",
   run_python: "Running code",
   run_shell: "Running code",
+  code_ls: "Looking around",
+  code_glob: "Finding files",
+  code_grep: "Searching",
+  code_read: "Reading",
+  code_edit: "Editing",
+  code_write: "Writing",
+  code_bash: "Running",
+  code_todo: "Planning",
+  create_project: "Filing",
+  create_code_project: "Setting up",
+  list_designs: "Looking at designs",
+  read_design: "Reading the design",
+  import_design: "Copying designs",
 };
 
 export function workingWord(skills, thinking) {

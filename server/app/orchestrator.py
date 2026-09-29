@@ -39,7 +39,11 @@ from .providers import (
     ProviderError,
     ProviderRouter,
 )
+from . import workspace as project
+from .code_mode import CODE_PREAMBLE, environment
+from .images import sync_from_chat
 from .design_mode import (
+    CODE,
     DESIGN,
     DESIGN_PREAMBLE,
     MAX_PIN_NUDGES,
@@ -112,6 +116,20 @@ PICTURE_SKILLS = {"view_canvas"}
 #: gives up and reports the failure like any other.
 MAX_GARBLED_ROUNDS = 2
 
+#: How many times a turn that has said nothing at all is asked to answer
+#: before the silence is reported. Once: a model that ends a round with no
+#: words and no call -- gpt-oss does, now and then, after its reasoning -- nearly
+#: always answers when told so, and one that does not will not on a second
+#: asking either.
+MAX_SILENT_NUDGES = 1
+
+SILENT_NUDGE = (
+    "Nothing reached the user: your last reply was empty. Answer them now, in "
+    "plain text, from what you have already found -- or, if you truly need "
+    "more, call one of the tools you were given, by its exact name. There are "
+    "no others."
+)
+
 
 class Orchestrator:
     def __init__(
@@ -136,7 +154,10 @@ class Orchestrator:
         self._session_grants: dict[str, set[str]] = {}
 
     def _skill_schemas(
-        self, allowed: set[str] | None = None, blocked: set[str] = frozenset()
+        self,
+        allowed: set[str] | None = None,
+        blocked: set[str] = frozenset(),
+        mode: str | None = None,
     ) -> list[dict] | None:
         """What the model is told it can call, or None when it can call nothing.
 
@@ -150,13 +171,19 @@ class Orchestrator:
         even an empty one -- means only those. An empty set therefore collapses
         to None below, which is correct: an agent given no skills is offered no
         tools at all.
+
+        `mode` narrows it to the tools that belong in this kind of conversation:
+        the code tools in a code conversation and not elsewhere, the canvas and
+        design tools everywhere but there. See `Skill.modes`.
         """
         if self.registry is None:
             return None
         schemas = [
             skill.schema()
             for name, skill in self.registry.enabled()
-            if (allowed is None or name in allowed) and name not in blocked
+            if (allowed is None or name in allowed)
+            and name not in blocked
+            and _offered_in(skill, mode)
         ]
         return schemas or None
 
@@ -211,6 +238,8 @@ class Orchestrator:
         mode = self.store.session_mode(session_id) if session_id else "chat"
         if mode == DESIGN:
             prompt = f"{prompt}\n\n{DESIGN_PREAMBLE}"
+        elif mode == CODE:
+            prompt = f"{prompt}\n\n{CODE_PREAMBLE}\n\n{self._project_block(session_id)}"
 
         situation = self._situation_block(session_id)
         if situation:
@@ -239,6 +268,50 @@ class Orchestrator:
             f"conversations:\n{lines}",
             [fact.id for fact in facts],
         )
+
+    def _project_block(self, session_id: str | None) -> str:
+        """Where a code conversation is working: the folder, its branch, its top
+        level, and the project's own instructions file if it has one.
+
+        Read fresh every turn -- the model and the reader both change the tree
+        -- which puts it after the stable preamble rather than inside it.
+        """
+        folder = self.store.session_workspace(session_id) if session_id else None
+        if not folder:
+            return (
+                "No project folder is open for this conversation yet. If the user "
+                "asks for work on code, ask them to open a folder in the Code view -- "
+                "or, for something new, offer to make a project with "
+                "create_code_project (from their designs, if they have some: "
+                "list_designs)."
+            )
+        try:
+            root = project.validate_root(folder, getattr(self.settings, "workspace_roots", ()))
+        except project.WorkspaceError as exc:
+            return f"The project folder {folder} cannot be used: {exc}"
+        # The machine before the folder: it decides how every command is
+        # written, and the project's own instructions, which can be long, end
+        # the block.
+        block = f"{environment(self.settings)}\n{project.summary(root)}"
+        # A conversation working in a folder is filed under that folder's
+        # project -- made now if it is gone or was never made -- so working in
+        # a folder is what puts it on the Projects page.
+        record = self.store.code_project_at(folder)
+        if not (self.store.get_session(session_id) or {}).get("project_id"):
+            record = self.store.ensure_code_project(folder)
+            self.store.set_session_project(session_id, record["id"])
+        # The designs it was built from, when it was: named here so "build the
+        # menu screen" needs no lookup, and so the model knows the copies in
+        # design/ are a snapshot of something that can still change.
+        source = self.store.get_project(record["source_id"]) if record and record.get("source_id") else None
+        if source:
+            block += (
+                f"\n\nThis project was built from the design project \"{source['name']}\". "
+                "Its designs were copied into design/ when the project was made "
+                "(design/README.md indexes them); read_design reads them as they are "
+                "now, and import_design refreshes the copies."
+            )
+        return block
 
     def _situation_block(self, session_id: str | None) -> str:
         """The user's time and rough whereabouts, as their device reported them.
@@ -408,9 +481,21 @@ class Orchestrator:
             used += cost
         selected.reverse()
 
+        # Which picture in the library each image attachment became, so the
+        # model is told the id beside the image it can see -- without it, the
+        # only way from "the photo I just sent" to a wireframe was list_images,
+        # and a model that went straight to the wireframe dropped the picture.
+        pictures = (
+            {image.attachment_id: image.id for image in self.store.session_images(session_id)
+             if image.attachment_id}
+            if session_id
+            else {}
+        )
+
         window = [Message(role="system", content=system)]
         window.extend(
-            _to_message(m, attached.get(m.id, ()), carried, carry_working) for m in selected
+            _to_message(m, attached.get(m.id, ()), carried, carry_working, pictures)
+            for m in selected
         )
         return window
 
@@ -440,6 +525,15 @@ class Orchestrator:
                 data=incoming.data,
                 text=incoming.text,
             )
+        # Pictures attached in the chat join the conversation's image library
+        # now, before the model runs, so they have ids it can put in a
+        # wireframe, a slide or a page -- rather than only once something
+        # happens to call list_images.
+        if attached:
+            try:
+                sync_from_chat(self.store, session_id)
+            except Exception:  # noqa: BLE001 -- a picture that will not import is still in the chat
+                pass
 
         route = await self.router.resolve(prefer)
         provider = route.provider
@@ -472,7 +566,8 @@ class Orchestrator:
             if agent and agent.parsed_skills() is not None
             else None
         )
-        tools = self._skill_schemas(allowed_skills, blocked)
+        mode = self.store.session_mode(session_id)
+        tools = self._skill_schemas(allowed_skills, blocked, mode)
         # Whether this backend's model can look at a picture. A skill that
         # answers with one is offered only when it can; a picture sent to a
         # model that cannot see is dropped without a word.
@@ -484,6 +579,7 @@ class Orchestrator:
             stored_files,
             system=system,
             budget=await self._window_budget(provider, tools),
+            session_id=session_id,
         )
         # One batched update, not one statement per fact per turn. This is what
         # "12 answers" under a fact on the memory page is counting, and what
@@ -547,6 +643,7 @@ class Orchestrator:
             # picture made). Until then a model that stops is sent back.
             pin_done = choice is None
             pin_nudges = 0
+            silent_nudges = 0
 
             for _ in range(max_rounds):
                 final = None
@@ -603,6 +700,19 @@ class Orchestrator:
                     )
                     continue
                 if final is None or not final.tool_calls:
+                    # Stopped with nothing to show for the whole turn: no words
+                    # and no call. Asked once, plainly, rather than handing the
+                    # reader an empty bubble and an error. A pinned turn that
+                    # has not made its thing is left to the pin's own nudge
+                    # below, which asks for the right thing.
+                    if (
+                        pin_done
+                        and not "".join(parts).strip()
+                        and silent_nudges < MAX_SILENT_NUDGES
+                    ):
+                        silent_nudges += 1
+                        window.append(Message(role="user", content=SILENT_NUDGE))
+                        continue
                     if pin_done or pin_nudges >= MAX_PIN_NUDGES:
                         break
                     # Stopped without making what the user pinned -- answered
@@ -634,13 +744,23 @@ class Orchestrator:
                 )
 
                 for call in final.tool_calls:
+                    # Where in the turn this call sits: how much reasoning and
+                    # how much answer existed when it was made. Offsets into
+                    # the two stored strings, so the working can be shown in
+                    # the order it happened -- live and when reopened -- with
+                    # no extra column.
+                    at = {
+                        "r": sum(len(c) for c in reasoning),
+                        "t": sum(len(c) for c in parts),
+                    }
                     yield _sse(
-                        "tool_call", {"name": call.name, "arguments": call.arguments}
+                        "tool_call",
+                        {"name": call.name, "arguments": call.arguments, **at},
                     )
                     # Recorded before it runs, so a skill that raises or a turn
                     # the reader abandons still leaves evidence it was asked
                     # for. `finally` persists whatever this list holds.
-                    record = {"name": call.name, "arguments": call.arguments}
+                    record = {"name": call.name, "arguments": call.arguments, **at}
                     # Which MCP server a tool came from, when it came from one.
                     # The client's result widget wears that service's mark, the
                     # way the Skills page does -- a row read as a brand is found
@@ -660,14 +780,20 @@ class Orchestrator:
                     # approval prompt so a restricted agent cannot reach past its
                     # set, and tell the model plainly rather than silently.
                     refused = allowed_skills is not None and call.name not in allowed_skills
-                    if refused or call.name in blocked:
+                    known = self.registry.get(call.name) if self.registry else None
+                    elsewhere = known is not None and not _offered_in(known, mode)
+                    if refused or elsewhere or call.name in blocked:
                         result = (
-                            f"{call.name} did not run: the user chose "
+                            f"{call.name} is not one of this agent's skills, so it "
+                            "did not run. Answer without it."
+                            if refused
+                            else f"{call.name} is not available in this kind of "
+                            "conversation, so it did not run. Use the tools you "
+                            "were given."
+                            if elsewhere
+                            else f"{call.name} did not run: the user chose "
                             f"{choice['label']} in the Make menu for this message. "
                             f"Use {choice['tool']} instead."
-                            if not refused
-                            else f"{call.name} is not one of this agent's skills, so it "
-                            "did not run. Answer without it."
                         )
                         record["result"] = result
                         record["denied"] = True
@@ -829,8 +955,13 @@ class Orchestrator:
                             extra["kind"] = choice["kind"]
                             extra["kind_pinned"] = True
                         before = self._canvas_marks(session_id) if choice and not pin_done else None
+                        touched: list = []
                         result = await self._run_skill(
-                            call, session_id, extra=extra, images=round_images if sees else None
+                            call,
+                            session_id,
+                            extra=extra,
+                            images=round_images if sees else None,
+                            touched=touched,
                         )
                         result += _gated_note(self.store, gated, extra, call.name)
                         record["result"] = result
@@ -850,6 +981,25 @@ class Orchestrator:
                     # a call that actually ran, so a declined one leaves the
                     # panel showing what it already had rather than nothing.
                     skill = self.registry.get(call.name) if self.registry else None
+                    # The project's files, likewise: the editor reloads what a
+                    # code tool changed ("*" after a command, which could have
+                    # changed anything).
+                    if (
+                        not record.get("denied")
+                        and skill is not None
+                        and skill.surfaces == "workspace"
+                        and touched
+                    ):
+                        yield _sse("workspace", {"paths": sorted(set(touched))})
+                    # A project made or a conversation filed: the rail and the
+                    # Projects page re-read theirs, and a code conversation
+                    # given a folder opens it.
+                    if (
+                        not record.get("denied")
+                        and skill is not None
+                        and skill.surfaces == "projects"
+                    ):
+                        yield _sse("projects", {"session_id": session_id})
                     if (
                         not record.get("denied")
                         and skill is not None
@@ -1071,6 +1221,7 @@ class Orchestrator:
         session_id: str | None = None,
         extra: dict | None = None,
         images: list | None = None,
+        touched: list | None = None,
     ) -> str:
         """One skill call, reduced to text the model can read.
 
@@ -1080,7 +1231,13 @@ class Orchestrator:
         """
         skill = self.registry.get(call.name) if self.registry else None
         if skill is None:
-            known = ", ".join(name for name, _ in self.registry.enabled()) if self.registry else ""
+            # The names this conversation is offered, not every name there is:
+            # listing a canvas tool to a code conversation invites a call that
+            # is refused on the next round.
+            mode = self.store.session_mode(session_id) if session_id else None
+            known = ", ".join(
+                name for name, found in self.registry.enabled() if _offered_in(found, mode)
+            ) if self.registry else ""
             return (
                 f"There is no skill called {call.name!r}."
                 + (f" Available: {known}." if known else "")
@@ -1112,6 +1269,8 @@ class Orchestrator:
             self.settings, "result_chars", MAX_RESULT_CHARS
         )
         text = clip_result(str(result), limit)
+        if touched is not None:
+            touched.extend(getattr(result, "paths", ()) or ())
         pictures = tuple(getattr(result, "images", ()) or ())
         if pictures:
             if images is None:
@@ -1192,6 +1351,12 @@ class Orchestrator:
 
         self.store.rename_session(session_id, title)
         return title
+
+
+def _offered_in(skill, mode: str | None) -> bool:
+    """Whether `skill` belongs in a conversation of `mode` (see Skill.modes)."""
+    modes = getattr(skill, "modes", None)
+    return not modes or (mode or "chat") in modes
 
 
 def clip_result(text: str, limit: int) -> str:
@@ -1282,7 +1447,11 @@ def _carried_trace(stored: StoredMessage) -> str:
 
 
 def _to_message(
-    stored: StoredMessage, attached, carried: set[str], carry_working: bool = False
+    stored: StoredMessage,
+    attached,
+    carried: set[str],
+    carry_working: bool = False,
+    pictures: dict[str, str] | None = None,
 ) -> Message:
     """One stored turn as the providers see it.
 
@@ -1297,6 +1466,19 @@ def _to_message(
     """
     text: list[str] = []
     images: list[Image] = []
+    pictures = pictures or {}
+    # The ids of the attached pictures, said once above the message, so the
+    # model can place the image it is looking at without looking the id up.
+    named = [
+        f"{item.name} is {pictures[item.id]}"
+        for item in attached
+        if item.kind == "image" and item.id in pictures
+    ]
+    if named:
+        text.append(
+            "[Attached pictures, by id -- use these to put them in a wireframe, a "
+            "slide or a page: " + "; ".join(named) + "]"
+        )
 
     for item in attached:
         if item.kind != "image":
@@ -1367,10 +1549,10 @@ def _silent_turn_reason(final: Chunk | None, rounds: int = MAX_TOOL_ROUNDS) -> s
             "to see what it was told each time."
         )
     return (
-        "The model finished without saying anything. That usually means it "
-        "believed it should use a skill and had none offered: check that the "
-        "system preamble isn't promising abilities the request doesn't declare "
-        "in `tools`."
+        "The model finished without replying, even when asked a second time. "
+        "Local models do this now and then -- most often by reaching for a tool "
+        "they were trained with but were not given (gpt-oss has browser and file "
+        "tools of its own). Send the message again, or try another model."
     )
 
 

@@ -21,7 +21,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 # What never gets listed or read, however it is asked for. These are the things
 # a home directory is full of that a model has no business seeing: credentials,
@@ -135,6 +135,8 @@ def _describe(path: Path) -> str:
 
 class _Rooted(Skill):
     """Shared construction for the skills that take a path."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     def __init__(self, *, name: str, description: str, parameters, settings) -> None:
         super().__init__(name=name, description=description, parameters=parameters)

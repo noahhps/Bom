@@ -19,7 +19,17 @@ const message = (role, content = "", extra = {}) => ({
  */
 export function useChat(
   api,
-  { onSessionsChanged, onCanvas, provider = null, agentId = null, mode = "chat", design = null },
+  {
+    onSessionsChanged,
+    onCanvas,
+    onWorkspace,
+    onProjects,
+    provider = null,
+    agentId = null,
+    mode = "chat",
+    design = null,
+    workspace = null,
+  },
 ) {
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
@@ -189,7 +199,10 @@ export function useChat(
           // Likewise what a new conversation is started as: a design chat,
           // and the look picked on its empty screen before anything was sent.
           // And, every message, what the Make menu pinned it to.
-          { ...(sessionId ? {} : { mode, design }), make: make && make !== "auto" ? make : null },
+          {
+            ...(sessionId ? {} : { mode, design, workspace: mode === "code" ? workspace : null }),
+            make: make && make !== "auto" ? make : null,
+          },
         );
 
         for await (const { event, data } of readEvents(response)) {
@@ -242,8 +255,11 @@ export function useChat(
             schedule();
           } else if (event === "tool_call") {
             // Appended optimistically: the result arrives as a second frame,
-            // and until it does the row shows as still running.
-            skills = [...skills, { name: data.name, arguments: data.arguments }];
+            // and until it does the row shows as still running. `r` and `t`
+            // are where in the turn it was called -- how much reasoning and
+            // how much answer came before it -- which is what puts it in its
+            // place among them (see lib/timeline.js).
+            skills = [...skills, { name: data.name, arguments: data.arguments, r: data.r, t: data.t }];
             setMessages((prev) =>
               prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
             );
@@ -319,6 +335,14 @@ export function useChat(
             setMessages((prev) =>
               prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
             );
+          } else if (event === "workspace") {
+            // A code tool changed files in the project: the editor reloads
+            // them, the way the canvas panel takes a rewritten canvas.
+            onWorkspace?.(data.paths || [], active);
+          } else if (event === "projects") {
+            // A project was made or this conversation filed -- and a code
+            // conversation may have been given its folder.
+            onProjects?.(data, active);
           } else if (event === "canvas") {
             // write_canvas rewrote the document in the side panel. Handed
             // straight up rather than kept here: the canvas is a property of
@@ -392,10 +416,13 @@ export function useChat(
       flush,
       jumpToEnd,
       onCanvas,
+      onWorkspace,
+      onProjects,
       onSessionsChanged,
       agentId,
       mode,
       design,
+      workspace,
       provider,
       schedule,
       sessionId,

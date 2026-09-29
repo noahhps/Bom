@@ -850,3 +850,121 @@ async def test_an_edit_honours_a_pinned_format(store: Store):
              if b.startswith("event: make\n")]
     assert [m["status"] for m in makes] == ["done"], "no nudge towards a rewrite"
     assert provider.calls == 2
+
+
+# -- pictures attached in the chat ------------------------------------------------
+
+import io  # noqa: E402
+
+from PIL import Image as PILImage  # noqa: E402
+
+from app.attachments import IncomingFile  # noqa: E402
+from app.skills.images import resolve_image  # noqa: E402
+
+
+def _jpeg(colour=(30, 90, 200)) -> bytes:
+    buffer = io.BytesIO()
+    PILImage.new("RGB", (64, 40), colour).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def _attach(store: Store, sid: str, name: str, colour=(30, 90, 200)) -> None:
+    message = store.add_message(sid, "user", "Here is the photo.")
+    store.add_attachment(message.id, kind="image", name=name, mime="image/jpeg", data=_jpeg(colour))
+
+
+@pytest.mark.asyncio
+async def test_a_wireframe_can_use_a_chat_picture_by_its_name(store: Store):
+    sid = store.create_session()["id"]
+    _attach(store, sid, "harbour-front.jpg")
+    # Straight to the wireframe, never having called list_images, naming the
+    # picture the way it was shown: its file name.
+    said = await WriteWireframe(store).use(session=sid, title="App", frames=[{
+        "name": "Home", "layers": [{"type": "image", "image": "harbour-front.jpg"}]}])
+    doc = json.loads(store.find_canvas_by_title(sid, "App").content)
+    image_id = store.session_images(sid)[0].id
+    assert doc["frames"][0]["layers"][0]["image"] == image_id
+    assert "Left off" not in said and image_id in said
+
+
+@pytest.mark.asyncio
+async def test_the_attached_photo_resolves_in_every_canvas_tool(store: Store):
+    sid = store.create_session()["id"]
+    _attach(store, sid, "cup.jpg")
+    await WriteWireframe(store).use(session=sid, title="App", frames=[LOGIN])
+    said = await EditWireframe(store).use(session=sid, title="App", ops=[
+        {"op": "add", "frame": "Login", "after": "f1_l2", "layer": {"type": "image", "image": "the attached photo"}},
+    ])
+    doc = json.loads(store.find_canvas_by_title(sid, "App").content)
+    image_id = store.session_images(sid)[0].id
+    assert any(l.get("image") == image_id for l in doc["frames"][0]["layers"]), said
+
+    await WriteSlides(store).use(session=sid, title="Deck", slides=[
+        {"layout": "photo", "title": "Cup", "image": "cup.jpg"}])
+    deck = json.loads(store.find_canvas_by_title(sid, "Deck").content)
+    assert deck["slides"][0]["image"]["id"] == image_id
+
+    said = await WriteCanvas(store).use(session=sid, title="Page", kind="html",
+                                        content='<img src="bom-image:cup.jpg" alt="A cup">')
+    assert f"bom-image:{image_id}" in store.find_canvas_by_title(sid, "Page").content
+    assert "WARNING" not in said
+
+
+def test_references_resolve_by_name_order_and_intent():
+    class Pic:
+        def __init__(self, id, name):
+            self.id, self.name = id, name
+
+    two = [Pic("img_a1", "harbour.jpg"), Pic("img_b2", "Espresso cup.png")]
+    assert resolve_image(two, "espresso cup") == "img_b2"
+    assert resolve_image(two, "image 2") == "img_b2"
+    assert resolve_image(two, "the attached image") == "img_b2", "the latest one"
+    assert resolve_image(two, "first") == "img_a1"
+    assert resolve_image(two, "hero.jpg") is None, "two pictures, and the name fits neither"
+    assert resolve_image([two[0]], "hero.jpg") == "img_a1", "one picture can only mean that one"
+    assert resolve_image(two, "https://example.com/a.jpg") is None
+    assert resolve_image(two, "placeholder") is None
+
+
+class _SeesAttachment:
+    name = "mock"
+    model = "mock"
+
+    def __init__(self) -> None:
+        self.windows: list[list] = []
+
+    async def stream(self, messages, *, think=None, tools=None):
+        self.windows.append(list(messages))
+        yield Chunk(text="Got it.", done=True)
+
+    async def embed(self, texts):
+        return [[0.0] * 8 for _ in texts]
+
+    async def health(self):
+        return True
+
+
+@pytest.mark.asyncio
+async def test_an_attached_picture_is_in_the_library_and_its_id_beside_it(store: Store):
+    provider = _SeesAttachment()
+    router = ProviderRouter.__new__(ProviderRouter)
+
+    async def resolve(prefer=None):
+        return type("Route", (), {"provider": provider, "reason": "local"})()
+
+    router.resolve = resolve
+    router.invalidate_health = lambda: None
+    settings = type("S", (), {
+        "system_preamble": "You help.", "context_tokens": 8192, "reply_tokens": 1024,
+        "ollama_think": "medium", "memory_max_facts": 20, "memory_fact_chars": 200,
+    })()
+    orch = Orchestrator(settings, store, router, Registry())
+    sid = store.create_session()["id"]
+    upload = IncomingFile(kind="image", name="storefront.jpg", mime="image/jpeg", data=_jpeg())
+    [f async for f in orch.run_turn(sid, "Put this in the wireframe", attached=[upload])]
+
+    images = store.session_images(sid)
+    assert len(images) == 1 and images[0].name.startswith("storefront")
+    user_turn = provider.windows[0][-1]
+    assert f"storefront.jpg is {images[0].id}" in user_turn.content
+    assert user_turn.images, "and the picture itself still travels for a model that can see"

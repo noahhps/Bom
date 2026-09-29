@@ -29,21 +29,17 @@ import { swatchOf } from "../lib/theme";
  */
 
 const LIST_KEY = "unified-llm-rail-list-open";
-const DESIGN_LIST_KEY = "unified-llm-rail-design-list-open";
 
-// Chat and Design are not in this list: each is a group with a conversation
-// list folded under it, drawn by `RailGroup` above the plain destinations.
+// The conversations are not in this list: they are a group with the list
+// folded under it, drawn by `RailGroup` above the plain destinations.
 const DESTINATIONS = [
   { id: "projects", label: "Projects", icon: "folder" },
-  { id: "memory", label: "Memory", icon: "memory" },
+  // The design.md files designs are held to.
+  { id: "standards", label: "Standards", icon: "design" },
   { id: "skills", label: "Skills", icon: "skills" },
   { id: "agents", label: "Agents", icon: "agents" },
-  // Named for the page it opens. It was "tools", but `view === "tools"` has
-  // never had a branch of its own -- it fell through to the Settings page,
-  // which is also where the mark at the head of the rail goes. The label was
-  // describing a screen that does not exist; the id now matches the one it
-  // actually lands on.
-  { id: "settings", label: "Settings", icon: "settings" },
+  // Memory and Settings are not here: they are screens of the settings
+  // window, behind the gear at the top right of the app bar.
 ];
 
 /* The destination's name.
@@ -107,8 +103,7 @@ function useFold(key) {
   return [open, toggle];
 }
 
-/* A destination with a list of conversations folded under it -- Chat, and
- * Design. Two controls in the head, because they are two different intents:
+/* A destination with a list of conversations folded under it. Two controls in the head, because they are two different intents:
  * the row goes somewhere, the chevron beside it shows or hides the list. One
  * button doing both meant you could not fold the list away without also
  * being taken to the page it belongs to.
@@ -186,10 +181,11 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
   return sessions.map((session) => {
     const accent = accentOf(session, projects, agents);
     const design = session.mode === "design";
+    const code = session.mode === "code";
     return (
     <li
       key={session.id}
-      data-mode={design ? "design" : undefined}
+      data-mode={design ? "design" : code ? "code" : undefined}
       data-active={String(session.id === activeId)}
       draggable
       onDragStart={(event) => {
@@ -207,14 +203,14 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
 
             Otherwise the bead shows the assigned agent's color first, then
             the project's color for chats that have no agent. */}
-        {design ? (
+        {design || code ? (
           <span
             className="navrail-session-icon"
-            aria-label="Design"
+            aria-label={design ? "Design" : "Code"}
             role="img"
             style={accent ? { color: accent } : undefined}
           >
-            <Icon name="design" />
+            <Icon name={design ? "design" : "code"} />
           </span>
         ) : accent ? (
           <span className="accent-bead" aria-hidden="true" style={{ background: accent }} />
@@ -254,7 +250,6 @@ export function NavRail({
   onChooseModel,
   onManageProviders,
   pinned,
-  onTogglePin,
   resizable,
   resizing,
   onResizeStart,
@@ -269,13 +264,10 @@ export function NavRail({
   activeId,
   onOpenSession,
   onNewSession,
-  onNewDesign,
   onDelete,
 }) {
-  // Whether each conversation list is unfolded under its heading.
+  // Whether the conversation list is unfolded under its heading.
   const [listOpen, toggleList] = useFold(LIST_KEY);
-  const [designOpen, toggleDesign] = useFold(DESIGN_LIST_KEY);
-  const designSessions = (sessions || []).filter((s) => s.mode === "design");
   // Whether a dragged conversation is currently over the list. One at a time,
   // so one id rather than a set.
   const [dropOver, setDropOver] = useState(null);
@@ -297,13 +289,9 @@ export function NavRail({
     ? forceOpen
     : pinned || hovered || focused || menuOpen || resizing;
 
-  // The toggle is inside the rail so that hovering it counts as hovering the
-  // rail -- but it must not count as focus *within* the panel. Clicking it to
-  // close the sidebar leaves it focused, and focus holds the panel open, so
-  // the one control that closes the rail was the one thing stopping it from
-  // closing. It is the handle, not the contents.
-  const holdsOpen = (el) =>
-    Boolean(el && node.current?.contains(el) && !el.closest(".rail-toggle"));
+  // Focus anywhere in the panel holds it open, so a keyboard can reach
+  // everything in it.
+  const holdsOpen = (el) => Boolean(el && node.current?.contains(el));
 
   // Focus moving between two children fires blur then focus, which would flap
   // the panel shut and open again. Asking where focus actually landed after
@@ -388,13 +376,15 @@ export function NavRail({
         </div>
 
         <div className="navrail-dest">
-          {/* Every conversation, design ones included -- a design chat is
-              still a conversation, and this is the list of them. */}
+          {/* Every conversation -- chats, designs and code sessions -- in one
+              list, newest first. A design or a code session wears its glyph at
+              the left, so the three can be told apart at a glance; which kind
+              a new one is gets chosen in its composer. */}
           <RailGroup
             id="chat"
-            label="Chat"
+            label="Conversations"
             icon="chat_bubble"
-            current={view === "chat"}
+            current={view === "chat" || view === "code"}
             open={listOpen}
             onToggle={toggleList}
             onGo={() => onView("chat")}
@@ -432,52 +422,13 @@ export function NavRail({
               }}
             >
               <SessionRows
-                sessions={sessions}
+                sessions={sessions || []}
                 projects={projects}
                 agents={agents}
                 activeId={activeId}
                 onOpenSession={onOpenSession}
                 onDelete={onDelete}
                 empty="Nothing yet"
-              />
-            </ul>
-          </RailGroup>
-
-          {/* Design: pressing it starts a new design conversation, and the
-              list under it is only the design ones. The standards library --
-              the design.md files a result is held to -- is one row here, since
-              it is what those conversations draw from. */}
-          <RailGroup
-            id="design"
-            label="Design"
-            icon="design"
-            current={view === "design" || view === "standards"}
-            open={designOpen}
-            onToggle={toggleDesign}
-            onGo={onNewDesign}
-            hint="Start a new design"
-            newLabel="+ New design"
-            onNew={onNewDesign}
-            extra={
-              <button
-                type="button"
-                className="navrail-new navrail-link"
-                aria-current={view === "standards" ? "page" : undefined}
-                onClick={() => onView("standards")}
-              >
-                Design standards
-              </button>
-            }
-          >
-            <ul data-list="design">
-              <SessionRows
-                sessions={designSessions}
-                projects={projects}
-                agents={agents}
-                activeId={activeId}
-                onOpenSession={onOpenSession}
-                onDelete={onDelete}
-                empty="No designs yet"
               />
             </ul>
           </RailGroup>
@@ -514,34 +465,9 @@ export function NavRail({
         </div>
       </div>
 
-      {/* The sidebar's own control, and the only one: this used to be a pin
-          inside the header doing the same job from one fixed spot.
-          *
-          * It lives at the sheet's top left while the sidebar is shut and
-          * travels to the header when it opens, so the control is always
-          * where the sidebar's edge is rather than parked over whichever
-          * screen happens to be underneath.
-          *
-          * Inside .navrail on purpose. The rail opens on hover, and a button
-          * that sits over the open panel without being part of it would close
-          * the very thing it is standing on the moment the pointer reached
-          * it. As a descendant, hovering it is hovering the rail.
-          *
-          * Outside .navrail-inner, which clips its overflow -- the same reason
-          * ModelMenu is out here. */}
-      {!narrow ? (
-        <button
-          type="button"
-          className="rail-toggle"
-          data-open={open ? "" : undefined}
-          aria-pressed={pinned}
-          aria-label={pinned ? "Close sidebar" : "Open sidebar"}
-          title={pinned ? "Close sidebar" : "Open sidebar"}
-          onClick={onTogglePin}
-        >
-          <Icon name="sidebar" filled={open} />
-        </button>
-      ) : null}
+      {/* The sidebar's toggle is in the app bar (see AppBar.jsx) -- above
+          the rail rather than floating over the sheet, so no screen has to
+          leave room for it. */}
 
       {/* The right edge, as a drag handle. Only while the rail is open: shut,
           its width is the icons' width and there is nothing to choose. */}

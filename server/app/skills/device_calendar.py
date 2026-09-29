@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from ..device import mac_calendar as backend
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 MAX_LISTED = 40
 
@@ -49,6 +49,9 @@ def _lines(events, empty: str) -> str:
 
 class _CalendarSkill(Skill):
     """Shared availability and the permission handshake."""
+
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
 
     @property
     def available(self) -> bool:

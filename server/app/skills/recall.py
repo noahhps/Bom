@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..memory.indexer import Indexer
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 # How many hits come back. The orchestrator truncates a skill result at 4000
 # characters from the tail, so this is chosen against that: six passages with
@@ -22,6 +22,11 @@ SNIPPET_CHARS = 420
 
 
 class Recall(Skill):
+    # Not offered in a code conversation. There the answer is in the project's
+    # files, and a model offered past conversations reaches for them first --
+    # and answers "what is this project" from an old chat instead of the code.
+    modes = NOT_CODE
+
     def __init__(self, indexer: Indexer):
         super().__init__(
             name="search_history",

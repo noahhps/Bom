@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from ..device import mac_photos as backend
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 MAX_LISTED = 60
 
@@ -36,6 +36,9 @@ def _describe(photo) -> str:
 
 
 class _PhotoSkill(Skill):
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
+
     @property
     def available(self) -> bool:
         return backend.available()

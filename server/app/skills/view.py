@@ -19,13 +19,15 @@ from ..render import Renderer, data_uri, page_stage, wireframe_stage
 from ..store import Store
 from .args import plain_text
 from .images import REFERENCE
-from .skill import Pictured, Skill
+from .skill import NOT_CODE, Pictured, Skill
 
 #: How many wireframe frames fit one picture before each is too small to read.
 MAX_FRAMES = 4
 
 
 class ViewCanvas(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     wants_session = True
 
     def __init__(self, store: Store, renderer: Renderer | None = None) -> None:

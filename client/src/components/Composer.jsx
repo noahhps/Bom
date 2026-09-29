@@ -111,6 +111,43 @@ export const MAKES = [
   { id: "image", label: "Image", icon: "image" },
 ];
 
+/* What a new conversation is started as. Chosen in the composer itself, on
+   the one page every conversation begins from: the box, the chips under it
+   and the controls in it change to suit -- a chat's starters, a design's
+   formats and looks, a code session's jobs and projects. Fixed once the first
+   message is sent. */
+export const KINDS = [
+  { id: "chat", label: "Chat", icon: "chat_bubble" },
+  { id: "code", label: "Code", icon: "code" },
+  { id: "design", label: "Design", icon: "design" },
+];
+
+function KindControl({ value, onChange, disabled }) {
+  return (
+    <div
+      className="composer-kind"
+      role="radiogroup"
+      aria-label="Conversation type"
+      style={{ "--i": Math.max(0, KINDS.findIndex((k) => k.id === value)) }}
+    >
+      {KINDS.map((kind) => (
+        <button
+          key={kind.id}
+          type="button"
+          role="radio"
+          aria-checked={value === kind.id}
+          title={`New ${kind.id === "code" ? "code session" : kind.id === "design" ? "design" : "chat"}`}
+          disabled={disabled}
+          onClick={() => onChange(kind.id)}
+        >
+          <Icon name={kind.icon} />
+          <span>{kind.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* The Make menu: which tool the model must use for the next message. Said
    out loud rather than hidden -- the chip shows the pinned format, and it
    stays until changed. */
@@ -153,6 +190,8 @@ export function Composer({
   onAgent,
   make = null,
   onMake = null,
+  kind = null,
+  onKind = null,
   placeholder = "Ask me. Task me.",
 }) {
   const [value, setValue] = useState("");
@@ -183,10 +222,10 @@ export function Composer({
   const picker = useRef(null);
   const dragDepth = useRef(0);
   const stagedRef = useRef(staged);
-  // Raised while `publishPeek` is driving the thread's scrollTop itself, so the
-  // scroll listener in the proximity effect can tell that scroll apart from one
-  // the reader performed. Without it the two halves of this component drove
-  // each other: see the note over `selfScroll` in `publishPeek`.
+  // Raised while `publishReserve` is driving the thread's scrollTop itself, so
+  // the scroll listener in the proximity effect can tell that scroll apart from
+  // one the reader performed -- otherwise the box growing as you type would
+  // read as "reading" and send it back down.
   const selfScroll = useRef(false);
   stagedRef.current = staged;
 
@@ -200,38 +239,30 @@ export function Composer({
   // placeholder clipped in half. It then stayed that way, because this only
   // re-runs when the text or the attachments change: nobody types into a
   // composer they cannot see, so nothing ever asked it to grow back.
-  /* How much room the thread keeps clear at its foot, and the scroll that makes
-   * the conversation ride up with the box rather than vanish behind it.
+  /* How much room the thread keeps clear at its foot.
    *
-   * The reserve is not a constant and it is not the whole composer either. It
-   * is however much of the box is *on screen*, which depends on how far the box
-   * has withdrawn -- so `near` belongs in this sum. Withdrawn (0) the thread
-   * clears only the sliver still showing; raised (1) it clears the whole thing.
-   * Computing it from the tucked height alone, as this did, is why a raised
-   * composer sat over the last few lines of every answer.
+   * The whole composer, raised, whatever it happens to be doing. The box slides
+   * down out of the way and back up as the cursor comes and goes, and the
+   * conversation does not follow it: the last turn sits the same distance above
+   * where the raised box will be, so the box rising never covers it and the box
+   * falling never drags it down. An earlier version reserved only the part of
+   * the box on screen and scrolled the thread to match, so every approach of
+   * the cursor moved the text -- reading while the composer animated meant
+   * reading a moving target.
    *
-   * Publishing the number is only half the job. Growing the space under the
-   * last turn does not move that turn: it adds emptiness below it while the box
-   * rises over the top. So when the reader is already at the end, the thread is
-   * scrolled to match, which is what turns "more padding" into "the text moves
-   * with the composer".
-   *
-   * Only when they are already at the end. Someone reading back through an
-   * answer should not be dragged forward because the cursor drifted near the
-   * box. */
-  const publishPeek = useCallback((near) => {
+   * The reserve still changes when the composer itself changes size -- a second
+   * line of text, a staged attachment, a narrower window rewrapping it -- and
+   * then, if the reader is already at the end, the thread is scrolled by the
+   * difference so the last line stays in view rather than going under the box.
+   * Only then, and only at the end: someone reading back through an answer is
+   * not dragged forward because the box grew. */
+  const publishReserve = useCallback(() => {
     const node = form.current;
-    const box = node?.querySelector(".composer-box");
-    if (!node || !box) return;
+    if (!node) return;
 
-    // `--tuck` is read back out of the stylesheet rather than repeated here, so
-    // how far the box withdraws stays a single decision made in one place.
-    const tuck = parseFloat(getComputedStyle(box).getPropertyValue("--tuck")) / 100 || 0;
-    const hidden = tuck * box.offsetHeight * (1 - near);
-    const peek = Math.max(0, Math.round(node.offsetHeight - hidden));
-
+    const reserve = Math.max(0, Math.round(node.offsetHeight));
     const root = document.documentElement;
-    if (peek === parseFloat(root.style.getPropertyValue("--composer-peek"))) return;
+    if (reserve === parseFloat(root.style.getPropertyValue("--composer-reserve"))) return;
 
     // Measured before the write, because setting the property changes the very
     // numbers this asks about.
@@ -239,25 +270,15 @@ export function Composer({
     const atEnd =
       thread && thread.scrollHeight - thread.scrollTop - thread.clientHeight < STICK_PX;
 
-    root.style.setProperty("--composer-peek", peek + "px");
+    root.style.setProperty("--composer-reserve", reserve + "px");
 
-    // The scroll below is ours, and the proximity effect has to know that.
-    //
-    // It listens for `scroll` to decide the reader is reading and the box
-    // should get out of the way -- but a scroll event carries no mark of who
-    // caused it, so it counted this one too. That closed a loop: approaching
-    // the box raised it, raising it scrolled the thread, the scroll read as
-    // "reading" and dropped the box back down. The next twitch of the pointer
-    // -- and a hand resting on a mouse never stops twitching -- raised it
-    // again, and round it went. The composer swinging between tucked and
-    // present while the thread's padding and scrollTop chased it is the
-    // shaking you get from merely hovering near the box without clicking it.
-    //
+    // The scroll below is ours, and the proximity effect has to know that: it
+    // listens for `scroll` to decide the reader is reading and the box should
+    // get out of the way, and a scroll event carries no mark of who caused it.
     // Cleared on the next frame rather than on the line after: scroll events
     // are dispatched in the rendering steps, which run before animation frame
     // callbacks, so by the time this fires the event it is covering has
-    // already been and gone. If the assignment landed on the position the
-    // thread was already at, no event comes and clearing it is a no-op.
+    // already been and gone.
     if (thread && atEnd) {
       selfScroll.current = true;
       thread.scrollTop = thread.scrollHeight;
@@ -265,13 +286,6 @@ export function Composer({
         selfScroll.current = false;
       });
     }
-  }, []);
-
-  const currentNear = useCallback(() => {
-    // The stylesheet's own default is 1 -- present, not tucked -- and that is
-    // what applies until the proximity effect has spoken.
-    const near = parseFloat(form.current?.style.getPropertyValue("--near"));
-    return Number.isFinite(near) ? near : 1;
   }, []);
 
   const autosize = useCallback(() => {
@@ -283,8 +297,8 @@ export function Composer({
     // resize and replaces it.
     const ceiling = (window.innerHeight || 800) * 0.4 || 320;
     node.style.height = Math.min(node.scrollHeight, ceiling) + "px";
-    publishPeek(currentNear());
-  }, [publishPeek, currentNear]);
+    publishReserve();
+  }, [publishReserve]);
 
   useLayoutEffect(autosize, [autosize, value, staged]);
 
@@ -300,14 +314,14 @@ export function Composer({
   // The layout effect above covers everything that changes the composer's
   // contents. This covers everything that changes its box for other reasons --
   // the drawer opening and narrowing it, the window resizing, a font landing --
-  // any of which can rewrap the text and leave --composer-peek stale, so the
+  // any of which can rewrap the text and leave --composer-reserve stale, so the
   // last turn ends up behind the input.
   useEffect(() => {
     const node = form.current;
-    const observer = new ResizeObserver(() => publishPeek(currentNear()));
+    const observer = new ResizeObserver(() => publishReserve());
     observer.observe(node);
     return () => observer.disconnect();
-  }, [publishPeek, currentNear]);
+  }, [publishReserve]);
 
   // The composer withdraws until you reach for it.
   //
@@ -359,22 +373,20 @@ export function Composer({
     // the composer parked over the end of it.
     let reading = false;
 
-    // Where the box sits, and how much room the thread leaves for it, are the
-    // same fact. Setting one without the other is what let them drift apart.
-    // `measure` already runs inside a frame, so this costs no extra scheduling.
+    // Where the box sits. Only the box: the room the thread leaves for it is
+    // the whole raised composer whatever this says (see publishReserve), so
+    // the conversation stays put while the box slides.
     //
     // Quantised to a hundredth, and skipped when that has not moved. A hand
     // resting on a mouse never stops twitching, and at three decimals every
     // one of those twitches was a new value -- a style write per frame, for a
-    // difference no eye can see. `publishPeek` rounds to whole pixels and
-    // guards its own write, so holding `--near` still here keeps both quiet.
+    // difference no eye can see.
     let wrote = null;
     const set = (near) => {
       const step = Math.round(near * 100) / 100;
       if (step === wrote) return;
       wrote = step;
       node.style.setProperty("--near", step.toFixed(2));
-      publishPeek(near);
     };
 
     const measure = () => {
@@ -451,7 +463,7 @@ export function Composer({
       // next thing to mount should not inherit a half-hidden composer.
       node.style.removeProperty("--near");
     };
-  }, [publishPeek]);
+  }, []);
 
   // A starter was picked. `draft` is a fresh object every time, so choosing the
   // same one twice still fires -- comparing the string would swallow the second
@@ -625,20 +637,31 @@ export function Composer({
               event.target.value = "";
             }}
           />
-          <button
-            type="button"
-            className="chip chip-icon"
-            aria-label="Attach files"
-            title="Attach files"
-            disabled={disabled}
-            onClick={() => picker.current.click()}
-          >
-            <Icon name="attachment" />
-          </button>
+          {/* One group, as tall as the send row it sits beside, so the two
+              line up on their centres -- and the part that gives way when the
+              composer is narrow, the conversation's name first. */}
+          <div className="composer-left-controls">
+            <button
+              type="button"
+              className="chip chip-icon"
+              aria-label="Attach files"
+              title="Attach files"
+              disabled={disabled}
+              onClick={() => picker.current.click()}
+            >
+              <Icon name="attachment" />
+            </button>
 
-          {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
+            {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} /> : null}
 
-          {sessionLabel ? <span className="chip">{sessionLabel}</span> : null}
+            {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
+
+            {sessionLabel ? (
+              <span className="chip composer-session" title={sessionLabel}>
+                {sessionLabel}
+              </span>
+            ) : null}
+          </div>
 
           <div className="spacer" />
 

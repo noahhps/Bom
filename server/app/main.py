@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import build_router
+from .workbench import Previews, Terminals, build_workbench_router, mount_public
 from .auth import make_auth_dependency
 from .config import Settings, load_settings, write_secret
 from .db import Database
@@ -30,6 +31,8 @@ from .providers import (
 )
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import CheckDesign, EditCanvas, OpenCanvas, ReadCanvas, WriteCanvas
+from .skills.code import code_skills
+from .skills.projects import project_skills
 from .imagegen import Generator
 from .skills.images import GenerateImage, ListImages
 from .skills.sheet import EditSheet, WriteSheet
@@ -220,6 +223,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # gated by the approval prompt; see skills/sandbox.py.
     registry.register(RunShell(settings))
     registry.register(RunPython(settings))
+    # The code tools: explore, read, edit, write and run, in the one project
+    # folder a code conversation was opened on. Offered only in those
+    # conversations, and every change goes through the approval prompt -- see
+    # skills/code.py.
+    for skill in code_skills(store, settings):
+        registry.register(skill)
+    # Projects of every kind, and the designs a code project is built from.
+    for skill in project_skills(store, settings):
+        registry.register(skill)
     # Registered only when configured. An unconfigured search that announced
     # itself and then refused would be the same failure as a system prompt
     # promising a tool the request never declares: the model spends the turn
@@ -233,6 +245,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     mcp_manager = MCPManager(store, registry)
     orchestrator = Orchestrator(settings, store, providers, registry)
 
+    terminals = Terminals()
+    previews = Previews()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # One catch-up at boot, in the background. A server that has just
@@ -244,6 +259,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mcp_sync = asyncio.create_task(_sync_mcp_quietly())
         orphan_watch = asyncio.create_task(_exit_with_parent())
         yield
+        # Every shell the terminals started goes with the server: a dev server
+        # left running with nothing to show it or stop it is worse than one
+        # stopped.
+        terminals.close_all()
         orphan_watch.cancel()
         mcp_sync.cancel()
         await mcp_manager.aclose()
@@ -355,6 +374,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         prefix="/api",
     )
+    # The Code view's terminals and preview. Half behind the bearer token like
+    # everything above; the socket and the preview's files check their own.
+    app.include_router(
+        build_workbench_router(settings, auth, terminals, previews), prefix="/api"
+    )
+    mount_public(app, settings, terminals, previews)
+    app.state.terminals = terminals
 
     @app.get("/openrouter/callback/{state}")
     async def openrouter_callback(state: str, code: str = "", error: str = "") -> HTMLResponse:

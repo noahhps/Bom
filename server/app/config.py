@@ -254,6 +254,37 @@ class Settings:
         default_factory=lambda: _env_int("SANDBOX_OUTPUT_CHARS", 6_000)
     )
 
+    # --- code ----------------------------------------------------------
+    # Where a project folder may be opened from in the Code view. A folder is
+    # opened by the reader, never by the model, and must sit *inside* one of
+    # these -- never be one of them, or the home folder itself -- so the most
+    # a code conversation can reach is the one project it was opened on.
+    workspace_roots: tuple[Path, ...] = field(
+        default_factory=lambda: _env_paths("WORKSPACE_ROOTS", [Path.home()])
+    )
+    # How long one command in a code conversation may run by default, and at
+    # most. Longer than the sandbox's: a test suite or a build is the usual
+    # command here, and thirty seconds is not enough for either.
+    code_timeout: int = field(default_factory=lambda: _env_int("CODE_TIMEOUT", 120))
+    code_timeout_max: int = field(default_factory=lambda: _env_int("CODE_TIMEOUT_MAX", 600))
+    # What one command, search or read may put back into the window.
+    code_output_chars: int = field(default_factory=lambda: _env_int("CODE_OUTPUT_CHARS", 30_000))
+    # Whether the Code view's terminal answers devices other than this one. Off:
+    # a terminal is a shell on this machine, and a phone on the network holding
+    # the token should not be one.
+    terminal_remote: bool = field(
+        default_factory=lambda: os.environ.get("TERMINAL_REMOTE", "").lower() in ("1", "true", "yes")
+    )
+    # Where a new code project's folder is made -- by the reader on the
+    # Projects page or by an agent -- when it is not an existing folder. Made
+    # on first use. No space in the default: a space in the path breaks the
+    # shebang of every virtualenv made inside it.
+    projects_dir: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("PROJECTS_DIR") or Path.home() / "BomProjects"
+        ).expanduser()
+    )
+
     # Working-context budget in tokens for an Ollama backend, sent as num_ctx.
     # The window builder trims to fit; real compaction (summarise the middle,
     # keep head and tail) is phase 5.

@@ -31,7 +31,7 @@ from . import sheet as sheets
 from .args import as_dict, plain_text
 from . import slides as decks
 from .patch import apply_edits, parse_edits, set_css_variables
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 # A full HTML document, or a fragment that opens with a structural tag. Used to
 # rescue content the model wrote as HTML but forgot to label -- stored as
@@ -188,6 +188,8 @@ def _check_note(kind: str, body: str) -> str:
 
 
 class WriteCanvas(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     surfaces = "canvas"
     wants_session = True
 
@@ -306,6 +308,11 @@ class WriteCanvas(Skill):
         # sheet is a real edit, and refusing it would make the model paste a
         # single space to get around the check.
         body = content or ""
+        # A picture named by its file name rather than its id -- the name is
+        # what the model saw when the user attached it.
+        from .images import resolution_note, resolve_images_in_text
+
+        body, matched = resolve_images_in_text(self.store, session, body)
         lang = (language or "").strip() or None
         resolved_kind = _normalize_kind(kind, lang)
         # Rescue a page the model wrote but labelled prose: stored as markdown
@@ -332,7 +339,8 @@ class WriteCanvas(Skill):
             verb = "Updated"
 
         lines = body.count("\n") + 1 if body else 0
-        note = _content_notes(self.store, session, body)
+        note = resolution_note(matched)
+        note += _content_notes(self.store, session, body)
         note += _check_note(resolved_kind, body)
         return (
             f"{verb} the canvas {canvas.title!r} ({lines} line"
@@ -343,6 +351,8 @@ class WriteCanvas(Skill):
 
 
 class ReadCanvas(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     wants_session = True
 
     def __init__(self, store: Store, max_chars: int = MAX_READ_CHARS) -> None:
@@ -402,52 +412,71 @@ class ReadCanvas(Skill):
             available = ", ".join(repr(c.title) for c in canvases)
             return f"There is no canvas called {name!r}. There is: {available}."
 
-        body = canvas.content or "(empty)"
-        header = f"{canvas.title} ({canvas.kind}" + (
-            f", {canvas.language}" if canvas.language else ""
-        ) + ")"
-        # The structured kinds are stored as JSON, which is a poor way to read a
-        # deck and a worse way to read a sheet. Both come back in the shape the
-        # model would write them: an outline, and a grid with its addresses.
-        if canvas.kind == sheets.KIND:
-            loaded = sheets.load(canvas.content)
-            if loaded is not None:
-                body = sheets.as_text(loaded)
-        elif canvas.kind == "wireframe":
-            from .wireframe import outline as wireframe_outline
+        return paged(
+            heading(canvas), readable(canvas), offset, self.max_chars,
+            "Call read_canvas again with offset={next} for the rest; the whole "
+            "canvas is in the panel.",
+        )
 
-            try:
-                body = wireframe_outline(json.loads(canvas.content or "{}"))
-            except (ValueError, AttributeError, KeyError):
-                pass
-        elif canvas.kind == decks.KIND:
-            try:
-                body = decks.outline(json.loads(canvas.content or "{}"))
-            except (ValueError, AttributeError):
-                pass
 
-        if len(body) <= self.max_chars and _as_int(offset, 1) <= 1:
-            return f"{header}:\n{body}"
+def heading(canvas) -> str:
+    """'Title (kind, language)' -- how a canvas is named back to the model."""
+    return f"{canvas.title} ({canvas.kind}" + (
+        f", {canvas.language}" if canvas.language else ""
+    ) + ")"
 
-        # Paged by whole lines, so a page never ends halfway through the text
-        # the model is about to quote back in an edit.
-        lines = body.split("\n")
-        start = min(max(1, _as_int(offset, 1)), len(lines))
-        kept, used = [], 0
-        for line in lines[start - 1:]:
-            if kept and used + len(line) + 1 > self.max_chars:
-                break
-            kept.append(line[: self.max_chars])
-            used += len(line) + 1
-        end = start + len(kept) - 1
-        page = "\n".join(kept)
-        said = f"{header}, lines {start}-{end} of {len(lines)}:\n{page}"
-        if end < len(lines):
-            said += (
-                f"\n… more below. Call read_canvas again with offset={end + 1} "
-                "for the rest; the whole canvas is in the panel."
-            )
-        return said
+
+def readable(canvas) -> str:
+    """A canvas as a model reads it.
+
+    The structured kinds are stored as JSON, which is a poor way to read a
+    deck and a worse way to read a sheet. They come back in the shape the
+    model would write them: an outline of screens and layers, an outline of
+    slides, and a grid with its addresses. Everything else is its text.
+    """
+    body = canvas.content or "(empty)"
+    if canvas.kind == sheets.KIND:
+        loaded = sheets.load(canvas.content)
+        if loaded is not None:
+            body = sheets.as_text(loaded)
+    elif canvas.kind == "wireframe":
+        from .wireframe import outline as wireframe_outline
+
+        try:
+            body = wireframe_outline(json.loads(canvas.content or "{}"))
+        except (ValueError, AttributeError, KeyError):
+            pass
+    elif canvas.kind == decks.KIND:
+        try:
+            body = decks.outline(json.loads(canvas.content or "{}"))
+        except (ValueError, AttributeError):
+            pass
+    return body
+
+
+def paged(header: str, body: str, offset, max_chars: int, more: str) -> str:
+    """`body` under `header`, or one page of it from line `offset`.
+
+    Paged by whole lines, so a page never ends halfway through the text the
+    model is about to quote back in an edit. `more` says how to get the next
+    page, with `{next}` for the line it starts on.
+    """
+    if len(body) <= max_chars and _as_int(offset, 1) <= 1:
+        return f"{header}:\n{body}"
+    lines = body.split("\n")
+    start = min(max(1, _as_int(offset, 1)), len(lines))
+    kept, used = [], 0
+    for line in lines[start - 1:]:
+        if kept and used + len(line) + 1 > max_chars:
+            break
+        kept.append(line[:max_chars])
+        used += len(line) + 1
+    end = start + len(kept) - 1
+    page = "\n".join(kept)
+    said = f"{header}, lines {start}-{end} of {len(lines)}:\n{page}"
+    if end < len(lines):
+        said += "\n… more below. " + more.format(next=end + 1)
+    return said
 
 
 def _as_int(value, default: int) -> int:
@@ -486,6 +515,8 @@ def _line_change(before: str, after: str) -> str:
 
 class EditCanvas(Skill):
     """Part of a page, a document or a program, changed in place."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     surfaces = "canvas"
     wants_session = True
@@ -569,6 +600,12 @@ class EditCanvas(Skill):
             else:
                 failed.append("css_vars only applies to an HTML page")
 
+        from .images import resolution_note, resolve_images_in_text
+
+        after, matched = resolve_images_in_text(self.store, session, after)
+        if matched:
+            applied.append("matched pictures by name")
+
         if not parsed and not variables:
             return (
                 "No edits were given. Pass `edits` as a list of {find, replace}, "
@@ -599,6 +636,7 @@ class EditCanvas(Skill):
                     " This edit left the markup unbalanced -- check the tags "
                     "around what you changed."
                 )
+        said += resolution_note(matched)
         said += _content_notes(self.store, session, after)
         said += _check_note(canvas.kind, after)
         return said
@@ -606,6 +644,8 @@ class EditCanvas(Skill):
 
 class CheckDesign(Skill):
     """A design review of anything in the canvas panel."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     wants_session = True
 
@@ -664,6 +704,8 @@ def check_canvas(kind: str, content: str) -> list | None:
 class OpenCanvas(Skill):
     """Put a canvas in front of the user -- this conversation's, or a copy of
     one from another conversation."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     surfaces = "canvas"
     wants_session = True

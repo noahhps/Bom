@@ -11,6 +11,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 from .db import Database
 from .situation import Situation
@@ -22,6 +23,26 @@ def _now() -> int:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:20]}"
+
+
+def _design_detail(kind: str, content: str) -> str:
+    """How big a design is, in its own units: screens, slides, rows or lines."""
+    if kind in ("wireframe", "slides", "sheet"):
+        try:
+            doc = json.loads(content or "{}")
+        except ValueError:
+            return ""
+        if not isinstance(doc, dict):
+            return ""
+        if kind == "wireframe":
+            count, unit = len(doc.get("frames") or []), "screen"
+        elif kind == "slides":
+            count, unit = len(doc.get("slides") or []), "slide"
+        else:
+            count, unit = len(doc.get("rows") or []), "row"
+        return f"{count} {unit}" + ("" if count == 1 else "s")
+    lines = content.count("\n") + 1 if content else 0
+    return f"{lines} line" + ("" if lines == 1 else "s")
 
 
 # Everything about an attachment except the bytes.
@@ -422,6 +443,7 @@ class Store:
         *,
         mode: str = "chat",
         design: str | None = None,
+        workspace: str | None = None,
     ) -> dict:
         session_id = _new_id("ses")
         now = _now()
@@ -430,8 +452,8 @@ class Store:
             """
             INSERT INTO sessions
                    (id, title, created_at, updated_at, tz, locale, utc_offset, region,
-                    mode, design)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    mode, design, workspace)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
@@ -444,8 +466,15 @@ class Store:
                 where["region"],
                 mode,
                 design,
+                workspace,
             ),
         )
+        # A code conversation is filed under its folder's project from the
+        # start, so the Projects page shows it there without being told.
+        project_id = None
+        if mode == "code" and workspace:
+            project_id = self.ensure_code_project(workspace)["id"]
+            self.set_session_project(session_id, project_id)
         return {
             "id": session_id,
             "title": title,
@@ -454,8 +483,42 @@ class Store:
             "theme": None,
             "mode": mode,
             "design": design,
+            "workspace": workspace,
+            "project_id": project_id,
             **where,
         }
+
+    def session_workspace(self, session_id: str) -> str | None:
+        """The project folder a code conversation works on, or None."""
+        row = self.db.query_one("SELECT workspace FROM sessions WHERE id = ?", (session_id,))
+        return row["workspace"] if row else None
+
+    def set_session_workspace(self, session_id: str, workspace: str | None) -> None:
+        """Move a code conversation to another folder -- and so to that
+        folder's project, which is made if the folder is new here."""
+        project_id = self.ensure_code_project(workspace)["id"] if workspace else None
+        self.db.execute(
+            "UPDATE sessions SET workspace = ?, project_id = ?, updated_at = ? WHERE id = ?",
+            (workspace, project_id, _now(), session_id),
+        )
+
+    def recent_workspaces(self, limit: int = 12) -> list[str]:
+        """The code projects' folders, most recently worked in first -- the
+        last conversation in one, or the project itself when it has none yet,
+        so a project made a moment ago is at the top of the list."""
+        rows = self.db.query(
+            """
+            SELECT p.path AS workspace,
+                   MAX(p.updated_at, COALESCE(
+                       (SELECT MAX(s.updated_at) FROM sessions s WHERE s.project_id = p.id), 0
+                   )) AS last
+              FROM projects p
+             WHERE p.kind = 'code' AND p.path IS NOT NULL
+             ORDER BY last DESC LIMIT ?
+            """,
+            (limit,),
+        )
+        return [row["workspace"] for row in rows]
 
     def session_mode(self, session_id: str) -> str:
         """'design' for a design conversation, 'chat' for everything else."""
@@ -514,7 +577,7 @@ class Store:
         rows = self.db.query(
             """
             SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id,
-                   s.agent_id, s.theme, s.mode, s.design,
+                   s.agent_id, s.theme, s.mode, s.design, s.workspace,
                    (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
             FROM sessions s
             ORDER BY s.updated_at DESC
@@ -1313,12 +1376,25 @@ class Store:
 
     # -- projects ---------------------------------------------------------
 
-    def create_project(self, name: str) -> dict:
+    def create_project(
+        self,
+        name: str,
+        *,
+        kind: str = "chat",
+        path: str | None = None,
+        source_id: str | None = None,
+    ) -> dict:
+        """A folder of conversations: 'chat', 'design', or 'code' -- a code
+        project also names the folder on disk it is, and may name the design
+        project it was built from."""
         project_id = _new_id("prj")
         now = _now()
         self.db.execute(
-            "INSERT INTO projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (project_id, name, now, now),
+            """
+            INSERT INTO projects (id, name, created_at, updated_at, kind, path, source_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (project_id, name, now, now, kind, path, source_id),
         )
         return {
             "id": project_id,
@@ -1326,19 +1402,82 @@ class Store:
             "created_at": now,
             "updated_at": now,
             "theme": None,
+            "kind": kind,
+            "path": path,
+            "source_id": source_id,
+            "session_count": 0,
         }
 
-    def list_projects(self) -> list[dict]:
+    def list_projects(self, kind: str | None = None) -> list[dict]:
         rows = self.db.query(
             """
             SELECT p.id, p.name, p.created_at, p.updated_at, p.theme,
+                   p.kind, p.path, p.source_id,
                    (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id)
                        AS session_count
             FROM projects p
+            WHERE ? IS NULL OR p.kind = ?
             ORDER BY p.name COLLATE NOCASE
-            """
+            """,
+            (kind, kind),
         )
         return [dict(row) for row in rows]
+
+    def find_project(self, name: str, kind: str | None = None) -> dict | None:
+        """A project by the name a model or a person gave it, any case."""
+        row = self.db.query_one(
+            """
+            SELECT * FROM projects
+             WHERE name = ? COLLATE NOCASE AND (? IS NULL OR kind = ?)
+             ORDER BY updated_at DESC LIMIT 1
+            """,
+            (name, kind, kind),
+        )
+        return dict(row) if row else None
+
+    def code_project_at(self, path: str) -> dict | None:
+        row = self.db.query_one("SELECT * FROM projects WHERE path = ?", (path,))
+        return dict(row) if row else None
+
+    def ensure_code_project(
+        self, path: str, name: str | None = None, source_id: str | None = None
+    ) -> dict:
+        """The code project for a folder, made the first time the folder is
+        used. The path is stored as given: callers pass it already resolved
+        (see workspace.validate_root), which is what makes it unique."""
+        found = self.code_project_at(path)
+        if found is not None:
+            if source_id and not found.get("source_id"):
+                self.db.execute(
+                    "UPDATE projects SET source_id = ?, updated_at = ? WHERE id = ?",
+                    (source_id, _now(), found["id"]),
+                )
+                found["source_id"] = source_id
+            return found
+        label = name or Path(path).name or path
+        return self.create_project(label, kind="code", path=path, source_id=source_id)
+
+    def design_library(self) -> list[dict]:
+        """Every design made in a design conversation, without its content:
+        what the Projects page and the code tools choose from. Each carries
+        its conversation and that conversation's project, and a one-line
+        `detail` -- how many screens, slides or rows -- read off the content."""
+        rows = self.db.query(
+            """
+            SELECT c.id, c.title, c.kind, c.language, c.content, c.updated_at,
+                   c.session_id, s.title AS session_title, s.project_id,
+                   s.design AS standard
+              FROM canvases c JOIN sessions s ON s.id = c.session_id
+             WHERE s.mode = 'design'
+             ORDER BY c.updated_at DESC
+            """
+        )
+        library = []
+        for row in rows:
+            item = dict(row)
+            item["detail"] = _design_detail(item["kind"], item.pop("content") or "")
+            library.append(item)
+        return library
 
     def get_project(self, project_id: str) -> dict | None:
         row = self.db.query_one("SELECT * FROM projects WHERE id = ?", (project_id,))

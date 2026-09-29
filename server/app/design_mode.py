@@ -16,7 +16,10 @@ from __future__ import annotations
 
 CHAT = "chat"
 DESIGN = "design"
-MODES = (CHAT, DESIGN)
+# A code conversation: see code_mode.py. Named here because this is where a
+# stored mode is normalised.
+CODE = "code"
+MODES = (CHAT, DESIGN, CODE)
 
 
 #: What the composer's "Make" menu can pin a turn to: the tool that makes it,
@@ -95,7 +98,8 @@ def pin_nudge(choice: dict) -> str:
 
 def normalize(mode: str | None) -> str:
     """A mode that can be stored. Anything unknown is an ordinary chat."""
-    return DESIGN if (mode or "").strip().lower() == DESIGN else CHAT
+    value = (mode or "").strip().lower()
+    return value if value in (DESIGN, CODE) else CHAT
 
 
 DESIGN_PREAMBLE = """\

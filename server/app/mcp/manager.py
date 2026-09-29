@@ -17,7 +17,8 @@ from .transports import (
     HttpSseTransport,
     StdioTransport,
 )
-from ..skills.mcp_skill import MCPSkill, sanitize_tool_name
+from ..skills.mcp_skill import MCPSkill, offered_in_code, sanitize_tool_name
+from ..skills.skill import NOT_CODE
 
 if TYPE_CHECKING:
     from ..skills.registry import Registry
@@ -150,6 +151,8 @@ class MCPManager:
                 manager=self,
                 name_override=self._available_name(server.name, tool_info.name),
             )
+            if not offered_in_code(server.name, server.command, server.parsed_args()):
+                skill.modes = NOT_CODE
             # register() reports a collision rather than raising, and the old
             # code ignored the answer: the name went into _server_skills anyway,
             # so disconnecting this server later deleted whichever *other*

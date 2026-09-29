@@ -32,7 +32,7 @@ import asyncio
 import os
 import sys
 
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 # Environment names the app uses for its own secrets. Dropped from what a
 # command inherits so the assistant's keys are not one `env` away from the
@@ -74,6 +74,8 @@ def _format(stdout: str, code: int | None, limit: int, *, timed_out: bool, secon
 
 class _Sandboxed(Skill):
     """Shared construction and the run itself for the two sandbox skills."""
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
 
     def __init__(self, *, name: str, description: str, parameters, settings) -> None:
         super().__init__(

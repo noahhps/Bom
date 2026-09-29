@@ -91,7 +91,10 @@ function Flower({ open, bloom }) {
   );
 }
 
-export function AgentFlower({ open, mark = false, size = 26, className }) {
+/* `blooming` keeps a mark blooming whether or not it is hovered -- for a logo
+   that should look alive while something is under way, as the sign-in screen's
+   does while it connects. */
+export function AgentFlower({ open, mark = false, size = 26, className, blooming = false }) {
   const [hovered, setHovered] = useState(false);
   if (!mark) return <Flower open={open} bloom={Boolean(open)} />;
   return (
@@ -99,10 +102,11 @@ export function AgentFlower({ open, mark = false, size = 26, className }) {
       className={className ? `flower-mark ${className}` : "flower-mark"}
       style={{ "--mark": size }}
       aria-hidden="true"
+      data-hover={hovered ? "" : undefined}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
     >
-      <Flower open={open} bloom={hovered} />
+      <Flower open={open} bloom={hovered || Boolean(blooming)} />
     </span>
   );
 }

@@ -548,6 +548,72 @@ MIGRATIONS: list[str] = [
     ALTER TABLE images ADD COLUMN prompt TEXT;
     UPDATE images SET source = CASE WHEN attachment_id IS NULL THEN 'upload' ELSE 'chat' END;
     """,
+    # 20 -- the project folder a code conversation works on.
+    #
+    # An absolute path, chosen by the reader when the conversation was started
+    # in the Code view and checked every time it is used (see workspace.py) --
+    # a folder moved or deleted since is an error at the point of use, not a
+    # stale row to clean up. NULL for every other kind of conversation.
+    """
+    ALTER TABLE sessions ADD COLUMN workspace TEXT;
+    """,
+    # 21 -- three kinds of project.
+    #
+    # `kind` is what a folder holds: 'chat' -- every project until now, a way
+    # of grouping conversations -- 'design', the design conversations and the
+    # wireframes, pages and decks they made, or 'code', a folder on disk and
+    # the code conversations working in it.
+    #
+    # `path` is a code project's folder, checked every time it is used, the
+    # same as a session's `workspace`; unique, so one folder is one project.
+    # `source_id` is the design project a code project was built from, SET
+    # NULL so deleting the designs leaves the code standing.
+    #
+    # Every folder a code conversation already works on becomes a code project
+    # here, named after its last path component, so the Code section of the
+    # Projects page starts out showing what has been worked on rather than
+    # nothing.
+    """
+    ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat';
+    ALTER TABLE projects ADD COLUMN path TEXT;
+    ALTER TABLE projects ADD COLUMN source_id TEXT
+      REFERENCES projects(id) ON DELETE SET NULL;
+
+    CREATE UNIQUE INDEX idx_projects_path ON projects(path) WHERE path IS NOT NULL;
+
+    INSERT INTO projects (id, name, created_at, updated_at, kind, path)
+    SELECT 'prj_' || lower(hex(randomblob(10))),
+           replace(workspace, rtrim(workspace, replace(workspace, '/', '')), ''),
+           MIN(created_at), MAX(updated_at), 'code', workspace
+      FROM sessions
+     WHERE mode = 'code' AND workspace IS NOT NULL
+     GROUP BY workspace;
+
+    UPDATE sessions
+       SET project_id = (SELECT p.id FROM projects p WHERE p.path = sessions.workspace)
+     WHERE mode = 'code' AND workspace IS NOT NULL;
+    """,
+    # 22 -- the same filing, once more.
+    #
+    # A server older than 21 still running against a database that is already
+    # at 21 -- migrated by a newer server, or by the test suite, which builds
+    # the app on import -- starts code conversations without filing them. This
+    # files every one that has a folder and no project yet. From here on a
+    # code turn files its own conversation too (see Orchestrator._project_block).
+    """
+    INSERT INTO projects (id, name, created_at, updated_at, kind, path)
+    SELECT 'prj_' || lower(hex(randomblob(10))),
+           replace(workspace, rtrim(workspace, replace(workspace, '/', '')), ''),
+           MIN(created_at), MAX(updated_at), 'code', workspace
+      FROM sessions
+     WHERE mode = 'code' AND workspace IS NOT NULL AND project_id IS NULL
+       AND workspace NOT IN (SELECT path FROM projects WHERE path IS NOT NULL)
+     GROUP BY workspace;
+
+    UPDATE sessions
+       SET project_id = (SELECT p.id FROM projects p WHERE p.path = sessions.workspace)
+     WHERE mode = 'code' AND workspace IS NOT NULL AND project_id IS NULL;
+    """,
 ]
 
 

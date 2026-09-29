@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timedelta
 
 from ..store import Store, StoredEvent
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 # 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM'. Deliberately strict: a model that guesses
 # at "next Tuesday" should be told the format rather than have a date invented
@@ -60,6 +60,9 @@ def _lines(events: list[StoredEvent], empty: str) -> str:
 
 
 class AddEvent(Skill):
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
+
     def __init__(self, store: Store) -> None:
         super().__init__(
             name="add_event",
@@ -117,6 +120,9 @@ class AddEvent(Skill):
 
 
 class ListEvents(Skill):
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
+
     def __init__(self, store: Store) -> None:
         super().__init__(
             name="list_events",
@@ -151,6 +157,9 @@ class ListEvents(Skill):
 
 
 class FindEvents(Skill):
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
+
     def __init__(self, store: Store) -> None:
         super().__init__(
             name="find_events",
@@ -198,6 +207,9 @@ def _shifted_end(event: StoredEvent, new_start: str) -> str | None:
 
 
 class UpdateEvent(Skill):
+    # Not offered in a code conversation, whose tools are for the project.
+    modes = NOT_CODE
+
     def __init__(self, store: Store) -> None:
         super().__init__(
             name="update_event",

@@ -22,7 +22,7 @@ import json
 
 from ..design_presets import PRESETS, swatch, tokens_for
 from ..store import Store
-from .skill import Skill
+from .skill import NOT_CODE, Skill
 
 #: What the client sends back when the reader declines a standard, and what the
 #: turn falls back to if nobody answers. A real answer rather than a refusal:
@@ -153,6 +153,8 @@ def resolve(store: Store, choice: str) -> tuple[str, str] | None:
 
 
 class AskForDesign(Skill):
+    # A canvas, design or device tool: not offered in a code conversation.
+    modes = NOT_CODE
     #: The orchestrator reads this and stops the turn to ask, the way it stops
     #: for an approval. See `run_turn`.
     asks = "design"

@@ -19,7 +19,8 @@
         "minHeight": 520,
         "resizable": true,
         "center": true,
-        
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 16, "y": 24 },
         "hiddenTitle": true,
         "visible": false,
         "dragDropEnabled": false,
@@ -47,7 +48,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http: https:"
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http: https: ws: wss:; frame-src 'self' http: https:; worker-src 'self' blob:"
     },
     "macOSPrivateApi": true
   },

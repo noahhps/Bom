@@ -31,14 +31,16 @@ export function TopBar({
   looks = [],
   look = null,
   onLook,
+  // A design conversation with designs in it: make a code project of them.
+  onBuildInCode = null,
 }) {
   const design = mode === "design";
   return (
     <header className="topbar" data-mode={design ? "design" : undefined}>
-      {design ? (
-        <span className="topbar-mode mi" title="Design conversation">
-          <Icon name="design" />
-          <span className="topbar-mode-label">Design</span>
+      {design || mode === "code" ? (
+        <span className="topbar-mode mi" title={design ? "Design conversation" : "Code session"}>
+          <Icon name={design ? "design" : "code"} />
+          <span className="topbar-mode-label">{design ? "Design" : "Code"}</span>
         </span>
       ) : null}
       <span className="title">{title}</span>
@@ -120,6 +122,18 @@ export function TopBar({
             ))}
           </select>
         </label>
+      ) : null}
+
+      {onBuildInCode ? (
+        <button
+          type="button"
+          className="topbar-build"
+          title="Make a code project from these designs"
+          onClick={onBuildInCode}
+        >
+          <Icon name="code" />
+          <span>Build in code</span>
+        </button>
       ) : null}
 
       {/* The canvas toggle. Shown only once a conversation has a canvas to

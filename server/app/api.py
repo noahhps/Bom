@@ -6,6 +6,7 @@ import asyncio
 import base64
 import binascii
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,8 @@ from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
+from . import code_projects, design_export
+from . import workspace as project
 from .design_mode import normalize as normalize_mode
 from .images import ImageError, prepare as prepare_image, sync_from_chat
 from .design_presets import PRESETS as DESIGN_PRESETS
@@ -89,10 +92,13 @@ class ClientContext(BaseModel):
 
 class SessionIn(BaseModel):
     client: ClientContext | None = None
-    # "chat" or "design". Anything else is an ordinary chat -- see design_mode.
+    # "chat", "design" or "code". Anything else is an ordinary chat -- see
+    # design_mode.
     mode: str | None = Field(default=None, max_length=20)
     # A design standard picked before the first message, or "none".
     design: str | None = Field(default=None, max_length=120)
+    # A code conversation's project folder, checked before it is stored.
+    workspace: str | None = Field(default=None, max_length=4096)
 
 
 class ChatRequest(BaseModel):
@@ -108,6 +114,8 @@ class ChatRequest(BaseModel):
     # screen before anything was sent. Ignored once the session exists.
     mode: str | None = Field(default=None, max_length=20)
     design: str | None = Field(default=None, max_length=120)
+    # A new code conversation's project folder, likewise first-message-only.
+    workspace: str | None = Field(default=None, max_length=4096)
     attachments: list[AttachmentIn] = Field(default_factory=list)
     # Sent with every message, recorded only on the first one. A conversation
     # that starts from the phone should say so even when the client opened it
@@ -239,6 +247,29 @@ class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 
 
+class ProjectCreate(BaseModel):
+    """A new project. `kind` is chat, design or code; everything after it is
+    for a code project only: an existing `folder` to register (otherwise a
+    new one is made under PROJECTS_DIR), and the designs to build it from --
+    a design project (`source_id`), a design conversation (`session_id`), or
+    particular designs by canvas id (`designs`), which narrow either."""
+
+    name: str = Field(min_length=1, max_length=120)
+    kind: str = "chat"
+    folder: str | None = Field(default=None, max_length=4096)
+    source_id: str | None = None
+    session_id: str | None = None
+    designs: list[str] | None = Field(default=None, max_length=500)
+
+
+class DesignImport(BaseModel):
+    """Designs, by canvas id, written into a project folder."""
+
+    root: str = Field(min_length=1, max_length=4096)
+    designs: list[str] = Field(min_length=1, max_length=500)
+    into: str = Field(default="design", min_length=1, max_length=400)
+
+
 class SessionProject(BaseModel):
     # None files the conversation back under no project. Explicitly nullable
     # rather than an absent field, so "unfile this" is a thing the client can
@@ -335,6 +366,33 @@ class ImageGenerate(BaseModel):
 
 class ImagePatch(BaseModel):
     alt: str | None = Field(default=None, max_length=300)
+
+
+class WorkspacePath(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class WorkspaceFile(BaseModel):
+    """A save from the editor."""
+
+    root: str = Field(min_length=1, max_length=4096)
+    path: str = Field(min_length=1, max_length=4096)
+    content: str = Field(default="", max_length=20_000_000)
+    # When the editor opened the file. A save made from an older version than
+    # the one on disk -- the agent changed it meanwhile -- is refused with 409
+    # rather than written over the newer one. `force` is the reader choosing to.
+    mtime: float | None = None
+    force: bool = False
+
+
+class WorkspaceEntry(BaseModel):
+    root: str = Field(min_length=1, max_length=4096)
+    path: str = Field(min_length=1, max_length=4096)
+    kind: str = Field(default="file", pattern="^(file|folder)$")
+
+
+class SessionWorkspace(BaseModel):
+    workspace: str | None = Field(default=None, max_length=4096)
 
 
 class SessionDesign(BaseModel):
@@ -519,6 +577,15 @@ def build_router(
             raise HTTPException(404, "no such design standard")
         return design
 
+    def _workspace(given: str | None) -> str | None:
+        """A project folder worth storing, or a 400 saying why not."""
+        if not given:
+            return None
+        try:
+            return str(project.validate_root(given, settings.workspace_roots))
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+
     @router.post("/sessions")
     def create_session(body: SessionIn | None = None) -> dict:
         # Body-less POSTs still work: an older client, or curl, is a caller
@@ -528,7 +595,160 @@ def build_router(
             situation=Situation.from_client(client.model_dump() if client else None),
             mode=normalize_mode(body.mode if body else None),
             design=_valid_design(body.design if body else None),
+            workspace=_workspace(body.workspace if body else None),
         )
+
+    @router.put("/sessions/{session_id}/workspace")
+    def set_session_workspace(session_id: str, body: SessionWorkspace) -> dict:
+        """Open, change or close the project folder a code conversation works on."""
+        if not store.get_session(session_id):
+            raise HTTPException(404, "no such session")
+        folder = _workspace(body.workspace)
+        store.set_session_workspace(session_id, folder)
+        return {"ok": True, "workspace": folder}
+
+    # -- the project folder -------------------------------------------------
+    #
+    # What the Code view's editor reads and writes. Every call names its root
+    # and every root is checked again (validate_root), so there is no opened-
+    # folder state to go stale on the server, and no way to point the editor
+    # at a folder that would be refused as a code conversation's.
+
+    def _root(root: str) -> Path:
+        try:
+            return project.validate_root(root, settings.workspace_roots)
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    def _inside(root: Path, path: str) -> Path:
+        try:
+            return project.inside(root, path)
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @router.get("/workspace/browse")
+    def browse_folders(path: str | None = None) -> dict:
+        """One folder's sub-folders, for the picker that opens a project.
+
+        Confined to WORKSPACE_ROOTS, like the projects themselves, and blind to
+        hidden folders: the picker is for finding a project, not for touring
+        the disk.
+        """
+        bases = settings.workspace_roots or (Path.home().resolve(),)
+        try:
+            target = Path(path).expanduser().resolve() if path else bases[0]
+        except (OSError, RuntimeError):
+            raise HTTPException(400, "not a usable path") from None
+        if not any(target == base or base in target.parents for base in bases):
+            raise HTTPException(400, "outside the folders projects can be opened from")
+        if not target.is_dir():
+            raise HTTPException(400, "not a folder")
+        if any(part in project.SENSITIVE for part in target.parts):
+            raise HTTPException(400, "a folder of keys is never browsed")
+        dirs = []
+        try:
+            children = sorted(os.scandir(target), key=lambda e: e.name.lower())
+        except OSError as exc:
+            raise HTTPException(400, f"could not be listed: {exc.strerror or exc}") from None
+        for entry in children:
+            if entry.name.startswith(".") or project.ignored(entry.name):
+                continue
+            if target == Path.home().resolve() and entry.name in ("Library", "Applications"):
+                continue
+            try:
+                if not entry.is_dir():
+                    continue
+            except OSError:
+                continue
+            folder = Path(entry.path)
+            dirs.append({"name": entry.name, "path": str(folder), "project": project.is_project(folder)})
+        try:
+            project.validate_root(str(target), settings.workspace_roots)
+            openable, reason = True, None
+        except project.WorkspaceError as exc:
+            openable, reason = False, str(exc)
+        return {
+            "path": str(target),
+            "parent": None if target in bases else str(target.parent),
+            "dirs": dirs[:500],
+            "openable": openable,
+            "reason": reason,
+            "project": project.is_project(target),
+        }
+
+    @router.get("/workspace/recent")
+    def recent_workspaces() -> dict:
+        folders = []
+        for folder in store.recent_workspaces():
+            try:
+                root = project.validate_root(folder, settings.workspace_roots)
+            except project.WorkspaceError:
+                continue
+            folders.append({"root": str(root), "name": root.name, "branch": project.git_branch(root)})
+        return {"folders": folders}
+
+    @router.post("/workspace/open")
+    def open_workspace(body: WorkspacePath) -> dict:
+        root = _root(body.path)
+        # Opened is worked in: the folder is a code project from now on, on
+        # the Projects page and at the top of the recent list, whether or
+        # not a conversation has started in it yet.
+        store.ensure_code_project(str(root))
+        return {"root": str(root), "name": root.name, "branch": project.git_branch(root)}
+
+    @router.get("/workspace/tree")
+    def workspace_tree(root: str, path: str = ".") -> dict:
+        folder = _root(root)
+        try:
+            return {"path": path, "entries": project.list_dir(folder, path)}
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @router.get("/workspace/files")
+    def workspace_files(root: str) -> dict:
+        """Every file in the project, for quick open."""
+        folder = _root(root)
+        limit = 10_000
+        files = [project.relative(folder, p) for p in project.walk_files(folder, limit=limit)]
+        return {"files": files, "truncated": len(files) >= limit}
+
+    @router.get("/workspace/file")
+    def workspace_read(root: str, path: str) -> dict:
+        folder = _root(root)
+        target = _inside(folder, path)
+        try:
+            content = project.read_text(target)
+        except project.WorkspaceError as exc:
+            raise HTTPException(415 if "binary" in str(exc) else 400, str(exc)) from None
+        return {
+            "path": project.relative(folder, target),
+            "content": content,
+            "mtime": project.mtime(target),
+            "size": target.stat().st_size,
+        }
+
+    @router.put("/workspace/file")
+    def workspace_save(body: WorkspaceFile) -> dict:
+        folder = _root(body.root)
+        target = _inside(folder, body.path)
+        if project.in_git_dir(folder, target):
+            raise HTTPException(400, "files inside .git are not edited here")
+        try:
+            saved = project.write_text(target, body.content, None if body.force else body.mtime)
+        except project.Conflict as exc:
+            raise HTTPException(409, {"message": str(exc), "mtime": exc.mtime}) from None
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"path": project.relative(folder, target), "mtime": saved}
+
+    @router.post("/workspace/entry")
+    def workspace_create(body: WorkspaceEntry) -> dict:
+        folder = _root(body.root)
+        try:
+            made = project.create(folder, body.path, body.kind)
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"path": project.relative(folder, made), "kind": body.kind}
 
     @router.put("/sessions/{session_id}/design")
     def set_session_design(session_id: str, body: SessionDesign) -> dict:
@@ -586,13 +806,102 @@ def build_router(
 
     # -- projects ---------------------------------------------------------
 
+    def _project_row(row: dict) -> dict:
+        """A project as the client shows it: a code project also says whether
+        its folder is still there, and which branch it is on."""
+        row = _read_accent(row)
+        if row.get("kind") == "code" and row.get("path"):
+            folder = Path(row["path"])
+            row["missing"] = not folder.is_dir()
+            row["branch"] = None if row["missing"] else project.git_branch(folder)
+        return row
+
     @router.get("/projects")
     def list_projects() -> dict:
-        return {"projects": [_read_accent(p) for p in store.list_projects()]}
+        # Where a new code project's folder goes, so the page can say so
+        # before it is made.
+        return {
+            "projects": [_project_row(p) for p in store.list_projects()],
+            "projects_dir": str(Path(settings.projects_dir).expanduser()),
+        }
 
     @router.post("/projects")
-    def create_project(body: ProjectIn) -> dict:
-        return store.create_project(body.name.strip())
+    def create_project(body: ProjectCreate) -> dict:
+        kind = (body.kind or "chat").strip().lower()
+        name = body.name.strip()
+        if kind not in ("chat", "design", "code"):
+            raise HTTPException(400, "kind is chat, design or code")
+        if kind != "code":
+            return _project_row(store.create_project(name, kind=kind))
+
+        # The designs it is built from: a design project's, a design
+        # conversation's, or the ones named -- only ever designs, never some
+        # other conversation's canvases.
+        library = {item["id"]: item for item in store.design_library()}
+        source = store.get_project(body.source_id) if body.source_id else None
+        if body.source_id and (source is None or source.get("kind") != "design"):
+            raise HTTPException(404, "no such design project")
+        chosen: list[dict] = []
+        if source is not None or body.session_id or body.designs is not None:
+            chosen = list(library.values())
+            if source is not None:
+                chosen = [i for i in chosen if i["project_id"] == source["id"]]
+            if body.session_id:
+                chosen = [i for i in chosen if i["session_id"] == body.session_id]
+            if body.designs is not None:
+                unknown = set(body.designs) - set(library)
+                if unknown:
+                    raise HTTPException(404, "no such design: " + ", ".join(sorted(unknown)[:5]))
+                wanted = set(body.designs)
+                chosen = [i for i in chosen if i["id"] in wanted]
+        source_name = source["name"] if source else (
+            chosen[0]["session_title"] if chosen and body.session_id else None
+        )
+        try:
+            record, root, written = code_projects.make(
+                store, settings, name,
+                folder=body.folder,
+                source_id=source["id"] if source else None,
+                canvas_ids=[i["id"] for i in chosen],
+                source_name=source_name,
+            )
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+        except OSError as exc:
+            raise HTTPException(400, f"the folder could not be made: {exc.strerror or exc}") from None
+        return {**_project_row(store.get_project(record["id"]) or record), "root": str(root), "written": written}
+
+    @router.get("/designs/library")
+    def design_library() -> dict:
+        """Every design, grouped the way the Projects page shows them: by
+        design project, then design conversations filed in none."""
+        groups = design_export.library(store)
+        return {
+            "groups": [
+                {
+                    "project_id": g["project"]["id"] if g["project"] else None,
+                    "session_id": g["session_id"],
+                    "name": g["name"],
+                    "designs": g["designs"],
+                }
+                for g in groups
+            ]
+        }
+
+    @router.post("/workspace/designs")
+    def import_designs(body: DesignImport) -> dict:
+        """Designs copied into a project folder -- the Code view's Designs
+        panel. The reader's own click, so nothing is asked."""
+        folder = _root(body.root)
+        known = {item["id"]: item for item in store.design_library()}
+        missing = [i for i in body.designs if i not in known]
+        if missing:
+            raise HTTPException(404, "no such design: " + ", ".join(missing[:5]))
+        try:
+            written = design_export.export(store, body.designs, folder, body.into)
+        except project.WorkspaceError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"written": written}
 
     @router.patch("/projects/{project_id}")
     def rename_project(project_id: str, body: ProjectIn) -> dict:
@@ -608,15 +917,34 @@ def build_router(
         store.delete_project(project_id)
         # Said out loud in the response, because "delete" on a folder full of
         # conversations is the kind of thing a caller should not have to read
-        # the schema to be sure about.
-        return {"ok": True, "conversations": "kept, now unfiled"}
+        # the schema to be sure about. A code project's folder on disk is
+        # never touched: this forgets the project, not the files.
+        return {"ok": True, "conversations": "kept, now unfiled", "files": "untouched"}
 
     @router.put("/sessions/{session_id}/project")
     def set_session_project(session_id: str, body: SessionProject) -> dict:
-        if not store.get_session(session_id):
+        session = store.get_session(session_id)
+        if not session:
             raise HTTPException(404, "no such session")
-        if body.project_id and not store.get_project(body.project_id):
+        target = store.get_project(body.project_id) if body.project_id else None
+        if body.project_id and target is None:
             raise HTTPException(404, "no such project")
+        # What each kind of folder holds. A chat project takes chats and, as
+        # it always has, design conversations; a design project takes design
+        # conversations; a code project is a folder on disk, and filing a
+        # code conversation there moves it to work in that folder.
+        mode = session.get("mode") or "chat"
+        kind = (target or {}).get("kind") or "chat"
+        if mode == "code":
+            if target is None or kind != "code":
+                raise HTTPException(400, "a code conversation belongs to a code project")
+            folder = _workspace(target["path"])
+            store.set_session_workspace(session_id, folder)
+            return {"ok": True, "project_id": target["id"], "workspace": folder}
+        if target is not None and kind == "code":
+            raise HTTPException(400, "a code project holds code conversations")
+        if target is not None and kind == "design" and mode != "design":
+            raise HTTPException(400, "a design project holds design conversations")
         store.set_session_project(session_id, body.project_id)
         return {"ok": True, "project_id": body.project_id}
 
@@ -992,6 +1320,7 @@ def build_router(
                 situation=situation,
                 mode=normalize_mode(body.mode),
                 design=_valid_design(body.design),
+                workspace=_workspace(body.workspace),
             )["id"]
             if body.agent_id:
                 store.set_session_agent(session_id, body.agent_id)

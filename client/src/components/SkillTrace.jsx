@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useAppActions } from "../lib/appActions";
 import { PLANS, sketchFor } from "../lib/drawkit";
 import { describeSkill } from "../lib/skillWidgets";
 import { CanvasBoard } from "./CanvasBoard";
+import { CodeCardBody, PathLink } from "./code/CodeParts";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
 
@@ -49,6 +51,10 @@ function useAtLeast(active, minMs) {
  * of the component: without it a turn that calls a slow skill looks identical
  * to a turn that has hung.
  */
+/* The code tools whose card shows what they did rather than the head of what
+   they returned: a diff, a file, a command's output, a checklist. */
+const CODE_BODIES = new Set(["code_edit", "code_write", "code_bash", "code_todo"]);
+
 function Card({ skill }) {
   const [open, setOpen] = useState(false);
   const running = skill.result === undefined;
@@ -99,7 +105,13 @@ function Card({ skill }) {
         ) : null}
       </div>
 
-      {widget.title ? <p className="skill-card-title">{widget.title}</p> : null}
+      {skill.name === "code_read" && skill.arguments?.path ? (
+        <p className="skill-card-title">
+          <PathLink path={skill.arguments.path} line={Number(skill.arguments.offset) || null} />
+        </p>
+      ) : widget.title ? (
+        <p className="skill-card-title">{widget.title}</p>
+      ) : null}
 
       {widget.rows.length ? (
         <dl className="skill-card-rows">
@@ -112,7 +124,9 @@ function Card({ skill }) {
         </dl>
       ) : null}
 
-      {sketch && drawing ? (
+      {CODE_BODIES.has(skill.name) ? (
+        <CodeCardBody skill={skill} />
+      ) : sketch && drawing ? (
         <CanvasBoard sketch={sketch} />
       ) : running ? (
         <p className="skill-card-preview" data-soft="">
@@ -135,9 +149,25 @@ function Card({ skill }) {
             </button>
           ) : null}
           {open ? <div className="skill-card-full">{skill.result}</div> : null}
+          <OpenProject skill={skill} />
         </>
       )}
     </div>
+  );
+}
+
+/* A code project a tool just made, one press from being worked in -- unless
+   this conversation has already moved into it, which the result says. */
+function OpenProject({ skill }) {
+  const { openCodeFolder } = useAppActions();
+  if (skill.name !== "create_code_project" || skill.denied || !openCodeFolder) return null;
+  const made = /^Created the code project ".*?" at (.+?)\.(?: |$)/m.exec(skill.result || "");
+  if (!made || /This conversation now works in it/.test(skill.result)) return null;
+  return (
+    <button type="button" className="btn skill-card-open" onClick={() => openCodeFolder(made[1])}>
+      <Icon name="code" />
+      Open in Code
+    </button>
   );
 }
 

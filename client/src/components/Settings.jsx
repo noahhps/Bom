@@ -45,7 +45,7 @@ export const SETTINGS_SCREENS = [
     label: "Models",
     icon: "spark",
     title: "Models",
-    lead: "Which backend answers, and with which model. Auto uses the local model and falls through to a cloud one only when it cannot answer.",
+    lead: "",
     words: "provider providers model local cloud ollama openrouter api key connection",
   },
   {
@@ -54,7 +54,7 @@ export const SETTINGS_SCREENS = [
     label: "Memory",
     icon: "memory",
     title: "What I remember",
-    lead: "Two kinds. Things I've picked up about you, and documents you've given me to look things up in. Change or delete anything — I stop using it straight away.",
+    lead: "",
     words: "facts remember documents index forget recall",
   },
   {
@@ -130,10 +130,6 @@ function Appearance({ theme, appearance }) {
           </button>
         ))}
       </div>
-      <p className="settings-note">
-        <b>System</b> follows this device and switches with it. Dark is black
-        and grey with the accent kept for what you act on.
-      </p>
 
       {/* The accent, app-wide: the bottom of the stack of three. A
           conversation with no accent of its own falls through to its project,
@@ -151,11 +147,6 @@ function Appearance({ theme, appearance }) {
           seed={theme?.contextSeed}
         />
       </div>
-      <p className="settings-note">
-        <b>From the chat</b> reads what a conversation is about and colours the
-        app to match — locally, from words already on this device, with nothing
-        sent anywhere. A conversation or a project can override this.
-      </p>
     </>
   );
 }

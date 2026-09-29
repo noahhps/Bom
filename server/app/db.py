@@ -614,6 +614,53 @@ MIGRATIONS: list[str] = [
        SET project_id = (SELECT p.id FROM projects p WHERE p.path = sessions.workspace)
      WHERE mode = 'code' AND workspace IS NOT NULL AND project_id IS NULL;
     """,
+    # 23 -- tasks that run at a time they were given.
+    #
+    # A scheduled task is a prompt and a time. When the time comes the server
+    # opens a fresh conversation, runs the prompt as its first message, and
+    # files the result under Chats like any other conversation -- so what a task
+    # did is read the same way as anything else the assistant did.
+    #
+    # `starts_at` is the anchor: the first occurrence, as the wall-clock time
+    # the user gave ('YYYY-MM-DDTHH:MM') in the zone named by `tz` (falling
+    # back to `utc_offset`, minutes east of UTC, for a device that reported
+    # only that). It is never rewritten; `next_run_at` (epoch ms, NULL once a
+    # one-off has run) is derived from it, which is what keeps "daily at 09:00"
+    # at 09:00 across a clock change.
+    #
+    # `repeat` is once | hourly | daily | weekdays | weekly | monthly.
+    #
+    # `last_session_id` is the conversation the latest run made. Not a foreign
+    # key: deleting that conversation should leave the task standing. It is
+    # also how a running task is told apart from a person -- a scheduled run may
+    # not schedule more tasks.
+    #
+    # `origin_session_id` is where it was asked for, for provenance only.
+    """
+    CREATE TABLE scheduled_tasks (
+      id                TEXT PRIMARY KEY,
+      title             TEXT NOT NULL,
+      prompt            TEXT NOT NULL,
+      starts_at         TEXT NOT NULL,
+      tz                TEXT,
+      utc_offset        INTEGER,
+      repeat            TEXT NOT NULL DEFAULT 'once',
+      enabled           INTEGER NOT NULL DEFAULT 1,
+      next_run_at       INTEGER,
+      last_run_at       INTEGER,
+      last_status       TEXT,
+      last_summary      TEXT,
+      last_session_id   TEXT,
+      run_count         INTEGER NOT NULL DEFAULT 0,
+      agent_id          TEXT REFERENCES agents(id) ON DELETE SET NULL,
+      origin_session_id TEXT,
+      created_at        INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL
+    );
+
+    CREATE INDEX idx_tasks_due ON scheduled_tasks(next_run_at) WHERE enabled = 1;
+    CREATE INDEX idx_tasks_last_session ON scheduled_tasks(last_session_id);
+    """,
 ]
 
 

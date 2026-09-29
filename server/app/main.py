@@ -22,6 +22,8 @@ from .mcp import MCPManager
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
+from .schedule_api import build_schedule_router
+from .scheduler import Scheduler
 from .providers import (
     NETWORK_URL_SETTING,
     OAuthFlows,
@@ -47,6 +49,7 @@ from .skills.device_photos import AddToAlbum, CreateAlbum, ListAlbums, ListPhoto
 from .skills.files import ListDirectory, ReadFile, SearchFiles
 from .skills.sandbox import RunPython, RunShell
 from .skills.clock import Clock
+from .skills.schedule import CancelScheduledTask, ListScheduledTasks, ScheduleTask
 from .skills.recall import Recall
 from .skills.registry import Registry
 from .skills.remember import Forget, Remember
@@ -182,6 +185,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry.register(Recall(indexer))
     registry.register(Remember(store, max_chars=settings.memory_fact_chars))
     registry.register(Forget(store))
+    # Tasks that run on their own at a time the user gave -- see scheduler.py.
+    registry.register(ScheduleTask(store))
+    registry.register(ListScheduledTasks(store))
+    registry.register(CancelScheduledTask(store))
     # The canvas: a document that lives beside the conversation and is shown in
     # a side panel. write_canvas surfaces it to the client; read_canvas lets a
     # revision see what it is revising.
@@ -244,6 +251,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Database-backed MCP manager: dynamically loads tools from mcp_servers table
     mcp_manager = MCPManager(store, registry)
     orchestrator = Orchestrator(settings, store, providers, registry)
+    scheduler = Scheduler(store, orchestrator)
 
     terminals = Terminals()
     previews = Previews()
@@ -258,7 +266,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         indexing = asyncio.create_task(_index_quietly())
         mcp_sync = asyncio.create_task(_sync_mcp_quietly())
         orphan_watch = asyncio.create_task(_exit_with_parent())
+        # Only a server that is actually serving runs tasks: `create_app` is
+        # also called by the test suite and by one-liners, and none of those
+        # should start acting on the user's schedule.
+        schedule_loop = asyncio.create_task(scheduler.run_forever())
         yield
+        schedule_loop.cancel()
+        await scheduler.shutdown()
         # Every shell the terminals started goes with the server: a dev server
         # left running with nothing to show it or stop it is worse than one
         # stopped.
@@ -361,6 +375,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # constructing a second app.
     app.state.store = store
     app.state.orchestrator = orchestrator
+    app.state.scheduler = scheduler
     app.state.indexer = indexer
     app.state.mcp_manager = mcp_manager
     app.state.providers = providers
@@ -374,6 +389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         prefix="/api",
     )
+    app.include_router(build_schedule_router(store, scheduler, auth), prefix="/api")
     # The Code view's terminals and preview. Half behind the bearer token like
     # everything above; the socket and the preview's files check their own.
     app.include_router(

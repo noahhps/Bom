@@ -179,6 +179,33 @@ class StoredFact:
 
 
 @dataclass
+class StoredTask:
+    id: str
+    title: str
+    prompt: str
+    starts_at: str
+    tz: str | None
+    utc_offset: int | None
+    repeat: str
+    enabled: int
+    next_run_at: int | None
+    last_run_at: int | None
+    last_status: str | None
+    last_summary: str | None
+    last_session_id: str | None
+    run_count: int
+    agent_id: str | None
+    origin_session_id: str | None
+    created_at: int
+    updated_at: int
+
+    def to_dict(self) -> dict:
+        data = dict(self.__dict__)
+        data["enabled"] = bool(self.enabled)
+        return data
+
+
+@dataclass
 class StoredEvent:
     id: str
     title: str
@@ -1373,6 +1400,97 @@ class Store:
 
     def delete_event(self, event_id: str) -> None:
         self.db.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
+
+    # -- scheduled tasks --------------------------------------------------
+
+    _TASK_FIELDS = frozenset({
+        "title", "prompt", "starts_at", "tz", "utc_offset", "repeat", "enabled",
+        "next_run_at", "last_run_at", "last_status", "last_summary",
+        "last_session_id", "run_count", "agent_id",
+    })
+
+    def add_task(
+        self,
+        title: str,
+        prompt: str,
+        starts_at: str,
+        *,
+        repeat: str = "once",
+        tz: str | None = None,
+        utc_offset: int | None = None,
+        next_run_at: int | None,
+        agent_id: str | None = None,
+        origin_session_id: str | None = None,
+    ) -> StoredTask:
+        now = _now()
+        task_id = _new_id("tsk")
+        self.db.execute(
+            """
+            INSERT INTO scheduled_tasks
+                (id, title, prompt, starts_at, tz, utc_offset, repeat, enabled,
+                 next_run_at, agent_id, origin_session_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+            """,
+            (task_id, title, prompt, starts_at, tz, utc_offset, repeat,
+             next_run_at, agent_id, origin_session_id, now, now),
+        )
+        return self.get_task(task_id)  # type: ignore[return-value]
+
+    def get_task(self, task_id: str) -> StoredTask | None:
+        row = self.db.query_one("SELECT * FROM scheduled_tasks WHERE id = ?", (task_id,))
+        return StoredTask(**dict(row)) if row else None
+
+    def list_tasks(self) -> list[StoredTask]:
+        """Every task: the ones still to run soonest first, finished ones last."""
+        rows = self.db.query(
+            """
+            SELECT * FROM scheduled_tasks
+             ORDER BY next_run_at IS NULL, next_run_at, created_at
+            """
+        )
+        return [StoredTask(**dict(row)) for row in rows]
+
+    def due_tasks(self, now_ms: int) -> list[StoredTask]:
+        rows = self.db.query(
+            """
+            SELECT * FROM scheduled_tasks
+             WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+             ORDER BY next_run_at
+            """,
+            (now_ms,),
+        )
+        return [StoredTask(**dict(row)) for row in rows]
+
+    def update_task(self, task_id: str, changes: dict) -> StoredTask | None:
+        """Change named columns. Unknown names are refused rather than ignored,
+        because the column names are interpolated into the statement."""
+        if not changes:
+            return self.get_task(task_id)
+        unknown = set(changes) - self._TASK_FIELDS
+        if unknown:
+            raise ValueError(f"not a task field: {', '.join(sorted(unknown))}")
+        columns = ", ".join(f"{name} = ?" for name in changes)
+        values = [int(v) if name == "enabled" else v for name, v in changes.items()]
+        self.db.execute(
+            f"UPDATE scheduled_tasks SET {columns}, updated_at = ? WHERE id = ?",
+            (*values, _now(), task_id),
+        )
+        return self.get_task(task_id)
+
+    def delete_task(self, task_id: str) -> bool:
+        if self.get_task(task_id) is None:
+            return False
+        self.db.execute("DELETE FROM scheduled_tasks WHERE id = ?", (task_id,))
+        return True
+
+    def is_scheduled_session(self, session_id: str | None) -> bool:
+        """Whether a scheduled task made this conversation."""
+        if not session_id:
+            return False
+        row = self.db.query_one(
+            "SELECT 1 FROM scheduled_tasks WHERE last_session_id = ?", (session_id,)
+        )
+        return row is not None
 
     # -- projects ---------------------------------------------------------
 

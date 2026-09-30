@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 /* Where the backends are managed: what each is pointed at, and how to connect
  * the one that needs connecting.
@@ -13,9 +13,14 @@ import { useState } from "react";
 const LABELS = {
   local: { name: "Local", blurb: "Ollama, on this machine" },
   network: { name: "Network", blurb: "Ollama, on another machine on your network" },
-  cloud: { name: "Cloud", blurb: "Anthropic, when a key is in the environment" },
+  cloud: { name: "Cloud", blurb: "Anthropic" },
   openrouter: { name: "OpenRouter", blurb: "One key, several hundred models" },
 };
+
+/** What a backend is called: the four built in by name, a connection by its own. */
+export function providerLabel(entry) {
+  return LABELS[entry?.id]?.name || entry?.label || entry?.name || entry?.id || "";
+}
 
 export function Providers({ models, provider, onProvider, serving }) {
   return (
@@ -56,7 +61,7 @@ export function Providers({ models, provider, onProvider, serving }) {
                 background: entry.healthy ? "var(--green)" : "rgba(var(--ink-rgb), 0.18)",
               }}
             />
-            <span>{LABELS[entry.id]?.name || entry.name}</span>
+            <span>{providerLabel(entry)}</span>
             <span className="mi">
               {/* Three states, not two: a backend with no key at all is not
                   the same as one whose key stopped working, and the label is
@@ -77,11 +82,23 @@ export function Providers({ models, provider, onProvider, serving }) {
             <OpenRouterConnection models={models} entry={entry} />
           ) : entry.id === "network" ? (
             <NetworkConnection models={models} entry={entry} />
+          ) : entry.id === "cloud" ? (
+            <AnthropicConnection models={models} entry={entry} />
+          ) : entry.connection ? (
+            <ConnectionDetails models={models} entry={entry} />
           ) : (
             <p>{entry.error || LABELS[entry.id]?.blurb}</p>
           )}
         </div>
       ))}
+
+      {models.connections.filter((c) => !c.enabled).map((connection) => (
+        <SwitchedOff key={connection.id} models={models} connection={connection} />
+      ))}
+
+      <AddConnection models={models} />
+
+      <FallbackOrder models={models} />
 
       <div className="lane" style={{ marginTop: "6px" }}>
         <span className="mi" data-strong>
@@ -92,7 +109,7 @@ export function Providers({ models, provider, onProvider, serving }) {
       <div className="filters">
         {[{ id: null, label: "Auto" }, ...models.providers.map((p) => ({
           id: p.id,
-          label: LABELS[p.id]?.name || p.name,
+          label: providerLabel(p),
         }))].map((choice) => (
           <button
             key={choice.id || "auto"}
@@ -106,10 +123,10 @@ export function Providers({ models, provider, onProvider, serving }) {
         ))}
       </div>
       <p className="caveat" style={{ margin: 0 }}>
-        Auto uses the local model and, when it cannot be reached, falls back to
-        the network Ollama first and a cloud backend only after that. Whichever one answers, it answers with the model
-        chosen above — and that choice is kept on the server, so it is the same
-        on every device.
+        Auto uses the local model and, when it cannot be reached, falls back in
+        the order above. Whichever one answers, it answers with the model
+        chosen for it — and that choice is kept on the server, so it is the
+        same on every device.
       </p>
     </>
   );
@@ -147,6 +164,12 @@ function ModelRow({ entry, onChoose }) {
       setBusy(false);
     }
   };
+
+  // A connection whose service lists nothing usable -- Azure, where the
+  // model is a deployment's name -- takes a typed one instead.
+  if (entry.connection && models.length === 0) {
+    return <TypedModel entry={entry} onChoose={onChoose} />;
+  }
 
   return (
     <div className="provider-model">
@@ -423,5 +446,501 @@ function OpenRouterConnection({ models, entry }) {
 
       {problem ? <p className="provider-problem">{problem}</p> : null}
     </>
+  );
+}
+
+
+/** A model named by hand, for a connection whose service does not list one. */
+function TypedModel({ entry, onChoose }) {
+  const [value, setValue] = useState(entry.model || "");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const save = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setProblem("");
+    try {
+      await onChoose(entry.id, value.trim());
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="provider-model" onSubmit={save}>
+      <label className="mi" htmlFor={`model-${entry.id}`}>
+        Model
+      </label>
+      <input
+        id={`model-${entry.id}`}
+        value={value}
+        placeholder="model or deployment name"
+        spellCheck="false"
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <button type="submit" className="btn" disabled={busy || !value.trim() || value.trim() === entry.model}>
+        Save
+      </button>
+      {problem ? <span className="mi provider-problem">{problem}</span> : null}
+    </form>
+  );
+}
+
+/** A key pasted for Anthropic, or the server's own environment. */
+function AnthropicConnection({ models, entry }) {
+  const [pasting, setPasting] = useState(false);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+
+  const run = async (next) => {
+    setBusy(true);
+    setProblem("");
+    try {
+      await models.setAnthropicKey(next);
+      setKey("");
+      setPasting(false);
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <p>
+        {entry.key_source === "settings"
+          ? "Connected with the key pasted here."
+          : entry.key_source === "environment"
+            ? "Connected with the key in the server's environment."
+            : "Paste an Anthropic API key (console.anthropic.com > API keys), or set ANTHROPIC_API_KEY on the server."}
+      </p>
+      <div className="side-actions" style={{ marginTop: "10px" }}>
+        <button type="button" className="btn" onClick={() => setPasting((was) => !was)}>
+          {pasting ? "Cancel" : entry.key_source ? "Replace key" : "Paste a key"}
+        </button>
+        {entry.key_source === "settings" ? (
+          <button type="button" className="btn" disabled={busy} onClick={() => run("")}>
+            Forget key
+          </button>
+        ) : null}
+      </div>
+      {pasting ? (
+        <form
+          className="skill-key"
+          onSubmit={(event) => {
+            event.preventDefault();
+            run(key.trim());
+          }}
+        >
+          <input
+            type="password"
+            value={key}
+            autoFocus
+            autoComplete="off"
+            spellCheck="false"
+            placeholder="sk-ant-…"
+            aria-label="Anthropic API key"
+            onChange={(event) => setKey(event.target.value)}
+          />
+          <button type="submit" className="btnp" disabled={!key.trim() || busy}>
+            {busy ? "Checking…" : "Save"}
+          </button>
+        </form>
+      ) : null}
+      {problem ? <p className="provider-problem">{problem}</p> : null}
+    </>
+  );
+}
+
+/** One connection: where it points, its key, and taking it back. */
+function ConnectionDetails({ models, entry }) {
+  const connection = entry.connection;
+  const [editing, setEditing] = useState(null); // "key" | "name" | null
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [removing, setRemoving] = useState(false);
+
+  const run = async (action) => {
+    setBusy(true);
+    setProblem("");
+    try {
+      await action();
+      setEditing(null);
+      setValue("");
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <p>
+        {connection.base_url}
+        {" · "}
+        {connection.has_key ? "key saved" : connection.key_required ? "no key" : "no key needed"}
+        {entry.error ? ` · ${entry.error}` : ""}
+      </p>
+      <div className="side-actions" style={{ marginTop: "10px" }}>
+        <button type="button" className="btn" onClick={() => {
+          setEditing(editing === "key" ? null : "key");
+          setValue("");
+        }}>
+          {editing === "key" ? "Cancel" : connection.has_key ? "Replace key" : "Add key"}
+        </button>
+        <button type="button" className="btn" onClick={() => {
+          setEditing(editing === "name" ? null : "name");
+          setValue(connection.name);
+        }}>
+          {editing === "name" ? "Cancel" : "Rename"}
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => run(() => models.editConnection(connection.id, { enabled: false }))}
+        >
+          Switch off
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onBlur={() => setRemoving(false)}
+          onClick={() =>
+            removing ? run(() => models.removeConnection(connection.id)) : setRemoving(true)
+          }
+        >
+          {removing ? "Really remove?" : "Remove"}
+        </button>
+      </div>
+      {editing ? (
+        <form
+          className="skill-key"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const patch = editing === "key" ? { api_key: value.trim() } : { name: value.trim() };
+            run(() => models.editConnection(connection.id, patch));
+          }}
+        >
+          <input
+            type={editing === "key" ? "password" : "text"}
+            value={value}
+            autoFocus
+            autoComplete="off"
+            spellCheck="false"
+            aria-label={editing === "key" ? `${providerLabel(entry)} API key` : "Name"}
+            placeholder={editing === "key" ? "API key" : "Name"}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          <button type="submit" className="btnp" disabled={busy || (editing === "name" && !value.trim())}>
+            Save
+          </button>
+        </form>
+      ) : null}
+      {problem ? <p className="provider-problem">{problem}</p> : null}
+    </>
+  );
+}
+
+/** A connection that is switched off: listed, not offered. */
+function SwitchedOff({ models, connection }) {
+  const [busy, setBusy] = useState(false);
+  const run = async (action) => {
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="sur corpus provider-card" data-off>
+      <div className="corpus-top">
+        <i style={{ background: "rgba(var(--ink-rgb), 0.18)" }} />
+        <span>{connection.name}</span>
+        <span className="mi">switched off</span>
+      </div>
+      <p>{connection.base_url}</p>
+      <div className="side-actions" style={{ marginTop: "10px" }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => run(() => models.editConnection(connection.id, { enabled: true }))}
+        >
+          Switch on
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => run(() => models.removeConnection(connection.id))}
+        >
+          Remove
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Adding a connection: pick the service, give it a key (or an address, for a
+ * server of your own), check it, pick a model, add it.
+ *
+ * Checked before it is saved, so a wrong key or a server that is not running
+ * is found here rather than on the first message.
+ */
+function AddConnection({ models }) {
+  const [presets, setPresets] = useState([]);
+  const [chosen, setChosen] = useState(null);
+  const [form, setForm] = useState({ name: "", base_url: "", api_key: "", model: "" });
+  const [check, setCheck] = useState(null); // {ok, models, error}
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    models
+      .presets()
+      .then((data) => live && setPresets(data.presets || []))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // `models.presets` is a fresh function each render; fetching once is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pick = (preset) => {
+    setChosen(preset);
+    setForm({ name: "", base_url: preset.base_url || "", api_key: "", model: "" });
+    setCheck(null);
+    setProblem("");
+  };
+
+  const body = () => ({
+    preset: chosen.id,
+    name: form.name.trim(),
+    base_url: chosen.url_editable ? form.base_url.trim() : "",
+    api_key: form.api_key.trim(),
+  });
+
+  const runCheck = async () => {
+    setBusy(true);
+    setProblem("");
+    try {
+      const found = await models.checkConnection(body());
+      setCheck(found);
+      if (found.ok && found.models.length && !form.model) {
+        setForm((was) => ({ ...was, model: found.models[0].id }));
+      }
+    } catch (failure) {
+      setCheck(null);
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setProblem("");
+    try {
+      await models.addConnection({ ...body(), model: form.model.trim() });
+      setChosen(null);
+      setCheck(null);
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = (name) => (event) => {
+    setForm((was) => ({ ...was, [name]: event.target.value }));
+    if (name !== "model" && name !== "name") setCheck(null);
+  };
+
+  const groups = [
+    { kind: "cloud", label: "Cloud services" },
+    { kind: "local", label: "On this machine or your network" },
+  ];
+  const needsKey = chosen?.key_required && !form.api_key.trim();
+
+  return (
+    <div className="provider-add">
+      <div className="lane" style={{ marginTop: "6px" }}>
+        <span className="mi" data-strong>
+          Add a provider
+        </span>
+        <i />
+      </div>
+      <p className="caveat" style={{ margin: 0 }}>
+        Anything that speaks OpenAI's chat API: the services below, a model
+        server of your own, or your company's gateway.
+      </p>
+      {groups.map((group) => (
+        <div key={group.kind} className="provider-presets">
+          <span className="mi">{group.label}</span>
+          <div className="filters">
+            {presets
+              .filter((preset) => preset.kind === group.kind)
+              .map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="chip"
+                  data-on={chosen?.id === preset.id ? "" : undefined}
+                  title={preset.blurb}
+                  onClick={() => (chosen?.id === preset.id ? setChosen(null) : pick(preset))}
+                >
+                  {preset.label}
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+
+      {chosen ? (
+        <form className="sur provider-form" onSubmit={add}>
+          <p>{chosen.blurb}</p>
+          <label>
+            <span className="mi">Name</span>
+            <input value={form.name} placeholder={chosen.label} onChange={field("name")} />
+          </label>
+          {chosen.url_editable ? (
+            <label>
+              <span className="mi">Address</span>
+              <input
+                value={form.base_url}
+                placeholder="https://…/v1"
+                spellCheck="false"
+                onChange={field("base_url")}
+              />
+            </label>
+          ) : null}
+          {chosen.key_required || chosen.key_help ? (
+            <label>
+              <span className="mi">API key{chosen.key_required ? "" : " (optional)"}</span>
+              <input
+                type="password"
+                value={form.api_key}
+                autoComplete="off"
+                spellCheck="false"
+                placeholder={chosen.key_help || "API key"}
+                onChange={field("api_key")}
+              />
+            </label>
+          ) : null}
+          <div className="side-actions">
+            <button type="button" className="btn" disabled={busy || needsKey} onClick={runCheck}>
+              {busy && !check ? "Checking…" : "Check"}
+            </button>
+          </div>
+          {check && !check.ok ? <p className="provider-problem">{check.error}</p> : null}
+          {check ? (
+            <label>
+              <span className="mi">Model</span>
+              {check.models.length ? (
+                <select value={form.model} onChange={field("model")}>
+                  {check.models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={form.model}
+                  placeholder="model or deployment name"
+                  spellCheck="false"
+                  onChange={field("model")}
+                />
+              )}
+            </label>
+          ) : null}
+          {problem ? <p className="provider-problem">{problem}</p> : null}
+          <div className="side-actions">
+            <button
+              type="submit"
+              className="btnp"
+              disabled={busy || needsKey || !check || !form.model.trim()}
+            >
+              Add {form.name.trim() || chosen.label}
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
+/** The order Auto falls back in, after the local model. */
+function FallbackOrder({ models }) {
+  const [problem, setProblem] = useState("");
+  const byId = Object.fromEntries(models.providers.map((p) => [p.id, p]));
+  const order = models.order.filter((id) => byId[id]);
+  if (order.length < 2) return null;
+
+  const move = async (index, step) => {
+    const next = [...order];
+    const [item] = next.splice(index, 1);
+    next.splice(index + step, 0, item);
+    setProblem("");
+    try {
+      await models.setFallbackOrder(next);
+    } catch (failure) {
+      setProblem(failure.message || String(failure));
+    }
+  };
+
+  return (
+    <div className="provider-order">
+      <div className="lane" style={{ marginTop: "6px" }}>
+        <span className="mi" data-strong>
+          Fallback order
+        </span>
+        <i />
+      </div>
+      <p className="caveat" style={{ margin: 0 }}>
+        When the local model is not answering, Auto tries these in turn and uses
+        the first that is reachable.
+      </p>
+      <ol>
+        {order.map((id, index) => (
+          <li key={id}>
+            <span className="mi">{index + 1}</span>
+            <span className="provider-order-name">{providerLabel(byId[id])}</span>
+            <span className="mi">{byId[id].healthy ? "reachable" : "unreachable"}</span>
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Move ${providerLabel(byId[id])} up`}
+              disabled={index === 0}
+              onClick={() => move(index, -1)}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="btn"
+              aria-label={`Move ${providerLabel(byId[id])} down`}
+              disabled={index === order.length - 1}
+              onClick={() => move(index, 1)}
+            >
+              ↓
+            </button>
+          </li>
+        ))}
+      </ol>
+      {problem ? <p className="provider-problem">{problem}</p> : null}
+    </div>
   );
 }

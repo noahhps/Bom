@@ -44,6 +44,27 @@ class AnthropicProvider:
         self._windows: dict[str, int] = {}
         self._outputs: dict[str, int] = {}
         self._client = None
+        # A key pasted in Settings > Models. Empty means the SDK's own lookup:
+        # ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an `ant auth login`
+        # profile -- which is how this backend was set up before there was a
+        # field for it, and still works.
+        self.api_key = ""
+
+    @property
+    def configured(self) -> bool:
+        return bool(
+            self.api_key
+            or os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+            or _profile_exists()
+        )
+
+    def set_api_key(self, key: str) -> None:
+        """Use this key from now on; empty goes back to the environment."""
+        self.api_key = (key or "").strip()
+        self._client = None
+        self._windows.clear()
+        self._outputs.clear()
 
     async def context_window(self) -> int:
         """The window budget: the configured one, or the model's when smaller.
@@ -89,7 +110,7 @@ class AnthropicProvider:
                 raise ProviderError(
                     "cloud fallback requires `pip install anthropic`"
                 ) from exc
-            self._client = AsyncAnthropic()
+            self._client = AsyncAnthropic(api_key=self.api_key) if self.api_key else AsyncAnthropic()
         return self._client
 
     async def stream(
@@ -221,11 +242,7 @@ class AnthropicProvider:
             self._ensure_client()
         except ProviderError:
             return False
-        return bool(
-            os.environ.get("ANTHROPIC_API_KEY")
-            or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-            or (os.path.expanduser("~/.config/anthropic") and _profile_exists())
-        )
+        return self.configured
 
 
 def _profile_exists() -> bool:

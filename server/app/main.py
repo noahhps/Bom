@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import signal
 from contextlib import asynccontextmanager
@@ -16,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import build_router
 from .workbench import Previews, Terminals, build_workbench_router, mount_public
 from .auth import make_auth_dependency
-from .config import Settings, load_settings, write_secret
+from .config import Settings, load_settings, read_secret, write_secret
 from .db import Database
 from .enterprise import LiveSettings
 from .mcp import MCPManager
@@ -33,6 +34,7 @@ from .providers import (
     ProviderRouter,
     model_setting_key,
 )
+from .providers.router import FALLBACK_SETTING
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import CheckDesign, EditCanvas, OpenCanvas, ReadCanvas, WriteCanvas
 from .skills.code import code_skills
@@ -135,6 +137,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # it pulled this boot and OpenRouter may have retired it, and either way
     # the honest failure is the one that names the model at the moment it is
     # used, not a silent reversion to something else on startup.
+    # Connections to OpenAI-compatible services, and the order Auto falls
+    # back in -- both kept in the database, set from Settings > Models.
+    providers.load_connections(store.list_connections())
+    saved_order = store.get_text_setting(FALLBACK_SETTING)
+    if saved_order:
+        try:
+            providers.set_fallback_order([str(i) for i in json.loads(saved_order)])
+        except (ValueError, TypeError):
+            pass
+    # A key pasted for the Anthropic backend. The environment wins, as it
+    # does for OpenRouter: someone who exported ANTHROPIC_API_KEY meant it.
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        saved_key = read_secret(settings.anthropic_key_path)
+        if saved_key:
+            providers.cloud.set_api_key(saved_key)
     for provider_id in providers.by_id:
         saved = store.get_text_setting(model_setting_key(provider_id))
         if saved:

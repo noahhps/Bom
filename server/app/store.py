@@ -2277,6 +2277,61 @@ class Store:
         self.db.execute("DELETE FROM mcp_icons WHERE key = ?", (key,))
         return True
 
+    # -- model connections ------------------------------------------------
+
+    def list_connections(self) -> list[dict]:
+        rows = self.db.query("SELECT * FROM model_connections ORDER BY created_at, rowid")
+        return [dict(row) for row in rows]
+
+    def get_connection(self, connection_id: str) -> dict | None:
+        row = self.db.query_one("SELECT * FROM model_connections WHERE id = ?", (connection_id,))
+        return dict(row) if row else None
+
+    def add_connection(
+        self, *, preset: str, name: str, base_url: str, api_key: str = "", model: str = ""
+    ) -> dict:
+        now = _now()
+        row = {
+            "id": _new_id("conn"),
+            "preset": preset,
+            "name": name,
+            "base_url": base_url,
+            "api_key": api_key or None,
+            "model": model or None,
+            "enabled": 1,
+            "created_at": now,
+            "updated_at": now,
+        }
+        self.db.execute(
+            """
+            INSERT INTO model_connections
+                (id, preset, name, base_url, api_key, model, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            tuple(row.values()),
+        )
+        return row
+
+    def update_connection(self, connection_id: str, **fields) -> dict | None:
+        """Change any of name, base_url, api_key, model, enabled."""
+        allowed = {"name", "base_url", "api_key", "model", "enabled"}
+        changes = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if changes:
+            if "enabled" in changes:
+                changes["enabled"] = 1 if changes["enabled"] else 0
+            assignments = ", ".join(f"{key} = ?" for key in changes)
+            self.db.execute(
+                f"UPDATE model_connections SET {assignments}, updated_at = ? WHERE id = ?",
+                (*changes.values(), _now(), connection_id),
+            )
+        return self.get_connection(connection_id)
+
+    def delete_connection(self, connection_id: str) -> bool:
+        if not self.get_connection(connection_id):
+            return False
+        self.db.execute("DELETE FROM model_connections WHERE id = ?", (connection_id,))
+        return True
+
     # -- MCP sign-ins -------------------------------------------------------
 
     def get_mcp_auth(self, server_id: str) -> dict:

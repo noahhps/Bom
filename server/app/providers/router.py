@@ -21,7 +21,9 @@ from ..config import Settings
 from .anthropic import AnthropicProvider
 from .base import ModelProvider
 from .ollama import OllamaProvider
+from .openai_compat import OpenAICompatProvider
 from .openrouter import OpenRouterProvider
+from .presets import get_connection_preset
 
 _HEALTH_TTL_SECONDS = 15.0
 
@@ -42,6 +44,11 @@ NETWORK_URL_SETTING = "ollama.network_url"
 # their own network, so falling back to it keeps a conversation off the
 # internet when this machine's Ollama is down.
 FALLBACK_ORDER = (NETWORK, OPENROUTER, CLOUD)
+
+# Where a reordered fallback list is kept in `app_settings`, as a JSON list of
+# provider ids. Connections not named in it follow the ones that are, in the
+# order they were added.
+FALLBACK_SETTING = "providers.fallback_order"
 
 # Where a picked model is kept, per backend, in `app_settings`. Namespaced like
 # the theme and the memory switches beside it, because that table is shared.
@@ -92,15 +99,73 @@ class ProviderRouter:
             base_url=settings.openrouter_url,
             context_tokens=cloud_window,
         )
+        # Connections to OpenAI-compatible services, by connection id -- the
+        # id is also their provider id everywhere else (the picker, /api/chat's
+        # `provider`, the fallback order). See load_connections.
+        self.connections: dict[str, OpenAICompatProvider] = {}
+        self._retired: list[OpenAICompatProvider] = []
+        self.fallback_order: list[str] = list(FALLBACK_ORDER)
+        self._settings = settings
+        self._rebuild()
+        self._last_check = 0.0
+        self._last_healthy = True
+        self.apply_limits(settings)
+
+    def _rebuild(self) -> None:
         self.by_id: dict[str, ModelProvider] = {
             LOCAL: self.local,
             NETWORK: self.network,
             CLOUD: self.cloud,
             OPENROUTER: self.openrouter,
+            **self.connections,
         }
-        self._last_check = 0.0
-        self._last_healthy = True
-        self.apply_limits(settings)
+
+    def load_connections(self, rows: list[dict]) -> None:
+        """Make the connection backends match these stored rows.
+
+        Enabled rows only: a switched-off connection is not offered, routed to
+        or fallen back on. A connection whose address is unchanged keeps its
+        provider object -- its HTTP client and cached model list -- and just
+        takes the new key, model and name.
+        """
+        kept: dict[str, OpenAICompatProvider] = {}
+        for row in rows:
+            if not row.get("enabled"):
+                continue
+            preset = get_connection_preset(row.get("preset", "")) or get_connection_preset("custom")
+            existing = self.connections.get(row["id"])
+            if existing is not None and existing.base_url == (row.get("base_url") or "").rstrip("/"):
+                if existing.api_key != (row.get("api_key") or ""):
+                    existing.set_api_key(row.get("api_key") or "")
+                existing.model = row.get("model") or ""
+                existing.label = row.get("name") or preset["label"]
+                kept[row["id"]] = existing
+                continue
+            kept[row["id"]] = OpenAICompatProvider(
+                connection_id=row["id"],
+                name=row.get("preset") or "custom",
+                label=row.get("name") or preset["label"],
+                base_url=row.get("base_url") or "",
+                api_key=row.get("api_key") or "",
+                model=row.get("model") or "",
+                preset=preset,
+            )
+        for connection_id, provider in self.connections.items():
+            if kept.get(connection_id) is not provider:
+                self._retired.append(provider)
+        self.connections = kept
+        self._rebuild()
+        self.apply_limits(self._settings)
+
+    def fallback(self) -> list[str]:
+        """The order Auto tries backends in after the local one."""
+        named = [i for i in self.fallback_order if i in self.by_id and i != LOCAL]
+        rest = [i for i in self.by_id if i != LOCAL and i not in named]
+        return named + rest
+
+    def set_fallback_order(self, order: list[str]) -> list[str]:
+        self.fallback_order = [i for i in dict.fromkeys(order) if i != LOCAL]
+        return self.fallback()
 
     def apply_limits(self, settings) -> None:
         """Bring every backend's window, reply cap and caching in line with
@@ -133,6 +198,13 @@ class ProviderRouter:
         cloud = getattr(self, "cloud", None)
         if cloud is not None and max_tokens:
             cloud.max_tokens = int(max_tokens)
+        # A connection is windowed like what it is: a hosted service like the
+        # other cloud backends, a server on the reader's hardware like Ollama.
+        for connection in getattr(self, "connections", {}).values():
+            window = local_window if connection.kind == "local" else cloud_window
+            if window:
+                connection.context_tokens = int(window)
+            connection.cache_ttl = ttl
 
     def set_model(self, provider_id: str, model: str) -> str:
         """Point one backend at a different model.
@@ -158,7 +230,7 @@ class ProviderRouter:
 
         if await self._local_healthy():
             return Route(self.local, LOCAL)
-        for provider_id in FALLBACK_ORDER:
+        for provider_id in self.fallback():
             provider = self.by_id[provider_id]
             if await provider.health():
                 return Route(provider, "fallback")
@@ -182,3 +254,5 @@ class ProviderRouter:
         await self.local.aclose()
         await self.network.aclose()
         await self.openrouter.aclose()
+        for provider in [*self.connections.values(), *self._retired]:
+            await provider.aclose()

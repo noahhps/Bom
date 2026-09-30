@@ -266,7 +266,7 @@ export function useChat(
             setBadge({
               text:
                 data.source === "fallback"
-                  ? data.provider + " · " + data.model
+                  ? (data.provider_label || data.provider) + " · " + data.model
                   : data.model,
               tone: data.source === "fallback" ? "warn" : null,
             });

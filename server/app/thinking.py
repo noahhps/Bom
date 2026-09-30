@@ -99,6 +99,14 @@ def _bare(model: str) -> str:
     return name.split(":", 1)[0]
 
 
+def control_for_connection(preset: dict) -> ThinkingControl:
+    """The control for an OpenAI-compatible connection: effort where the
+    service takes `reasoning_effort` (OpenAI, Gemini, Azure), nothing where it
+    does not. A model that reasons by itself -- DeepSeek's reasoner, Grok --
+    still shows its reasoning; there is just no dial to turn."""
+    return _EFFORT if (preset or {}).get("reasoning") == "effort" else NONE
+
+
 def control_for(provider: str, model: str) -> ThinkingControl:
     """The reasoning control this model should be driven by.
 

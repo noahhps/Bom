@@ -25,6 +25,10 @@ const POLL_LIMIT = 240;
  */
 export function useModels(api) {
   const [providers, setProviders] = useState([]);
+  // Every stored connection, switched-off ones included, and the order Auto
+  // falls back in. Both come with the same /models call.
+  const [connections, setConnections] = useState([]);
+  const [order, setOrder] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   // The sign-in in flight: {state, status, error}. Null when none is running.
@@ -35,6 +39,8 @@ export function useModels(api) {
     try {
       const data = await api.listModels();
       setProviders(data.providers || []);
+      setConnections(data.connections || []);
+      setOrder(data.order || []);
       setError(null);
       return data.providers || [];
     } catch (problem) {
@@ -167,6 +173,56 @@ export function useModels(api) {
     setSignIn(null);
   }, []);
 
+  /* Connections. Each change is followed by a fresh /models, because a
+   * connection added, renamed, switched or keyed changes what the picker and
+   * the fallback order show. */
+  const addConnection = useCallback(
+    async (body) => {
+      const added = await api.addConnection(body);
+      await load();
+      return added;
+    },
+    [api, load],
+  );
+
+  const editConnection = useCallback(
+    async (id, patch) => {
+      await api.editConnection(id, patch);
+      await load();
+    },
+    [api, load],
+  );
+
+  const removeConnection = useCallback(
+    async (id) => {
+      await api.deleteConnection(id);
+      await load();
+    },
+    [api, load],
+  );
+
+  const setFallbackOrder = useCallback(
+    async (next) => {
+      setOrder(next); // optimistic: the list moves on the click
+      try {
+        const saved = await api.setProviderOrder(next);
+        setOrder(saved.order || next);
+      } catch (problem) {
+        await load();
+        throw problem;
+      }
+    },
+    [api, load],
+  );
+
+  const setAnthropicKey = useCallback(
+    async (key) => {
+      await api.setAnthropicKey(key);
+      await load();
+    },
+    [api, load],
+  );
+
   return {
     providers,
     loading,
@@ -179,5 +235,14 @@ export function useModels(api) {
     signIn,
     startSignIn,
     dismissSignIn,
+    connections,
+    order,
+    presets: () => api.connectionPresets(),
+    checkConnection: (body) => api.checkConnection(body),
+    addConnection,
+    editConnection,
+    removeConnection,
+    setFallbackOrder,
+    setAnthropicKey,
   };
 }

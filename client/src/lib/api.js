@@ -395,9 +395,10 @@ export function createApi(token, onUnauthorized = () => {}) {
       signal = undefined,
       // For a brand-new conversation only: "chat", "design" or "code", a design
       // standard chosen on the empty screen, and a code conversation's project
-      // folder. The server ignores all three once the session exists.
+      // folder, and the project a chat or design is filed in. The server
+      // ignores all four once the session exists.
       // `make` is per message: the composer's Make menu, or null for auto.
-      { mode = null, design = null, workspace = null, make = null } = {},
+      { mode = null, design = null, workspace = null, projectId = null, make = null } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -414,6 +415,7 @@ export function createApi(token, onUnauthorized = () => {}) {
           mode,
           design,
           workspace,
+          project_id: projectId,
           make,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to

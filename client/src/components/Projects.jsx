@@ -154,16 +154,21 @@ export function Projects({
   accentOf,
   seedOfRecord,
   onProjectAccent,
+  // Which kinds this space shows: Home keeps chat projects, Studio design
+  // and code ones. The tabs are only drawn when there is more than one.
+  kinds = ["chat", "design", "code"],
 }) {
   const { confirm } = useDialog();
-  const [tab, setTab] = useState(() => {
+  const tabs = TABS.filter((t) => kinds.includes(t.id));
+  const [picked, setTab] = useState(() => {
     try {
-      const saved = localStorage.getItem(TAB_KEY);
-      return TABS.some((t) => t.id === saved) ? saved : "chat";
+      return localStorage.getItem(TAB_KEY) || "chat";
     } catch {
       return "chat";
     }
   });
+  // The remembered tab, if this space has it; otherwise the space's first.
+  const tab = tabs.some((t) => t.id === picked) ? picked : tabs[0].id;
   const [name, setName] = useState("");
   // Which folder has its editor open. One at a time -- the popup overlays the
   // card, and two of them would be two dialogs fighting for the same corner.
@@ -540,7 +545,7 @@ export function Projects({
 
       <div className="page-body" style={{ flexDirection: "column" }}>
         <div className="page-col" style={{ alignSelf: "stretch" }}>
-          <div className="prj-tabs" role="tablist" aria-label="Kinds of project">
+          <div className="segmented prj-tabs" role="tablist" aria-label="Kinds of project">
             {TABS.map((t) => {
               const count = projects.filter((p) => kindOf(p) === t.id).length;
               return (

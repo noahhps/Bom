@@ -29,6 +29,8 @@ export function useChat(
     mode = "chat",
     design = null,
     workspace = null,
+    // The project a new chat or design is filed in, picked on the composer.
+    projectId = null,
   },
 ) {
   const [messages, setMessages] = useState([]);
@@ -121,6 +123,8 @@ export function useChat(
           // frame around nothing.
           .map((m) =>
             message(m.role, m.content, {
+              // Milliseconds since the epoch, as the server stores it.
+              sentAt: m.created_at,
               attachments: m.attachments,
               reasoning: m.reasoning || undefined,
               skills: m.skills?.length ? m.skills : undefined,
@@ -151,8 +155,11 @@ export function useChat(
       const controller = new AbortController();
       inFlight.current = controller;
 
-      const answer = message("assistant", "", { streaming: true });
-      const asked = message("user", text);
+      // Stamped here rather than waiting for the server's rows: the bubble is
+      // on screen now, and the server's clock is the same one to the second.
+      const now = Date.now();
+      const answer = message("assistant", "", { streaming: true, sentAt: now });
+      const asked = message("user", text, { sentAt: now });
       setMessages((prev) => [...prev, asked, answer]);
       jumpToEnd();
 
@@ -200,7 +207,14 @@ export function useChat(
           // and the look picked on its empty screen before anything was sent.
           // And, every message, what the Make menu pinned it to.
           {
-            ...(sessionId ? {} : { mode, design, workspace: mode === "code" ? workspace : null }),
+            ...(sessionId
+              ? {}
+              : {
+                  mode,
+                  design,
+                  workspace: mode === "code" ? workspace : null,
+                  projectId: mode === "code" ? null : projectId,
+                }),
             make: make && make !== "auto" ? make : null,
           },
         );
@@ -423,6 +437,7 @@ export function useChat(
       mode,
       design,
       workspace,
+      projectId,
       provider,
       schedule,
       sessionId,

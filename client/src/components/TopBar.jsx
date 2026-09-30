@@ -153,9 +153,13 @@ export function TopBar({
         </button>
       ) : null}
 
-      <button className="icon-btn" aria-label="New conversation" onClick={onNewSession}>
-        <Icon name="plus" />
-      </button>
+      {/* Not in an agent's chat: an agent has one chat, so there is no new
+          one to start. */}
+      {onNewSession ? (
+        <button className="icon-btn" aria-label="New conversation" onClick={onNewSession}>
+          <Icon name="plus" />
+        </button>
+      ) : null}
     </header>
   );
 }

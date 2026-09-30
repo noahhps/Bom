@@ -24,6 +24,21 @@ use server::ManagedServer;
 /// new-conversation screen with its composer set to that kind.
 const NEW_KINDS: &[(&str, &str)] = &[("new-chat", "chat"), ("new-code", "code"), ("new-design", "design")];
 
+/// The Dock icon, set from the bundled PNG. A built .app gets its icon from
+/// the bundle; `tauri dev` runs a bare binary, which the Dock draws generic.
+#[cfg(target_os = "macos")]
+fn set_dock_icon() {
+    use objc2::{AnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let data = NSData::with_bytes(include_bytes!("../icons/icon.png"));
+    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
+    }
+}
+
 /// The glass behind the rail.
 #[cfg(target_os = "macos")]
 fn apply_glass(window: &WebviewWindow) {
@@ -137,6 +152,9 @@ pub fn run() {
                 app.set_menu(menu)?;
             }
 
+            #[cfg(target_os = "macos")]
+            set_dock_icon();
+
             quickview::setup(handle);
             let bound = quickview::register(handle);
 
@@ -160,13 +178,11 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&open, &quick, &code, &design, &quit])?;
 
             TrayIconBuilder::with_id("bom-tray")
-                // The flower as a template image: black on transparent, so the
-                // menu bar tints it for light, dark and the highlighted state.
-                // The full-colour app icon is for the Dock, not for here. Next
-                // event and reachability replace this once there is a server
-                // to ask.
+                // The flower in its own colours, at 22pt (44px for retina). The
+                // petals read on both light and dark menu bars; the
+                // face is white. Next event and reachability replace this once
+                // there is a server to ask.
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
-                .icon_as_template(true)
                 .menu(&menu)
                 // macOS convention: the icon is a menu, not a button. Left
                 // click opening the window instead would make the menu

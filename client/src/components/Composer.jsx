@@ -9,7 +9,13 @@ import { swatchOf } from "../lib/theme";
 
 /**
  * The composer from artboard 1a: one rounded box, the text on its own line,
- * and a row of chips beneath it with the send button at the right.
+ * and a row beneath it with attaching at the left and effort and send at the
+ * right -- the controls that are about *this message*.
+ *
+ * What the message is *for* -- the kind of conversation, what to make, which
+ * agent, which project -- sits in a tray tucked under the box rather than in
+ * it. Those are set once and left, so they do not need to crowd the row the
+ * hand goes to on every send.
  *
  * The reasoning control is a three-way chip group rather than the old slider.
  * The design has no sliders in it, and three named states read faster than a
@@ -177,6 +183,32 @@ function MakeControl({ value, onChange, disabled }) {
   );
 }
 
+/* Which project a conversation goes in. Before the first message it rides
+   along with it (the server files the new conversation); after, choosing one
+   files it there straight away. */
+function ProjectControl({ projects, value, onChange, disabled }) {
+  const current = projects.find((p) => p.id === value) || null;
+  return (
+    <label className="composer-make composer-project" title="The project this conversation is filed in">
+      <span className="composer-agent-label mi">Project</span>
+      <span className="composer-agent-control">
+        <Icon name="folder" />
+        <select
+          value={current?.id || ""}
+          aria-label="Project"
+          disabled={disabled}
+          onChange={(event) => onChange?.(event.target.value || null)}
+        >
+          <option value="">None</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </span>
+    </label>
+  );
+}
+
 export function Composer({
   disabled,
   focusToken,
@@ -192,6 +224,9 @@ export function Composer({
   onMake = null,
   kind = null,
   onKind = null,
+  projects = [],
+  projectId = null,
+  onProject = null,
   placeholder = "Ask me. Task me.",
 }) {
   const [value, setValue] = useState("");
@@ -336,7 +371,12 @@ export function Composer({
   useLayoutEffect(() => {
     const node = form.current;
     if (!node) return undefined;
-    const box = node.querySelector(".composer-box");
+    // The box and the tray under it: the tray's controls are part of the
+    // composer, so a cursor on them is at the composer, not away from it.
+    // Measuring the box alone read a cursor on the tray as "leaving", and a
+    // click there then played the pop -- the composer bounced on every
+    // switch of Chat, Code and Design.
+    const box = node.querySelector(".composer-stack");
 
     // How far away the cursor starts having an effect, and how sharply it
     // ramps once it does. These are the two dials for the feel of the thing.
@@ -583,8 +623,11 @@ export function Composer({
   // Worth knowing this makes the flourish nearly unreachable: clicking the box
   // requires the pointer to be on it, and a pointer on it means proximity has
   // already raised it. A click is the wrong trigger for this animation.
-  const handleComposerClick = () => {
+  const handleComposerClick = (event) => {
     if (popping) return;
+    // Only a click on the box itself: choosing something in a control is not
+    // a request for the composer to present itself.
+    if (event.target.closest("button, select, label, input")) return;
     // Absent means the proximity effect never ran -- a touch screen, or
     // reduced motion -- where the composer is permanently present and there is
     // likewise nothing to pop out of.
@@ -603,44 +646,44 @@ export function Composer({
       data-dropping={dropping ? "" : undefined}
       data-popping={popping ? "" : undefined}
     >
-      <div className="composer-box">
-        <StagedAttachments items={staged} onRemove={unstage} />
+      {/* The box and the tray under it move as one: the stack is what slides
+          down out of the way and back up (see `.composer-stack`). */}
+      <div className="composer-stack">
+        <div className="composer-box">
+          <StagedAttachments items={staged} onRemove={unstage} />
 
-        <textarea
-          ref={input}
-          rows="1"
-          placeholder={placeholder}
-          autoComplete="off"
-          autoCapitalize="sentences"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter sends on a real keyboard; on a phone it should insert a
-            // newline -- there is nowhere else to put one.
-            const isTouch = window.matchMedia("(pointer: coarse)").matches;
-            if (event.key === "Enter" && !event.shiftKey && !isTouch) {
-              event.preventDefault();
-              form.current.requestSubmit();
-            }
-          }}
-        />
-
-        <div className="composer-row">
-          <input
-            ref={picker}
-            type="file"
-            multiple
-            hidden
-            onChange={(event) => {
-              stage(event.target.files);
-              // Cleared so picking the same file twice in a row still fires.
-              event.target.value = "";
+          <textarea
+            ref={input}
+            rows="1"
+            placeholder={placeholder}
+            autoComplete="off"
+            autoCapitalize="sentences"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter sends on a real keyboard; on a phone it should insert a
+              // newline -- there is nowhere else to put one.
+              const isTouch = window.matchMedia("(pointer: coarse)").matches;
+              if (event.key === "Enter" && !event.shiftKey && !isTouch) {
+                event.preventDefault();
+                form.current.requestSubmit();
+              }
             }}
           />
-          {/* One group, as tall as the send row it sits beside, so the two
-              line up on their centres -- and the part that gives way when the
-              composer is narrow, the conversation's name first. */}
-          <div className="composer-left-controls">
+
+          {/* This message: what goes with it, how hard to think, and send. */}
+          <div className="composer-row">
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              hidden
+              onChange={(event) => {
+                stage(event.target.files);
+                // Cleared so picking the same file twice in a row still fires.
+                event.target.value = "";
+              }}
+            />
             <button
               type="button"
               className="chip chip-icon"
@@ -652,44 +695,7 @@ export function Composer({
               <Icon name="attachment" />
             </button>
 
-            {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} /> : null}
-
-            {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
-
-            {sessionLabel ? (
-              <span className="chip composer-session" title={sessionLabel}>
-                {sessionLabel}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="spacer" />
-
-          <div className="composer-right-controls">
-            {agents.length > 0 ? (
-              <label className="composer-agent-picker">
-                <span className="composer-agent-label mi">Agent</span>
-                <span className="composer-agent-control">
-                  <i
-                    className="composer-agent-dot"
-                    aria-hidden="true"
-                    style={{
-                      background: selectedAgent ? agentColor(selectedAgent) : "var(--accent)",
-                    }}
-                  />
-                  <select
-                    value={agentId || ""}
-                    aria-label="Choose an agent for this conversation"
-                    onChange={(event) => onAgent?.(event.target.value || null)}
-                  >
-                    <option value="">None</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>{agent.name}</option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-            ) : null}
+            <div className="spacer" />
 
             <div className="composer-bottom-controls">
               <ThinkingControl
@@ -719,6 +725,60 @@ export function Composer({
             </div>
           </div>
         </div>
+
+        {/* The conversation: what kind it is, what to make, who answers and
+            where it is filed. Only what applies is drawn, and with nothing
+            to show the tray is not drawn at all. */}
+        {onKind || onMake || agents.length > 0 || onProject || sessionLabel ? (
+          <div className="composer-tray">
+            {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} /> : null}
+
+            {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
+
+            {agents.length > 0 ? (
+              <label className="composer-agent-picker">
+                <span className="composer-agent-label mi">Agent</span>
+                <span className="composer-agent-control">
+                  <i
+                    className="composer-agent-dot"
+                    aria-hidden="true"
+                    style={{
+                      background: selectedAgent ? agentColor(selectedAgent) : "var(--accent)",
+                    }}
+                  />
+                  <select
+                    value={agentId || ""}
+                    aria-label="Choose an agent for this conversation"
+                    onChange={(event) => onAgent?.(event.target.value || null)}
+                  >
+                    <option value="">None</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+            ) : null}
+
+            {onProject ? (
+              <ProjectControl
+                projects={projects}
+                value={projectId}
+                onChange={onProject}
+                disabled={disabled}
+              />
+            ) : null}
+
+            {sessionLabel ? (
+              <>
+                <span className="spacer" />
+                <span className="composer-session" title={sessionLabel}>
+                  {sessionLabel}
+                </span>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </form>
   );

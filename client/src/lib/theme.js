@@ -8,10 +8,10 @@
  * makes it swappable: hold the ladder, change the hue, and the app is dressed
  * in something else without a single rule in styles.css knowing about it.
  *
- * The ratios below were read back off the hand-picked hexes in styles.css, so
- * `cobalt` at full strength reproduces the palette this app shipped with to
- * within a rounding step. "Off" and "cobalt" agreeing is not a coincidence
- * worth losing -- it is the proof that the generator did not invent a look.
+ * The ratios below were read back off the hand-picked hexes in styles.css.
+ * What goes into the ladder is a petal (lib/petals.js): the hues the logo is
+ * drawn in are the hues the app can wear, and the static fallback tokens in
+ * styles.css are the cornflower petal run through this same ladder.
  *
  * What the generator does *not* do is the theatrical part. Apple Music's
  * colour is mostly one enormous soft field behind everything, and that is a
@@ -21,28 +21,43 @@
  */
 
 import { oklch, readable } from "./color";
+import { PETALS, PETAL_BY_ID, neighbours } from "./petals";
 
-// The ten accents on the swatch row. Hue in OKLCH degrees, chroma in OKLCH
+// The accents on the swatch row: the flower's eight petals, in the flower's
+// order, and one quiet grey for a chat that should not wear a colour but
+// should not be the bare sheet either. Hue in OKLCH degrees, chroma in OKLCH
 // units -- roughly 0.03 is a tinted grey, 0.22 is about as saturated as sRGB
 // goes at these lightnesses.
 //
-// `cobalt` is measured from #1f4fd8, the accent this app has always used, so
-// picking it is genuinely a return to the original rather than an
-// approximation of it.
+// Picking an accent is picking a petal. The row used to be ten muted cousins
+// of these hues at two thirds of their chroma, which is why the logo looked
+// pasted onto the app beside it.
 export const PRESETS = [
-  { id: "cobalt", name: "Cobalt", hue: 264.5, chroma: 0.216 },
-  { id: "midnight", name: "Midnight", hue: 258, chroma: 0.105 },
-  { id: "iris", name: "Iris", hue: 300, chroma: 0.15 },
-  { id: "mauve", name: "Mauve", hue: 350, chroma: 0.08 },
-  { id: "rose", name: "Rose", hue: 15, chroma: 0.135 },
-  { id: "ember", name: "Ember", hue: 45, chroma: 0.16 },
-  { id: "brass", name: "Brass", hue: 92, chroma: 0.13 },
-  { id: "fern", name: "Fern", hue: 152, chroma: 0.115 },
-  { id: "teal", name: "Teal", hue: 195, chroma: 0.11 },
+  ...PETALS.map(({ id, name, hue, chroma, hex }) => ({ id, name, hue, chroma, hex })),
   { id: "slate", name: "Slate", hue: 250, chroma: 0.032 },
 ];
 
 const BY_ID = new Map(PRESETS.map((preset) => [preset.id, preset]));
+
+// The ids the old swatch row saved, pointed at the petal each one was a muted
+// copy of, so an accent someone chose before the palette changed still
+// resolves -- to the petal on the same side of the wheel -- instead of
+// silently falling to "no colour".
+const LEGACY = {
+  cobalt: "cornflower",
+  midnight: "cornflower",
+  iris: "violet",
+  mauve: "orchid",
+  rose: "poppy",
+  ember: "marigold",
+  brass: "buttercup",
+  teal: "lagoon",
+};
+
+const presetOf = (id) => BY_ID.get(id) || BY_ID.get(LEGACY[id]);
+
+/** A saved preset id as it reads today -- "cobalt" is "cornflower" now. */
+export const canonicalPreset = (id) => presetOf(id)?.id ?? id;
 
 // How much colour, from a hairline to the full wash. The shipped palette sits
 // at about 0.31 on this scale; the default is deliberately above it, because
@@ -56,10 +71,14 @@ export const DEFAULT_ACCENT = { mode: "auto", strength: DEFAULT_STRENGTH };
 export function seedOf(accent, fallback = null) {
   if (!accent || accent.mode === "off") return null;
   if (accent.mode === "custom") {
-    return { hue: accent.hue ?? 264.5, chroma: accent.chroma ?? 0.14 };
+    const fallbackPetal = PETAL_BY_ID.get("cornflower");
+    return {
+      hue: accent.hue ?? fallbackPetal.hue,
+      chroma: accent.chroma ?? fallbackPetal.chroma,
+    };
   }
   if (accent.mode === "preset") {
-    const preset = BY_ID.get(accent.preset);
+    const preset = presetOf(accent.preset);
     return preset ? { hue: preset.hue, chroma: preset.chroma } : null;
   }
   // auto: the caller works the hue out from the conversation and hands it in.
@@ -91,29 +110,30 @@ const LADDER = {
   wash: [0.9431, 0.085],
 };
 
-/* The same rungs for dark mode, drawn in Vercel's dark language rather than
- * read off the light sheet: near-black neutrals a step apart (#000 behind,
- * #0a0a0a and #111 for what sits on it), hairlines that are barely there, and
- * text at #ededed. The chroma fractions are a fraction of the light ladder's,
- * so an accent tints the dark as a trace rather than a cast -- Vercel's greys
- * are greys, and the hue belongs to the things you act on and to the glow
- * behind the sheet, not to every surface. */
+/* The same rungs for dark mode: a deep, tinted night rather than black.
+ *
+ * This used to be Vercel's dark language -- #000 behind, #0a0a0a and #111 on
+ * top, greys that are greys -- which is the one setting the flower looks most
+ * like a sticker on. The petals need somewhere to glow, so the ground is
+ * lifted off black to about L 0.23 and every surface carries a trace of the
+ * accent's hue: a cornflower chat is a blue-violet dusk, a marigold one a warm
+ * dark. Text still goes through `readable()`, so the lift costs no contrast. */
 const LADDER_DARK = {
-  ground: [0.1448, 0.02],
-  surface: [0.1776, 0.02],
-  shell: [0.0, 0.0],
-  menu: [0.1776, 0.03],
-  "menu-well": [0.2178, 0.035],
-  rail: [0.1448, 0.02],
-  "grid-line": [0.1776, 0.03],
-  line: [0.2809, 0.035],
-  "line-soft": [0.2393, 0.03],
-  "line-firm": [0.3211, 0.04],
-  "line-strong": [0.3904, 0.05],
-  ink: [0.9491, 0.012],
-  "accent-soft": [0.72, 0.8],
-  field: [0.1985, 0.11],
-  wash: [0.1776, 0.08],
+  ground: [0.235, 0.1],
+  surface: [0.27, 0.1],
+  shell: [0.205, 0.11],
+  menu: [0.27, 0.1],
+  "menu-well": [0.31, 0.11],
+  rail: [0.235, 0.1],
+  "grid-line": [0.29, 0.11],
+  line: [0.37, 0.11],
+  "line-soft": [0.33, 0.1],
+  "line-firm": [0.41, 0.12],
+  "line-strong": [0.48, 0.13],
+  ink: [0.955, 0.015],
+  "accent-soft": [0.74, 0.85],
+  field: [0.33, 0.2],
+  wash: [0.3, 0.15],
 };
 
 /**
@@ -141,6 +161,9 @@ export function palette(accent, fallbackSeed = null, mode = "light") {
     return oklch(lightness, chroma * fraction * spread, hue);
   };
 
+  // A grey accent keeps grey neighbours: slate should not bloom.
+  const reach = Math.min(1, chroma / 0.1);
+  const [before, after] = neighbours(hue);
   const ground = tone("ground");
   // Three colours that carry text, and therefore the three that get checked
   // rather than chosen. 5.5:1 for the accent because it is also a link and a
@@ -186,15 +209,15 @@ export function palette(accent, fallbackSeed = null, mode = "light") {
     "--text-dim": dim,
     "--text-faint": faint,
 
-    /* The ambient field, which is the part that actually looks like the
-     * reference. Three soft discs of colour behind everything: one large and
-     * mid-toned low on the sheet, one deeper and offset in hue, one pale and
-     * turned the other way. Their hues are pulled apart by about 25 degrees
-     * each so the wash has somewhere to go -- a single-hue blur reads as a
-     * cast over the screen rather than as light coming from somewhere. */
+    /* The ambient field: three soft discs of colour behind everything, and
+     * they are petals. The accent's own in the middle, and the petal either
+     * side of it on the flower in the other two -- so a cornflower chat has
+     * lagoon and violet at its edges, the way the logo's blue petal sits
+     * between its teal and its violet. A single-hue blur reads as a cast
+     * over the screen; neighbouring petals read as the flower's light. */
     "--aura-1": oklch(0.845, chroma * 0.95, hue),
-    "--aura-2": oklch(0.755, chroma * 1.15, hue + 26),
-    "--aura-3": oklch(0.905, chroma * 0.72, hue - 32),
+    "--aura-2": oklch(0.8, before.chroma * reach * 1.05, before.hue),
+    "--aura-3": oklch(0.88, after.chroma * reach * 0.85, after.hue),
     // Kept under two thirds even at full strength. The fields sit behind the
     // thread, and past that they stop being light on a sheet and start being
     // a background the text has to fight.
@@ -207,9 +230,9 @@ export function palette(accent, fallbackSeed = null, mode = "light") {
 
 /* The dark ladder. Same tokens, same checks, a different ground: every colour
  * that carries text is searched for against the dark sheet, upwards, and the
- * glow behind it is kept low and deep so it reads as light from somewhere off
- * screen -- the soft gradient Vercel lets bleed behind a black page -- rather
- * than as a coloured fog over the conversation. */
+ * glow behind it is the flower's petals seen at night -- the accent and its
+ * two neighbours, deep enough to read as light from somewhere off screen
+ * rather than as a coloured fog over the conversation. */
 function darkPalette(seed, accent) {
   const { hue, chroma } = seed;
   const strength = clampStrength(accent?.strength);
@@ -219,13 +242,14 @@ function darkPalette(seed, accent) {
     return oklch(lightness, chroma * fraction * spread, hue);
   };
 
+  const reach = Math.min(1, chroma / 0.1);
+  const [before, after] = neighbours(hue);
   const ground = tone("ground");
-  // Links and marks: light enough to read on #0a0a0a at 5.5:1, which lands
-  // near Vercel's own dark-mode blue for the cobalt accent.
+  // Links and marks: light enough to read on the dark ground at 5.5:1.
   const accentColour = readable(hue, chroma, ground, 5.5, 0.6);
   const accentHover = readable(hue, chroma, ground, 8, 0.7);
   // Buttons and the send control: the darkest step that still carries white
-  // text at 4.5:1, like Vercel's filled blue on black.
+  // text at 4.5:1.
   const accentFill = readable(hue, chroma, "#ffffff", 4.5, 0.62);
   const dim = readable(hue, chroma * 0.03 * spread, ground, 7, 0.62);
   const faint = readable(hue, chroma * 0.03 * spread, ground, 5, 0.55);
@@ -251,12 +275,12 @@ function darkPalette(seed, accent) {
     "--line-strong": tone("line-strong"),
     "--text-dim": dim,
     "--text-faint": faint,
-    "--aura-1": oklch(0.42, chroma * 1.0, hue),
-    "--aura-2": oklch(0.36, chroma * 1.1, hue + 26),
-    "--aura-3": oklch(0.46, chroma * 0.8, hue - 32),
-    // Lower than the light sheet's: a glow on black carries much further than
-    // a tint on white, and past this it stops being a glow.
-    "--aura-opacity": (0.08 + 0.3 * strength).toFixed(3),
+    "--aura-1": oklch(0.5, chroma * 1.0, hue),
+    "--aura-2": oklch(0.46, before.chroma * reach * 1.05, before.hue),
+    "--aura-3": oklch(0.54, after.chroma * reach * 0.9, after.hue),
+    // Lower than the light sheet's: a glow on a dark ground carries further
+    // than a tint on white, and past this it stops being a glow.
+    "--aura-opacity": (0.12 + 0.36 * strength).toFixed(3),
     "--accent-pure": oklch(0.66, chroma, hue),
   };
 }
@@ -281,7 +305,7 @@ export function swatchOf(accent, fallbackSeed = null) {
  * clean, or the sheet keeps whichever tokens the new palette happens not to
  * mention. Every key this module can emit is in `ALL_TOKENS` for exactly that.
  */
-export const ALL_TOKENS = Object.keys(palette({ mode: "preset", preset: "cobalt" }));
+export const ALL_TOKENS = Object.keys(palette({ mode: "preset", preset: "cornflower" }));
 
 export function applyPalette(element, tokens) {
   if (!element) return;

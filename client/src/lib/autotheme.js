@@ -18,9 +18,17 @@
  */
 
 import { hashPick } from "./color";
+import { PETAL_BY_ID } from "./petals";
 import { PRESETS } from "./theme";
 
-/* Each field is a hue, a chroma, and the words that point at it.
+// A field wears a petal: the subject picks which part of the flower a
+// conversation is, so an auto accent is always one of the logo's colours.
+const petal = (id) => {
+  const { hue, chroma } = PETAL_BY_ID.get(id);
+  return { hue, chroma };
+};
+
+/* Each field is a petal -- a hue and a chroma -- and the words that point at it.
  *
  * Stems, matched as prefixes: "deploy" catches deploys, deployed and
  * deployment, and writing all three would be three chances to miss one. Short
@@ -29,64 +37,55 @@ import { PRESETS } from "./theme";
 const FIELDS = [
   {
     id: "engineering",
-    hue: 264.5,
-    chroma: 0.2,
+    ...petal("cornflower"),
     stems: "code coding function bug debug api server deploy python javascript typescript react component compile database query git commit refactor stack docker npm endpoint runtime regex terminal repo",
     exact: "app css html sql json build test ci rust go java",
   },
   {
     id: "writing",
-    hue: 40,
-    chroma: 0.1,
+    ...petal("marigold"),
     stems: "essay draft paragraph chapter novel poem poetry prose manuscript editor rewrite narrative sentence wording headline blog newsletter script",
     exact: "book edit tone title",
   },
   {
     id: "money",
-    hue: 152,
-    chroma: 0.12,
+    ...petal("fern"),
     stems: "invoice budget salary revenue expense pricing invest portfolio mortgage payroll accounting refund subscription earnings",
     exact: "tax cost price cash bank loan fees",
   },
   {
     id: "health",
-    hue: 178,
-    chroma: 0.1,
+    ...petal("lagoon"),
     stems: "doctor exercise workout symptom nutrition protein injury therapy medication dentist recovery training clinic surgery",
     exact: "sleep diet gym pain sick knee back",
   },
   {
     id: "music",
-    hue: 330,
-    chroma: 0.115,
+    ...petal("orchid"),
     stems: "album guitar chord lyric melody playlist concert singer instrument painting drawing gallery sketch design illustration",
     exact: "song band art film movie",
   },
   {
     id: "travel",
-    hue: 218,
-    chroma: 0.13,
+    ...petal("lagoon"),
     stems: "flight hotel itinerary passport airport booking airline luggage boarding station tourist",
     exact: "trip visa city train ferry",
   },
   {
     id: "food",
-    hue: 55,
-    chroma: 0.155,
+    ...petal("marigold"),
     stems: "recipe cooking baking dinner ingredient sauce kitchen roasted marinade breakfast restaurant sourdough pasta risotto seasoning",
     exact: "oven meal dough herbs pan bread flour salad soup roast",
   },
   {
     id: "science",
-    hue: 288,
-    chroma: 0.145,
+    ...petal("violet"),
     stems: "physics quantum astronomy galaxy molecule theorem experiment chemistry genome equation particle telescope hypothesis",
     exact: "orbit atom lab",
   },
   {
     id: "nature",
-    hue: 140,
-    chroma: 0.125,
+    ...petal("fern"),
     stems: "garden planting forest weather mountain wildlife hiking harvest compost seedling climate",
     exact: "tree soil bird lake trail rain snow",
   },
@@ -99,15 +98,13 @@ const FIELDS = [
   },
   {
     id: "security",
-    hue: 28,
-    chroma: 0.155,
+    ...petal("poppy"),
     stems: "security vulnerability breach exploit password credential firewall phishing encryption malware attacker",
     exact: "threat token leak audit",
   },
   {
     id: "learning",
-    hue: 95,
-    chroma: 0.13,
+    ...petal("buttercup"),
     stems: "study studying lecture homework tutorial revision curriculum semester textbook flashcard vocabulary grammar",
     exact: "exam class learn course quiz",
   },

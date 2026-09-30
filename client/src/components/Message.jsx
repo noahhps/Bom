@@ -3,6 +3,7 @@ import { Fragment, memo, useMemo } from "react";
 import { useReveal } from "../hooks/useReveal";
 import { workingWord } from "../lib/skillWidgets";
 import { turnTimeline } from "../lib/timeline";
+import { AgentWear } from "./AgentAvatar";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
 import { Decode } from "./Decode";
@@ -10,6 +11,33 @@ import { DesignChoice } from "./DesignChoice";
 import { Reasoning } from "./Reasoning";
 import { SkillApproval } from "./SkillApproval";
 import { SkillTrace } from "./SkillTrace";
+
+/* When a turn was sent, as a person would say it: the time alone for today,
+ * the day and time for earlier this year, the full date past that. The whole
+ * date and time is the tooltip, and `dateTime` carries it for a machine. */
+const TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const YEAR = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+const FULL = new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "short" });
+
+function SentAt({ at }) {
+  if (!at) return null;
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) return null;
+  const now = new Date();
+  const clock = TIME.format(when);
+  const label =
+    when.toDateString() === now.toDateString()
+      ? clock
+      : when.getFullYear() === now.getFullYear()
+        ? `${DAY.format(when)}, ${clock}`
+        : `${YEAR.format(when)}, ${clock}`;
+  return (
+    <time className="turn-time" dateTime={when.toISOString()} title={FULL.format(when)}>
+      {label}
+    </time>
+  );
+}
 
 /* One stretch of the answer's words. Its own component so each stretch
  * keeps its own fade-in state: only the one still being written is live. */
@@ -53,6 +81,8 @@ export const Message = memo(function Message({
   continuable,
   model,
   pin = null,
+  sentAt,
+  look = null,
 }) {
   // The answer in the order it happened: thinking, skills and words as they
   // came, rather than all the thinking, then all the skills, then the words.
@@ -69,6 +99,7 @@ export const Message = memo(function Message({
           {/* A turn can be nothing but a dropped file, in which case there is
               no bubble to draw -- only what was attached. */}
           {content ? <div className="bubble">{content}</div> : null}
+          <SentAt at={sentAt} />
         </div>
       </div>
     );
@@ -77,7 +108,8 @@ export const Message = memo(function Message({
   if (role === "error") {
     return (
       <div className="turn-error">
-        {content}
+        <AgentFlower open mark size={26} mood="down" className="turn-error-mark" />
+        <span className="turn-error-text">{content}</span>
         {continuable && onContinue ? (
           <button type="button" className="continue-btn" onClick={onContinue}>
             Continue
@@ -90,6 +122,7 @@ export const Message = memo(function Message({
   return (
     <div className="turn-answer">
       <div className="margin">
+        <SentAt at={sentAt} />
         {model ? (
           <>
             <span className="mi">Answered by</span>
@@ -119,6 +152,9 @@ export const Message = memo(function Message({
 
       <div className="answer">
         <AgentFlower open={Boolean(streaming)} />
+        {/* In an agent's room the answering flower is the agent, so it wears
+            what the agent wears. */}
+        <AgentWear look={look} className="answer-wear" />
 
         {parts.map((part, index) => {
           const last = index === parts.length - 1;

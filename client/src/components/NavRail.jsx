@@ -31,12 +31,12 @@ import { swatchOf } from "../lib/theme";
 const LIST_KEY = "unified-llm-rail-list-open";
 
 // The conversations are not in this list: they are a group with the list
-// folded under it, drawn by `RailGroup` above the plain destinations.
+// folded under it, drawn by `RailGroup` below the plain destinations.
 const DESTINATIONS = [
   { id: "projects", label: "Projects", icon: "folder" },
+  { id: "skills", label: "Skills", icon: "skills" },
   // The design.md files designs are held to.
   { id: "standards", label: "Standards", icon: "design" },
-  { id: "skills", label: "Skills", icon: "skills" },
   { id: "agents", label: "Agents", icon: "agents" },
   // Memory and Settings are not here: they are screens of the settings
   // window, behind the gear at the top right of the app bar.
@@ -126,7 +126,7 @@ function RailGroup({
 }) {
   const listId = `navrail-${id}-list`;
   return (
-    <div className="navrail-group" data-group={id}>
+    <div className="navrail-group" data-group={id} data-area={id}>
       <button
         type="button"
         className="navrail-section"
@@ -376,6 +376,26 @@ export function NavRail({
         </div>
 
         <div className="navrail-dest">
+          {/* The app's pages first, then the conversations -- the list is the
+              one part of the rail that grows, so it goes last, where it can
+              run on without pushing the pages out of reach. */}
+          {DESTINATIONS.map((destination) => (
+            <button
+              key={destination.id}
+              type="button"
+              data-area={destination.id}
+              aria-current={view === destination.id ? "page" : undefined}
+              onClick={() => onView(destination.id)}
+            >
+              <Icon name={destination.icon} />
+              <Label label={destination.label} />
+            </button>
+          ))}
+
+          {/* The line between the app's pages and the conversations: the
+              pages are places you go, the list below is things you made. */}
+          <hr className="navrail-rule" aria-hidden="true" />
+
           {/* Every conversation -- chats, designs and code sessions -- in one
               list, newest first. A design or a code session wears its glyph at
               the left, so the three can be told apart at a glance; which kind
@@ -433,22 +453,15 @@ export function NavRail({
             </ul>
           </RailGroup>
 
-          {DESTINATIONS.map((destination) => (
-            <button
-              key={destination.id}
-              type="button"
-              aria-current={view === destination.id ? "page" : undefined}
-              onClick={() => onView(destination.id)}
-            >
-              <Icon name={destination.icon} />
-              <Label label={destination.label} />
-            </button>
-          ))}
         </div>
 
         <div className="spacer" />
 
         <div className="navrail-foot">
+          {/* The connection is the flower, small: bright when the local model
+              is answering, drooping when a cloud backend has taken over, grey
+              with its eyes shut when nothing can answer. It was a green dot,
+              which said the same thing in a colour the logo never uses. */}
           <button
             type="button"
             className="navrail-circle navrail-dot"
@@ -458,7 +471,9 @@ export function NavRail({
             aria-label={`Answering with ${label} — change`}
             title={label}
             onClick={() => setMenuOpen((was) => !was)}
-          />
+          >
+            <AgentFlower open mark size={24} mood={tone} />
+          </button>
           <span className="navrail-status" aria-hidden="true">
             {label}
           </span>

@@ -104,6 +104,9 @@ def test_agent_instructions_go_into_the_system_prompt(store: Store):
     prompt_after, _ = orch.build_system_prompt(sid)
     assert prompt_after.startswith("You are Bom.")
     assert "Cite every claim." in prompt_after
+    # It is told its own name, ahead of its instructions.
+    assert "you are Researcher" in prompt_after
+    assert prompt_after.index("you are Researcher") < prompt_after.index("Cite every claim.")
 
 
 def test_skill_schemas_narrow_to_the_agents_subset(store: Store):
@@ -180,7 +183,8 @@ def test_preset_skills_are_all_real_skill_names(client: TestClient):
     registered = {s["name"] for s in client.get("/api/skills").json()["skills"]}
     presets = client.get("/api/agents/presets").json()["presets"]
     for preset in presets:
-        for name in preset["skills"]:
+        # None is "every enabled skill" -- nothing to check by name.
+        for name in preset["skills"] or []:
             assert name in registered, f"{preset['id']} names unknown skill {name!r}"
 
 
@@ -213,3 +217,34 @@ def test_agent_routes_404_on_missing(client: TestClient):
         client.put(f"/api/sessions/{sid}/agent", json={"agent_id": "agt_nope"}).status_code
         == 404
     )
+
+
+def test_agent_look_round_trips_and_clears(client: TestClient):
+    created = client.post(
+        "/api/agents",
+        json={"name": "Coder", "look": {"hat": "beanie", "item": "headphones"}},
+    )
+    assert created.status_code == 200
+    agent = created.json()
+    assert agent["look"] == {"hat": "beanie", "item": "headphones"}
+
+    # A partial look replaces the whole look -- the pair is chosen together.
+    changed = client.patch(f"/api/agents/{agent['id']}", json={"look": {"hat": "beret"}})
+    assert changed.json()["look"] == {"hat": "beret"}
+
+    # Leaving it out leaves it alone; null takes it off.
+    renamed = client.patch(f"/api/agents/{agent['id']}", json={"name": "Coder 2"})
+    assert renamed.json()["look"] == {"hat": "beret"}
+    bare = client.patch(f"/api/agents/{agent['id']}", json={"look": None})
+    assert bare.json()["look"] is None
+
+
+def test_agent_rejects_a_malformed_accessory_name(client: TestClient):
+    response = client.post("/api/agents", json={"name": "X", "look": {"hat": "Top Hat!"}})
+    assert response.status_code == 422
+
+
+def test_presets_carry_a_look_and_a_tagline(client: TestClient):
+    for preset in client.get("/api/agents/presets").json()["presets"]:
+        assert preset["tagline"]
+        assert preset["look"].get("hat") or preset["look"].get("item")

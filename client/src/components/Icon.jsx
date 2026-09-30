@@ -43,7 +43,6 @@ import {
   IconPin,
   IconPlayerPlay,
   IconPinned,
-  IconPlayerStop,
   IconPlus,
   IconPresentation,
   IconPuzzle,
@@ -55,6 +54,8 @@ import {
   IconTerminal2,
   IconTool,
   IconTopologyStar3,
+  IconOctagonFilled,
+  IconTrash,
   IconUserCircle,
   IconUsers,
   IconWorld,
@@ -68,7 +69,9 @@ const GLYPHS = {
   plus: IconPlus,
   close: IconX,
   send: IconArrowRight,
-  stop: IconPlayerStop,
+  // A stop sign: the octagon, filled -- the shape reads as "stop" where a
+  // square reads as a media control.
+  stop: IconOctagonFilled,
   // Sliders rather than a cog: "the things you can set", and no teeth to turn
   // to mush at rail size.
   settings: IconAdjustmentsHorizontal,
@@ -124,6 +127,7 @@ const GLYPHS = {
   // Which MCP server a tool came from, for the few whose sites offer no logo
   // (see ServiceIcon) and the small inline tags.
   mail: IconMail,
+  trash: IconTrash,
   design: IconPalette,
   apps: IconApps,
   device_hub: IconTopologyStar3,

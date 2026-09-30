@@ -12,3 +12,14 @@ export async function listenForNew(handler) {
   const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
   return getCurrentWebviewWindow().listen("bom://new", (event) => handler(event.payload));
 }
+
+/* Bom ▸ Settings… (⌘,) in the desktop app's menu bar. The menu owns ⌘, once
+ * it has the item, so the page's own key handler never sees the keystroke --
+ * this is how the settings window opens from the keyboard in the app.
+ *
+ * Resolves to an unlisten; does nothing in a browser. */
+export async function listenForSettings(handler) {
+  if (!isDesktop()) return () => {};
+  const { getCurrentWebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+  return getCurrentWebviewWindow().listen("bom://settings", () => handler());
+}

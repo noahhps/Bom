@@ -608,10 +608,13 @@ svg {
   height: 44px;
   flex: none;
   padding: 0 12px;
-  background: rgba(255, 255, 255, 0.72);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
-  border-bottom: 1px solid var(--line-solid);
+  /* The sheet's colour -- what `.screen` paints the conversation on (it sets
+     its own ground to `--sheet`) -- so the bar and the conversation under
+     it are one surface, in either theme. (It was a fixed translucent white,
+     which stayed white in the dark theme.) */
+  background: var(--sheet);
+  transition: background-color var(--accent-motion);
+  /* No rule under it: the bar and the sheet below meet on their fills. */
   user-select: none;
   -webkit-user-select: none;
 }
@@ -635,6 +638,23 @@ html[data-shell][data-fullscreen] .appbar { padding-left: 12px; }
   outline: none;
   box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 4px var(--accent);
 }
+
+/* Home and Studio, beside the sidebar toggle: the segmented control, sized
+   down to sit in the 44px bar -- 26px options in a 2px track, 32px in all --
+   and centred on the bar like the toggle and the window's buttons.
+   `.segmented` pins itself to the top of its row (right on a page, where it
+   heads the content); here that left it 3px under the bar's top edge and 9px
+   over its bottom. */
+/* Scoped under `.appbar` so it outranks `.segmented`, which comes later in
+   the sheet at the same weight and would otherwise win. */
+.appbar .appbar-spaces { padding: 2px; align-self: center; }
+.appbar .appbar-spaces > button {
+  height: 26px;
+  padding: 0 11px;
+  gap: 6px;
+  font-size: var(--t-xs);
+}
+.appbar .appbar-spaces svg { width: 14px; height: 14px; }
 
 /* -- the sidebar, a solid surface -------------------------------------------
  *
@@ -960,7 +980,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
   flex: 1;
   min-width: 0;
-  font: 500 calc(var(--t-xl) * 0.8)/1 var(--font);
+  font: 600 15px/1 var(--font);
   letter-spacing: var(--track-display);
   text-transform: none;
   text-overflow: ellipsis;
@@ -1042,25 +1062,24 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 
 /* Open, it becomes a full-width row again -- there is a label to sit beside
    now, so hugging the text would leave the name floating off the pill. */
-/* A 16px label -- 1.2x the reading size, so the app's pages are the
-   easiest thing in the rail to read -- in a compact 34px row, so the
-   highlight hugs the word rather than standing in a tall band. The glyph stays
+/* A 14px label in a compact 30px row, so the highlight hugs the word
+   rather than standing in a tall band. The glyph stays
    the sheet's 18px, at the sheet's stroke. */
 .navrail[data-open] .navrail-dest > button,
 .navrail[data-open] .navrail-group > .navrail-section {
-  min-height: 34px;
+  min-height: 30px;
   width: 100%;
   align-self: stretch;
   border-radius: var(--r-pill);
   justify-content: flex-start;
-  padding: 6px 10px;
+  padding: 5px 10px;
 }
 
 /* An open rail is a list of destinations, and a list is read in sentence case
    at reading size. The 9.5px tracked-out machine label is right for a caption
    under a chart and wrong for the primary navigation of the app. */
 .navrail[data-open] .lbl-h {
-  font: 400 calc(var(--t-md) * 1.2)/1.3 var(--font);
+  font: 400 14px/1.3 var(--font);
   letter-spacing: var(--track-body);
   text-transform: none;
 }
@@ -1083,15 +1102,15 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    well would have the glyph breathe on every hover for no reason. */
 .navrail-dest button > svg,
 .navrail-group > .navrail-section > svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   opacity: 1;
   margin-right: 0;
   transition: margin-right var(--rail-motion);
 }
 .navrail[data-open] .navrail-dest button > svg,
 .navrail[data-open] .navrail-group > .navrail-section > svg {
-  margin-right: 10px;
+  margin-right: 9px;
 }
 
 /* `.lbl-v`, the sideways copy of each name, used to live here. It was what the
@@ -1243,7 +1262,9 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: grid;
   /* One column when the sheet is narrow, more as it widens. Keyed off the
      column rather than the window, since the rail's width changes this. */
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* 360px at the least: room for a card's row of actions with every label
+     showing (a code card's four need about 330px inside the card). */
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -1325,9 +1346,39 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 .prj-popover-row input:focus { outline: none; border-color: var(--accent); }
 
-.prj-actions { display: flex; gap: 12px; padding-top: 2px; }
-.prj-actions button { color: var(--accent); }
-.prj-actions button:hover { color: var(--accent-hover); }
+/* A card's actions, as buttons (Projects.jsx `Action`): an icon and a label
+   in a small pill. The main one is filled in the accent -- "act here" -- the
+   rest are grey, and delete sits at the far end in the danger colour. */
+.prj-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 2px;
+}
+.prj-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--ink);
+  font: 500 var(--t-xs)/1 var(--font);
+  letter-spacing: var(--track-body);
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.prj-action svg { width: 14px; height: 14px; flex: none; }
+.prj-action:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.1); }
+.prj-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prj-action[data-tone="primary"] { background: var(--accent-fill); color: var(--on-accent); }
+.prj-action[data-tone="primary"]:hover:not(:disabled) { background: var(--accent-hover); }
+.prj-action[data-tone="danger"] { margin-left: auto; background: none; color: var(--danger); }
+.prj-action[data-tone="danger"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
 
 /* Filing the open conversation, in the top bar. */
 /* Project and Agent: one pill each, label and value inside the same outline,
@@ -2221,7 +2272,32 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   /* Left padding matches the thread's, so the title sits over the first
      character of the conversation rather than over the old menu button. */
   padding: 0 22px 0 34px;
-  border-bottom: 1px solid var(--line-soft);
+  /* No rule under the title -- a fade instead (below). Positioned and
+     raised so the fade lies over the thread scrolling beneath it. */
+  position: relative;
+  z-index: 4;
+}
+
+/* The divide between the title and the conversation, as a fade rather than
+   a line: 35px from the sheet's own colour to nothing, hanging just under
+   the title row, so text scrolling up dissolves into the header instead of
+   being cut off at an edge. Never in the way of a click. On an empty,
+   glassy screen the ground is transparent and the fade vanishes with it --
+   there is nothing scrolling there to soften. */
+:is(.topbar, .agent-chat-head)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 35px;
+  /* Solid for its first quarter, then fading: the divide starts a little
+     below the title rather than right at it. */
+  background: linear-gradient(
+    var(--ground) 25%,
+    color-mix(in srgb, var(--ground) 0%, transparent)
+  );
+  pointer-events: none;
 }
 
 .topbar .title {
@@ -3445,6 +3521,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 .send:not(:disabled):hover { transform: scale(1.08); }
 .send svg { width: 15px; height: 15px; }
+/* Tabler's filled glyphs (the stop sign) are drawn by fill, not stroke; the
+   sheet's `svg` rule would otherwise outline them. */
+.tabler-icon[class*="-filled"] { fill: currentColor; stroke: none; }
+.send .tabler-icon-octagon-filled { width: 14px; height: 14px; }
 .send:disabled { opacity: 0.35; cursor: default; }
 
 /* The budget slider, for a model that takes a token count rather than a word.
@@ -5537,15 +5617,22 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .navrail-group { position: relative; }
 .navrail[data-open] .navrail-group > .navrail-section { padding-right: 40px; }
 
+/* Centred on the section's 30px row -- (30 - 24) / 2 from its top -- and
+   inset 10px from its end, the same inset as the rule above it and the
+   row's own padding on the left, so the chevron and its hover plate line
+   up with the rest of the rail rather than sitting low and against the
+   edge.
+   Positioned against the group (the row and its list), so the offset is
+   from the row's top, not a percentage of the whole group. */
 .navrail-fold {
   position: absolute;
-  top: 5px;
-  right: 4px;
-  width: 26px;
-  height: 26px;
+  top: 3px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
   display: none;
   place-items: center;
-  border-radius: var(--r-card);
+  border-radius: var(--r-pill);
   color: var(--text-faint);
   transition: background 0.14s ease, color 0.14s ease;
 }
@@ -5582,29 +5669,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
    The group keeps a floor, so on a very short window it holds a few rows and
    the column scrolls as a whole, as it did before. */
-/* Home and Studio, at the head of the rail (see NavRail's SPACES). The
-   segmented control, full width while the rail is open; shut, a column of
-   the two glyphs, like everything else in a shut rail. Pulled up toward the
-   logo, which the panel's 28px gap would otherwise hold it away from. */
-.navrail-spaces {
-  display: flex;
-  width: 100%;
-  margin-top: -12px;
-}
-.navrail-spaces > button {
-  flex: 1;
-  justify-content: center;
-  height: 32px;
-  padding: 0 10px;
-}
-.navrail:not([data-open]) .navrail-spaces {
-  flex-direction: column;
-  width: auto;
-  align-self: center;
-}
-.navrail:not([data-open]) .navrail-spaces > button { flex: none; padding: 0 8px; }
-.navrail:not([data-open]) .navrail-space-label { display: none; }
-
 /* The rule between the pages and the conversations. A soft, round-ended
    line rather than a border: shut it is as wide as the icons, open it runs
    the width of the rows. */
@@ -7507,9 +7571,30 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
 .prj-none { color: var(--text-dim); max-width: 60ch; }
 
 .prj-sub { color: var(--text-faint); padding: 4px 8px 0; }
-.prj-actions { flex-wrap: wrap; row-gap: 6px; }
+/* One row, with Delete at its far end. A card's width follows the window, so
+   the row measures itself (a container) rather than trusting a fixed fit:
+   where the four labels do not fit -- a code card's Open, New session, Edit
+   and Delete need about 320px -- Delete drops to its icon, which it can do
+   without losing its meaning (a red bin, named in its tooltip), then Edit,
+   then the other secondary actions. Only past all of that does the row wrap
+   rather than run out of the card. */
+.prj-actions { flex-wrap: wrap; row-gap: 6px; container-type: inline-size; }
+/* In steps, dropping to icons only what has to go, and never the card's main
+   action (the filled one), whose label is the point of it. */
+@container (max-width: 330px) {
+  .prj-action[data-tone="danger"] { padding: 0 7px; }
+  .prj-action[data-tone="danger"] .prj-action-label { display: none; }
+}
+@container (max-width: 280px) {
+  .prj-action[aria-label="Edit"] { padding: 0 7px; }
+  .prj-action[aria-label="Edit"] .prj-action-label { display: none; }
+}
+@container (max-width: 230px) {
+  .prj-action:not([data-tone]) { padding: 0 7px; }
+  .prj-action:not([data-tone]) .prj-action-label { display: none; }
+}
 .prj-actions button { white-space: nowrap; }
-.prj-actions button:disabled { color: var(--text-faint); cursor: default; }
+.prj-actions button:disabled { opacity: 0.45; cursor: default; }
 
 /* A design project's designs: what it made, above who made them. */
 .prj-designs {
@@ -7909,7 +7994,6 @@ html:not([data-shell]) .screen[data-glass] {
   background: var(--accent-fill);
   border-color: transparent;
 }
-.screen[data-glass] .topbar { border-bottom-color: transparent; }
 .screen[data-glass] :is(.code-picker-recent, .code-picker-dirs) li + li { border-top-color: var(--line-solid); }
 
 /* The Code view hides the sheet's glow behind the editor; its project page is
@@ -8453,7 +8537,6 @@ html:not([data-shell]) .screen[data-glass] {
   align-items: center;
   gap: 12px;
   padding: 12px 20px 10px 24px;
-  border-bottom: 1px solid var(--line-soft);
   background: var(--ground);
   position: relative;
   z-index: 6;
@@ -8557,3 +8640,120 @@ html:not([data-shell]) .screen[data-glass] {
   letter-spacing: var(--track-body);
   text-transform: none;
 }
+
+/* The design standards, inside Settings (Design.jsx `embedded`): the page's
+   actions without its head, and its body without the page's own padding --
+   the settings screen already has both. */
+.design-embedded-head { margin: 4px 0 18px; }
+.design-embedded-head .actions { display: flex; gap: 8px; }
+.design-embedded > .page-body { padding: 0; }
+
+/* -- the colour wheel (ColorWheel.jsx) ---------------------------------------
+ *
+ * The disc on the left -- hue round it, colour out from its grey centre --
+ * and the preview on the right: the colour, its code, and a sidebar row
+ * wearing it, all following the knob while it is dragged. */
+.cw {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.cw-disc {
+  position: relative;
+  flex: none;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  /* A hairline round the disc, so its edge -- the most vivid ring -- has a
+     line to end on rather than fading into the popover. */
+  border: 1px solid var(--line-firm);
+}
+.cw-disc:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* The knob: a ring in the page's colour around the picked colour, so it
+   reads on any part of the wheel. */
+.cw-knob {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px var(--surface),
+    0 0 0 4px rgba(var(--ink-rgb), 0.25),
+    0 2px 6px rgba(var(--shadow-rgb), 0.3);
+  pointer-events: none;
+}
+.cw-preview {
+  flex: 1;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.cw-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-card);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.08);
+}
+.cw-hex {
+  font: 500 var(--t-xs)/1 var(--font-mono);
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+/* A rail row, as the project's conversations will show in the sidebar. */
+.cw-sample {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(var(--ink-rgb), 0.05);
+  font: 400 var(--t-sm)/1.3 var(--font);
+  color: var(--ink);
+}
+.cw-sample .accent-bead { margin: 0; }
+.cw-sample-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-reset {
+  padding: 0;
+  font: 500 var(--t-xs)/1 var(--font);
+  color: var(--accent);
+}
+.cw-reset:hover { color: var(--accent-hover); }
+
+/* The project editor: the name at the top left, the colour's preview under
+   it, the wheel down the right. ColorWheel's own wrapper steps aside
+   (`display: contents`) so its disc and preview land in this grid's cells.
+   `.popover.prj-editor` to outweigh the popover's own sizing. */
+.popover.prj-editor {
+  right: auto;
+  width: 408px;
+  /* 16px all round. (Set here: the generic popover's 7px outranks
+     `.prj-popover`'s own.) */
+  padding: 16px;
+  max-width: calc(100vw - 32px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name wheel"
+    "preview wheel";
+  column-gap: 18px;
+  row-gap: 14px;
+  align-items: start;
+}
+.prj-editor-name { grid-area: name; }
+.prj-editor .cw { display: contents; }
+.prj-editor .cw-disc { grid-area: wheel; align-self: center; }
+.prj-editor .cw-preview { grid-area: preview; align-self: end; }
+
+/* The small logo (NavRail): a 20px flower, centred on the 16px page glyphs
+   under it (so inset 8px where they are 10), close to the top bar -- 10px,
+   not the panel's 22px -- and 6px above New chat, not the panel's 28px. */
+.navrail-top { min-height: 28px; margin-top: -12px; margin-bottom: -22px; }
+.navrail[data-open] .navrail-top { padding: 0 8px; gap: 8px; }
+.navrail .navrail-mark { width: 20px; height: 20px; }
+.navrail .navrail-mark:hover { transform: scale(1.15); }
+

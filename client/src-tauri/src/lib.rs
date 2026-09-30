@@ -81,6 +81,19 @@ fn new_menu_event(app: &AppHandle, id: &str) -> bool {
     true
 }
 
+/// Bom ▸ Settings… (⌘,): the window comes forward and the page opens its
+/// settings window. False for any other menu item. The page also listens for
+/// ⌘, itself, but once the menu owns the accelerator the keystroke goes to
+/// the menu, so this is the path that has to work.
+fn settings_menu_event(app: &AppHandle, id: &str) -> bool {
+    if id != "settings" {
+        return false;
+    }
+    present_main_window(app);
+    let _ = app.emit_to("main", "bom://settings", ());
+    true
+}
+
 /// Bring the window back to the front, un-hiding it first if the close button
 /// put it away. Used by both the tray menu and a left-click on the icon.
 fn present_main_window(app: &tauri::AppHandle) {
@@ -113,7 +126,10 @@ pub fn run() {
         // alike. Checked by id, so the tray's own items -- handled on the
         // tray -- pass straight through.
         .on_menu_event(|app, event| {
-            new_menu_event(app, event.id().as_ref());
+            let id = event.id().as_ref();
+            if !new_menu_event(app, id) {
+                settings_menu_event(app, id);
+            }
         })
         .setup(|app| {
             let handle = app.handle();
@@ -136,9 +152,21 @@ pub fn run() {
                 let code_item = MenuItem::with_id(app, "new-code", "New Code Session", true, Some("CmdOrCtrl+2"))?;
                 let design_item = MenuItem::with_id(app, "new-design", "New Design", true, Some("CmdOrCtrl+3"))?;
                 let separator = PredefinedMenuItem::separator(app)?;
+                // Settings…, in the app menu (the first submenu, named after
+                // the app) under About, where every Mac app keeps it.
+                let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+                let settings_rule = PredefinedMenuItem::separator(app)?;
+                let mut app_menu_done = false;
                 let mut placed = false;
                 for item in menu.items()? {
                     if let MenuItemKind::Submenu(sub) = item {
+                        if !app_menu_done {
+                            app_menu_done = true;
+                            // After About and its rule: index 2.
+                            let at = sub.items()?.len().min(2);
+                            sub.insert_items(&[&settings_item, &settings_rule], at)?;
+                            continue;
+                        }
                         if sub.text()? == "File" {
                             sub.insert_items(&[&chat_item, &code_item, &design_item, &separator], 0)?;
                             placed = true;

@@ -133,7 +133,8 @@ export const KINDS = [
 export const STUDIO_KINDS = ["design", "code"];
 
 function KindControl({ value, onChange, disabled, kinds = KINDS.map((k) => k.id) }) {
-  const offered = KINDS.filter((k) => kinds.includes(k.id));
+  // In the order asked for: Studio reads Design, then Code.
+  const offered = kinds.map((id) => KINDS.find((k) => k.id === id)).filter(Boolean);
   return (
     <div
       className="composer-kind"

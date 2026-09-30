@@ -32,16 +32,9 @@ const LIST_KEY = "unified-llm-rail-list-open";
 
 // The conversations are not in this list: they are a group with the list
 // folded under it, drawn by `RailGroup` below the plain destinations.
-/* The two spaces, switched at the head of the rail. Home is conversation:
-   chats, quick asks, and the agents you keep talking to. Studio is the
-   longer work -- designs and code -- with its own conversations and
-   projects. Each has its own pages; Skills is in both, being what the model
-   can do wherever it is asked. */
-export const SPACES = [
-  { id: "home", label: "Home", icon: "home" },
-  { id: "studio", label: "Studio", icon: "code" },
-];
-
+/* Each space's pages (the spaces themselves are switched in the app bar --
+   see AppBar.jsx). Skills is in both, being what the model can do wherever
+   it is asked. */
 const DESTINATIONS = {
   home: [
     { id: "projects", label: "Projects", icon: "folder" },
@@ -80,26 +73,17 @@ function Label({ label }) {
  * An assigned agent always gets a bead. Agents without an explicit theme use a
  * stable color derived from their name, while unassigned chats still fall back
  * to the project accent when one exists. */
-function accentOf(session, projects, agents) {
-  // The agent it is run as wins, then the project it is filed under -- the same
-  // order `useTheme` resolves in, so the bead is the colour the conversation
-  // actually opens in. An assigned agent always has a stable color, including
-  // when its theme is automatic.
-  const agent = session.agent_id && agents?.find((a) => a.id === session.agent_id);
-  if (agent) {
-    return swatchOf(
-      agent.theme || { mode: "auto" },
-      seedFromContext({ id: agent.id, title: agent.name }),
-    );
-  }
-
+function accentOf(session, projects) {
+  // The dot says which project a conversation is filed in, and nothing else:
+  // no project, no dot -- not an agent's colour, not the app's. A project
+  // that has not chosen a colour still gets one of its own, derived from its
+  // name, so the dot always tells projects apart (the Projects page draws its
+  // beads the same way).
   if (!session.project_id) return null;
   const project = projects?.find((p) => p.id === session.project_id);
-  if (!project?.theme) return null;
-  // A project has a name rather than a title and no messages, so an auto
-  // accent seeds from what little it has.
+  if (!project) return null;
   return swatchOf(
-    project.theme,
+    project.theme || { mode: "auto" },
     seedFromContext({ title: project.name, id: project.id }),
   );
 }
@@ -169,9 +153,11 @@ function RailGroup({
           in is the only way they have. */}
       <div className="navrail-sessions">
         <div className="navrail-sessions-inner">
-          <button type="button" className="navrail-new" onClick={onNew}>
-            {newLabel}
-          </button>
+          {newLabel ? (
+            <button type="button" className="navrail-new" onClick={onNew}>
+              {newLabel}
+            </button>
+          ) : null}
           {extra}
           <div id={listId} hidden={!open}>
             {children}
@@ -193,7 +179,7 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
     );
   }
   return sessions.map((session) => {
-    const accent = accentOf(session, projects, agents);
+    const accent = accentOf(session, projects);
     const design = session.mode === "design";
     const code = session.mode === "code";
     return (
@@ -210,24 +196,17 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
       }}
     >
       <button className="navrail-session" onClick={() => onOpenSession(session.id)}>
-        {/* A design conversation wears the design glyph at its left, in both
-            lists, so it can be told from a chat at a glance -- tinted with
-            the conversation's accent where it has one, which is the colour
-            the bead would otherwise have carried.
-
-            Otherwise the bead shows the assigned agent's color first, then
-            the project's color for chats that have no agent. */}
+        {/* Its project's colour, as a dot -- only when it is in one. A
+            design or code conversation keeps its glyph beside the dot, in
+            the text's colour: the glyph says what kind it is, the dot where
+            it is filed. */}
+        {accent ? (
+          <span className="accent-bead" aria-hidden="true" style={{ background: accent }} />
+        ) : null}
         {design || code ? (
-          <span
-            className="navrail-session-icon"
-            aria-label={design ? "Design" : "Code"}
-            role="img"
-            style={accent ? { color: accent } : undefined}
-          >
+          <span className="navrail-session-icon" aria-label={design ? "Design" : "Code"} role="img">
             <Icon name={design ? "design" : "code"} />
           </span>
-        ) : accent ? (
-          <span className="accent-bead" aria-hidden="true" style={{ background: accent }} />
         ) : null}
         <span className="navrail-session-title">{session.title || "Untitled"}</span>
       </button>
@@ -256,7 +235,6 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
 
 export function NavRail({
   space = "home",
-  onSpace,
   view,
   onView,
   status,
@@ -373,9 +351,12 @@ export function NavRail({
       <div className="navrail-edge" aria-hidden="true" />
 
       <div className="navrail-inner">
+
+        {/* The logo, small: the flower at 20px, a touch over a page glyph --
+            and the name beside it, heading the rail like a label rather
+            than as the largest thing in it. It starts a new conversation,
+            as it always has. */}
         <div className="navrail-top">
-          {/* The mark is the agent's flower, open, at 42px -- the logo, and
-              the largest thing in the rail's head. It turns while hovered. */}
           <button
             type="button"
             className="navrail-mark"
@@ -383,39 +364,31 @@ export function NavRail({
             title="New conversation"
             onClick={onNewSession}
           >
-            <AgentFlower open mark size={42} />
+            <AgentFlower open mark size={20} />
           </button>
           <span className="navrail-wordmark" aria-hidden="true">
             Bom
           </span>
-
-        </div>
-
-        {/* Home or Studio -- the app's segmented control, at the head of the
-            rail the way Claude puts Home and Code. Open, the two sit side by
-            side with their names; shut, the rail is a column of glyphs and so
-            are they. */}
-        <div className="segmented navrail-spaces" role="tablist" aria-label="Space">
-          {SPACES.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={space === item.id}
-              data-active={space === item.id ? "" : undefined}
-              title={item.label}
-              onClick={() => onSpace?.(item.id)}
-            >
-              <Icon name={item.icon} />
-              <span className="navrail-space-label">{item.label}</span>
-            </button>
-          ))}
         </div>
 
         <div className="navrail-dest">
           {/* The app's pages first, then the conversations -- the list is the
               one part of the rail that grows, so it goes last, where it can
               run on without pushing the pages out of reach. */}
+          {/* New chat, first of the pages and drawn like them: starting
+              something is the thing you do most, so it heads the list -- a
+              chat in Home, a design or code session in Studio (the caller
+              decides which). */}
+          <button
+            type="button"
+            className="navrail-start"
+            onClick={onNewSession}
+            title={space === "studio" ? "New design or code session" : "New chat"}
+          >
+            <Icon name="plus" />
+            <Label label={space === "studio" ? "New session" : "New chat"} />
+          </button>
+
           {DESTINATIONS[space].map((destination) => (
             <button
               key={destination.id}
@@ -445,7 +418,8 @@ export function NavRail({
             open={listOpen}
             onToggle={toggleList}
             onGo={() => onView("chat")}
-            newLabel={space === "studio" ? "+ New design or code" : "+ New conversation"}
+            // Starting one is the button at the head of the rail now.
+            newLabel={null}
             onNew={onNewSession}
           >
             {/* Every conversation, in one flat list.

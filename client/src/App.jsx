@@ -41,7 +41,7 @@ import { useWorkspace } from "./hooks/useWorkspace";
 import { UnauthorizedError, createApi } from "./lib/api";
 import { ApiContext } from "./lib/api-context";
 import { AppActions } from "./lib/appActions";
-import { listenForNew } from "./lib/kinds";
+import { listenForNew, listenForSettings } from "./lib/kinds";
 
 const TOKEN_KEY = "unified-llm-token";
 // Whether the rail stays out. A layout preference rather than data, so it is
@@ -575,25 +575,6 @@ export default function App() {
     if (onScreen) setSpace(onScreen);
   }, [onScreen]);
 
-  // The switch at the head of the rail. Going to a space goes back to what
-  // it had on screen, if that is still open; otherwise to a fresh one --
-  // a new chat in Home, a new design or code session in Studio.
-  const goToSpace = useCallback(
-    (next) => {
-      setSpace(next);
-      setSidebarOpen(false);
-      const open = current && !agentChatIds.has(current.id) ? current : null;
-      if (next === "home") {
-        if (open && spaceOf(open) === "home") setView("chat");
-        else startNewOf("chat");
-      } else if (open && spaceOf(open) === "studio") {
-        setView(open.mode === "code" ? "code" : "chat");
-      } else {
-        startNewOf(studioKind.current);
-      }
-    },
-    [current, agentChatIds, startNewOf],
-  );
 
   const enterRoom = useCallback(
     (agentId) => {
@@ -814,6 +795,37 @@ export default function App() {
     [openSession, sessions.sessions, agentChatIds],
   );
 
+  // Each space's last conversation, so switching back is going back to where
+  // you were rather than to a blank page. Only ever one conversation is open
+  // in the app, so this is what lets each space keep its own.
+  const lastInSpace = useRef({ home: null, studio: null });
+  useEffect(() => {
+    if (current && !agentChatIds.has(current.id)) lastInSpace.current[spaceOf(current)] = current.id;
+  }, [current, agentChatIds]);
+
+  // The switch in the app bar. Going to a space goes back to what it had on
+  // screen -- still open, or the last conversation it had -- and otherwise
+  // to a fresh one: a new chat in Home, a new design or code session in
+  // Studio.
+  const goToSpace = useCallback(
+    (next) => {
+      setSpace(next);
+      setSidebarOpen(false);
+      const open = current && !agentChatIds.has(current.id) ? current : null;
+      if (open && spaceOf(open) === next) {
+        setView(open.mode === "code" ? "code" : "chat");
+        return;
+      }
+      const last = lastInSpace.current[next];
+      if (last && sessions.sessions.some((s) => s.id === last)) {
+        handleOpenSession(last);
+        return;
+      }
+      startNewOf(next === "home" ? "chat" : studioKind.current);
+    },
+    [current, agentChatIds, sessions.sessions, handleOpenSession, startNewOf],
+  );
+
   // The settings window: shut (null), or open on one of its screens. Opened
   // from the gear in the app bar, from ⌘, as on any Mac app, and on Models
   // from the model menu's "manage".
@@ -828,6 +840,20 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Bom ▸ Settings… (⌘,) in the desktop app's menu bar. Opens the window,
+  // or leaves it open on the screen it is showing.
+  useEffect(() => {
+    let off = null;
+    let live = true;
+    listenForSettings(() => setSettingsAt((was) => was || "general"))
+      .then((unlisten) => (live ? (off = unlisten) : unlisten()))
+      .catch(() => {});
+    return () => {
+      live = false;
+      off?.();
+    };
   }, []);
 
   // The desktop app's File menu and tray start new conversations too (New
@@ -1127,6 +1153,8 @@ export default function App() {
             onToggleSidebar={narrow ? () => setSidebarOpen((was) => !was) : togglePin}
             settingsOpen={Boolean(settingsAt)}
             onSettings={() => setSettingsAt((was) => (was ? null : "general"))}
+            space={space}
+            onSpace={goToSpace}
           />
 
           {settingsAt ? (
@@ -1172,7 +1200,6 @@ export default function App() {
             <NavRail
               view={view}
               space={space}
-              onSpace={goToSpace}
               onView={(next) => {
                 // The space's conversations, from a page: back to what the
                 // space had open, or a fresh one if what is loaded belongs to

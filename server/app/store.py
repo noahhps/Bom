@@ -2277,6 +2277,48 @@ class Store:
         self.db.execute("DELETE FROM mcp_icons WHERE key = ?", (key,))
         return True
 
+    # -- MCP sign-ins -------------------------------------------------------
+
+    def get_mcp_auth(self, server_id: str) -> dict:
+        """What is stored about signing in to one server: `metadata`, `client`
+        and `tokens`, each decoded (empty dicts when there is nothing)."""
+        row = self.db.query_one("SELECT * FROM mcp_auth WHERE server_id = ?", (server_id,))
+        found: dict = {"metadata": {}, "client": {}, "tokens": {}}
+        if row:
+            for key in found:
+                try:
+                    value = json.loads(row[key]) if row[key] else {}
+                except (TypeError, ValueError):
+                    value = {}
+                found[key] = value if isinstance(value, dict) else {}
+        return found
+
+    def put_mcp_auth(self, server_id: str, **fields: dict | None) -> None:
+        """Replace any of `metadata`, `client`, `tokens` for one server; the
+        ones not given are kept. None clears one."""
+        current = self.get_mcp_auth(server_id)
+        for key in ("metadata", "client", "tokens"):
+            if key in fields:
+                current[key] = fields[key] or {}
+        self.db.execute(
+            """
+            INSERT INTO mcp_auth (server_id, metadata, client, tokens, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(server_id) DO UPDATE SET
+                metadata = excluded.metadata,
+                client = excluded.client,
+                tokens = excluded.tokens,
+                updated_at = excluded.updated_at
+            """,
+            (
+                server_id,
+                json.dumps(current["metadata"]) if current["metadata"] else None,
+                json.dumps(current["client"]) if current["client"] else None,
+                json.dumps(current["tokens"]) if current["tokens"] else None,
+                _now(),
+            ),
+        )
+
     def delete_mcp_server(self, server_id: str) -> bool:
         if not self.get_mcp_server(server_id):
             return False

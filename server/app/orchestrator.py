@@ -803,7 +803,6 @@ class Orchestrator:
             if requested["tool"] in offered:
                 choice = requested
                 blocked = blocked_by(choice)
-                system = f"{system}\n\n{pin_instruction(choice)}"
         # The agent's skill subset, if the conversation is assigned to one.
         # `parsed_skills()` is None for "every enabled skill" and a list --
         # possibly empty -- for a restriction; the set is passed on to both
@@ -893,6 +892,16 @@ class Orchestrator:
             # Where this turn begins in the window: everything after it is the
             # turn's own working, which the round loop keeps in bounds.
             anchor = len(window) - 1
+            # The Make menu's instruction rides on this turn's message, not in
+            # the system prompt: it holds for this message only, and a system
+            # prompt that changed on every pinned turn threw away the cached
+            # conversation behind it twice -- once when the pin arrived, and
+            # again on the next turn when it left.
+            if choice is not None:
+                turn = window[anchor]
+                window[anchor] = dataclasses.replace(
+                    turn, content=f"{turn.content}\n\n[{pin_instruction(choice)}]"
+                )
 
             thinking_level = think or self.settings.ollama_think
             max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)

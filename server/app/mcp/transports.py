@@ -32,6 +32,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from .protocol import (
+    MCPAuthRequired,
     MCPProtocolError,
     MCPTimeoutError,
     MCPTransportError,
@@ -334,6 +335,9 @@ class HttpSseTransport(BaseMCPTransport):
         self._session_id: str | None = None
         self._protocol_version: str | None = None
         self._tried_fallback = False
+        # A 401 on the legacy GET stream, kept so connect() can raise it as a
+        # sign-in rather than as a stream that closed for no reason.
+        self._stream_refused: MCPAuthRequired | None = None
 
     @staticmethod
     def _guess_mode(url: str) -> str:
@@ -368,10 +372,7 @@ class HttpSseTransport(BaseMCPTransport):
             return
 
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=5.0),
-                follow_redirects=True,
-            )
+            self._client = self._make_client()
 
         if self.mode == "sse":
             await self._start_sse_listener()
@@ -381,10 +382,24 @@ class HttpSseTransport(BaseMCPTransport):
             self._post_url = self.url
             self._connected = True
 
+    #: How the HTTP client is made. A hook rather than a constructor argument
+    #: so a test can stand a whole server up in memory for every transport the
+    #: manager creates.
+    client_factory = None
+
+    def _make_client(self) -> httpx.AsyncClient:
+        if self.client_factory is not None:
+            return self.client_factory()
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=5.0),
+            follow_redirects=True,
+        )
+
     async def _start_sse_listener(self) -> None:
         """Open the long-lived GET stream and wait for it to name the POST endpoint."""
         self._post_url = self.url
         self._endpoint_ready = asyncio.Event()
+        self._stream_refused = None
         self._connected = True
         self._sse_task = asyncio.create_task(self._sse_listener())
         try:
@@ -393,6 +408,8 @@ class HttpSseTransport(BaseMCPTransport):
             # Some servers accept POSTs at the same URL without announcing an
             # endpoint. Keep going rather than failing the connection outright.
             pass
+        if self._stream_refused is not None:
+            raise self._stream_refused
 
     async def _sse_listener(self) -> None:
         """Read the GET stream: capture the POST endpoint, resolve pending requests."""
@@ -408,6 +425,10 @@ class HttpSseTransport(BaseMCPTransport):
                 "GET", self.url, headers=headers, timeout=None
             ) as response:
                 if response.status_code >= 400:
+                    if response.status_code == 401:
+                        self._stream_refused = MCPAuthRequired(
+                            self.url, response.headers.get("www-authenticate", "")
+                        )
                     self._connected = False
                     self._endpoint_ready.set()
                     return
@@ -533,6 +554,14 @@ class HttpSseTransport(BaseMCPTransport):
                 f"Network error connecting to '{self._post_url}': {exc}"
             ) from exc
 
+        # Signed out, never signed in, or a token that expired: the server
+        # wants a person, and what it says in WWW-Authenticate is where signing
+        # in starts (see oauth.py).
+        if response.status_code == 401:
+            raise MCPAuthRequired(
+                self._post_url, response.headers.get("www-authenticate", ""), response.text
+            )
+
         # Order matters: once we hold a session id we are demonstrably talking
         # to a Streamable HTTP server, so a 404 means that session expired --
         # not that we guessed the protocol wrong.
@@ -614,6 +643,10 @@ class HttpSseTransport(BaseMCPTransport):
             )
             if response.status_code >= 400:
                 self._pending.pop(req_id, None)
+                if response.status_code == 401:
+                    raise MCPAuthRequired(
+                        self._post_url, response.headers.get("www-authenticate", "")
+                    )
                 raise MCPTransportError(
                     f"HTTP {response.status_code} from '{self._post_url}'"
                 )
@@ -680,6 +713,8 @@ class HttpSseTransport(BaseMCPTransport):
                 f"Failed sending notification '{method}' to '{self._post_url}': {exc}"
             ) from exc
 
+        if response.status_code == 401:
+            raise MCPAuthRequired(self._post_url, response.headers.get("www-authenticate", ""))
         if response.status_code >= 400:
             raise MCPTransportError(
                 f"HTTP {response.status_code} sending notification '{method}' "

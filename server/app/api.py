@@ -550,6 +550,12 @@ class MCPImportIn(BaseModel):
     enabled: bool = True
 
 
+class MCPSignIn(BaseModel):
+    # The origin the reader's browser reached this server on; the sign-in
+    # comes back to its /mcp/oauth/callback. See mcp/oauth.py.
+    callback_base: str = Field(default="", max_length=300)
+
+
 class MCPPresetIn(BaseModel):
     preset: str = Field(min_length=1, max_length=100)
     name: str | None = Field(default=None, max_length=100)
@@ -573,6 +579,7 @@ def build_router(
     curator: Curator,
     mcp_manager: Any = None,
     oauth: OAuthFlows | None = None,
+    mcp_oauth: Any = None,
 ) -> APIRouter:
     router = APIRouter(dependencies=[Depends(auth)])
     # One per server. Defaulted here rather than required so a test that builds
@@ -1987,7 +1994,21 @@ def build_router(
         # A flag, not the bytes: the endpoint is authenticated, so the client
         # fetches it with the bearer header and wraps it in an object URL.
         data["has_icon"] = _stored_icon(server) is not None
+        # Whether the server wants a person signed in, and whether one is.
+        # Never the tokens themselves.
+        data["auth"] = {
+            "signed_in": bool(mcp_oauth and server.url and mcp_oauth.signed_in(server.id)),
+            "required": bool(mcp_manager and mcp_manager.needs_sign_in(server.name)),
+            "can_sign_in": bool(mcp_oauth and server.url),
+        }
         return data
+
+    def _sync_error(server, exc: Exception) -> str:
+        """Why a sync failed, as the page should say it: a server that wants
+        a sign-in says so in words, not as an HTTP 401."""
+        if mcp_manager and mcp_manager.needs_sign_in(server.name):
+            return mcp_manager.last_error(server.name) or str(exc)
+        return str(exc)
 
     @router.get("/mcp/presets")
     def list_mcp_presets() -> dict:
@@ -2130,7 +2151,7 @@ def build_router(
             try:
                 tools = await mcp_manager.sync_server(server)
             except Exception as exc:
-                return _with_status(server, tools=[], error=str(exc))
+                return _with_status(server, tools=[], error=_sync_error(server, exc))
 
         return _with_status(server, tools=tools)
 
@@ -2188,7 +2209,7 @@ def build_router(
             try:
                 tools = await mcp_manager.sync_server(server)
             except Exception as exc:
-                return _with_status(server, tools=[], error=str(exc))
+                return _with_status(server, tools=[], error=_sync_error(server, exc))
 
         return _with_status(server, tools=tools)
 
@@ -2244,7 +2265,7 @@ def build_router(
                 try:
                     tools = await mcp_manager.sync_server(server)
                 except Exception as exc:
-                    error = str(exc)
+                    error = _sync_error(server, exc)
             added.append(_with_status(server, tools=tools, error=error))
 
         return {"added": added, "skipped": skipped}
@@ -2291,7 +2312,7 @@ def build_router(
             try:
                 tools = await mcp_manager.sync_server(updated)
             except Exception as exc:
-                return _with_status(updated, tools=[], error=str(exc))
+                return _with_status(updated, tools=[], error=_sync_error(updated, exc))
 
         return _with_status(updated, tools=tools)
 
@@ -2306,6 +2327,57 @@ def build_router(
 
         store.delete_mcp_server(server_id)
         return {"ok": True}
+
+    # -- signing in to hosted MCP servers ----------------------------------
+
+    @router.post("/mcp/servers/{server_id}/signin")
+    async def start_mcp_signin(server_id: str, body: MCPSignIn, request: Request) -> dict:
+        """Begin signing in to a hosted server, and hand back the URL to open.
+
+        Like the OpenRouter sign-in: the client opens the URL in the reader's
+        browser, the server's consent page sends it back to /mcp/oauth/callback
+        on this server, and the client learns how it went by polling.
+        """
+        from .mcp.oauth import MCPOAuthError
+
+        server = store.get_mcp_server(server_id)
+        if not server:
+            raise HTTPException(404, "no such MCP server")
+        if mcp_oauth is None:
+            raise HTTPException(500, "signing in to MCP servers is not set up on this server")
+        base = body.callback_base.strip() or str(request.base_url)
+        challenge = mcp_manager.challenge(server.name) if mcp_manager else None
+        try:
+            flow = await mcp_oauth.begin(server, base, challenge)
+        except MCPOAuthError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"state": flow.state, "url": flow.url, "callback": flow.redirect_uri}
+
+    @router.get("/mcp/signin/{state}")
+    def mcp_signin_status(state: str) -> dict:
+        """How a sign-in went, for the client polling it; with the server's
+        status once it has connected."""
+        flow = mcp_oauth.get(state) if mcp_oauth else None
+        if flow is None:
+            return {"state": state, "status": "unknown", "error": ""}
+        report = flow.to_dict()
+        server = store.get_mcp_server(flow.server_id)
+        if server is not None:
+            report["server_status"] = _with_status(server)
+        return report
+
+    @router.delete("/mcp/servers/{server_id}/signin")
+    async def mcp_sign_out(server_id: str) -> dict:
+        """Forget the tokens and disconnect. The server stays configured, so
+        signing in again is one button."""
+        server = store.get_mcp_server(server_id)
+        if not server:
+            raise HTTPException(404, "no such MCP server")
+        if mcp_oauth is not None:
+            mcp_oauth.sign_out(server.id)
+        if mcp_manager:
+            await mcp_manager.signed_out(server)
+        return _with_status(server)
 
     @router.post("/mcp/servers/{server_id}/sync")
     async def sync_mcp_server(server_id: str) -> dict:

@@ -108,3 +108,11 @@ does:
 - **The remembered facts.** They are taken once per conversation. A fact learned
   since is already in the conversation, and a fact forgotten or deleted still
   leaves on the next turn.
+- **The Make menu's instruction.** It now goes on the user's message for the
+  turn it applies to, not in the system prompt.
+
+## Work tools
+
+Jira, Confluence, Linear, Notion, Sentry and other hosted MCP servers connect
+by signing in with your company account. No token is needed. See
+[work-tools.md](work-tools.md).

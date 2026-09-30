@@ -694,6 +694,21 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_compactions_session ON compactions(session_id, created_at);
     """,
+    # Sign-ins to hosted MCP servers (see mcp/oauth.py). One row per server:
+    # what discovery found (`metadata`, JSON), the client this app registered
+    # there (`client`, JSON -- its id, any secret, and the redirect it was
+    # registered with), and the tokens (`tokens`, JSON). Kept beside the other
+    # MCP secrets, which already live in mcp_servers.headers; never sent to
+    # the client. Goes with its server.
+    """
+    CREATE TABLE mcp_auth (
+      server_id   TEXT PRIMARY KEY REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      metadata    TEXT,
+      client      TEXT,
+      tokens      TEXT,
+      updated_at  INTEGER NOT NULL
+    );
+    """,
 ]
 
 

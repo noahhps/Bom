@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from .protocol import (
+    MCPAuthRequired,
     MCPError,
     MCPProtocolError,
     MCPTimeoutError,
@@ -33,12 +34,24 @@ SUPPORTED_TRANSPORTS = ("stdio", "sse", "http", "streamable-http")
 class MCPManager:
     """Manages active MCP connections and registers their discovered tools."""
 
-    def __init__(self, store: Store, registry: Registry) -> None:
+    def __init__(self, store: Store, registry: Registry, oauth: Any = None) -> None:
         self.store = store
         self.registry = registry
+        # Sign-ins to hosted servers (oauth.MCPOAuth). Optional so a manager
+        # built by hand still works for servers that need none.
+        self.oauth = oauth
         self._transports: dict[str, BaseMCPTransport] = {}
         self._server_skills: dict[str, list[str]] = {}
         self._errors: dict[str, str] = {}
+        # Servers that answered 401, with what they said: the challenge is
+        # where signing in starts.
+        self._challenges: dict[str, MCPAuthRequired] = {}
+
+    def needs_sign_in(self, server_name: str) -> bool:
+        return server_name in self._challenges
+
+    def challenge(self, server_name: str) -> MCPAuthRequired | None:
+        return self._challenges.get(server_name)
 
     def is_server_connected(self, server_name: str) -> bool:
         transport = self._transports.get(server_name)
@@ -82,10 +95,42 @@ class MCPManager:
         if not server.enabled:
             return []
 
-        transport = self._create_transport(server)
         try:
-            registered = await self._handshake_and_register(server, transport)
+            transport, registered = await self._connect(server)
+        except MCPAuthRequired as exc:
+            # One refresh, then the reader: a token that has lapsed is renewed
+            # quietly, and only a server that still refuses asks for a person.
+            if self.oauth is not None and await self._refreshed(server):
+                try:
+                    transport, registered = await self._connect(server)
+                except MCPAuthRequired as again:
+                    self._sign_in_needed(server, again)
+                    raise
+            else:
+                self._sign_in_needed(server, exc)
+                raise
         except Exception as exc:
+            self._errors[server.name] = str(exc)
+            raise
+
+        self._transports[server.name] = transport
+        self._server_skills[server.name] = registered
+        self._errors.pop(server.name, None)
+        self._challenges.pop(server.name, None)
+        return registered
+
+    async def _connect(self, server: StoredMCPServer) -> tuple[BaseMCPTransport, list[str]]:
+        bearer = await self.oauth.bearer(server) if self.oauth is not None and server.url else None
+        # Only named when there is one, so a stand-in for _create_transport
+        # that knows nothing of sign-ins still fits.
+        transport = (
+            self._create_transport(server, bearer=bearer)
+            if bearer
+            else self._create_transport(server)
+        )
+        try:
+            return transport, await self._handshake_and_register(server, transport)
+        except Exception:
             # Nothing is stored on the failure path, so nothing would ever close
             # this transport again: without it, every failed sync of an stdio
             # server leaks the npx process it just spawned.
@@ -93,13 +138,27 @@ class MCPManager:
                 await transport.close()
             except Exception:
                 pass
-            self._errors[server.name] = str(exc)
             raise
 
-        self._transports[server.name] = transport
-        self._server_skills[server.name] = registered
-        self._errors.pop(server.name, None)
-        return registered
+    async def _refreshed(self, server: StoredMCPServer) -> bool:
+        if self.oauth is None or not self.oauth.signed_in(server.id):
+            return False
+        return await self.oauth.refresh(server)
+
+    async def signed_out(self, server: StoredMCPServer) -> None:
+        """Disconnect a server whose sign-in was just forgotten, and say it
+        needs one -- so the page offers Sign in again without a sync first."""
+        await self.disconnect_server(server.name)
+        self._challenges[server.name] = MCPAuthRequired(server.url or server.name)
+        self._errors[server.name] = f"Signed out. Sign in to {server.name} to use its tools."
+
+    def _sign_in_needed(self, server: StoredMCPServer, exc: MCPAuthRequired) -> None:
+        self._challenges[server.name] = exc
+        self._errors[server.name] = (
+            f"Sign in to {server.name} to use its tools."
+            if self.oauth is not None
+            else f"{server.name} needs you to sign in (HTTP 401)."
+        )
 
     async def _handshake_and_register(
         self, server: StoredMCPServer, transport: BaseMCPTransport
@@ -194,6 +253,7 @@ class MCPManager:
             if isinstance(skill, MCPSkill) and skill.server_name == server_name:
                 self.registry.delete(skill_name)
 
+        self._challenges.pop(server_name, None)
         transport = self._transports.pop(server_name, None)
         if transport:
             try:
@@ -221,7 +281,24 @@ class MCPManager:
 
         params = {"name": tool_name, "arguments": arguments}
         try:
-            res = await transport.send_request("tools/call", params, timeout=45.0)
+            try:
+                res = await transport.send_request("tools/call", params, timeout=45.0)
+            except MCPAuthRequired:
+                # The token lapsed mid-conversation. Reconnect (which refreshes
+                # it) and try the call once more before sending the reader to
+                # sign in again.
+                server = self.store.get_mcp_server_by_name(server_name)
+                try:
+                    await self.sync_server(server)
+                except MCPAuthRequired:
+                    return (
+                        f"'{server_name}' needs you to sign in again. Ask the user "
+                        "to sign in from Skills > MCP servers, then try again."
+                    )
+                transport = self._transports.get(server_name)
+                if not transport:
+                    return f"MCP server '{server_name}' is not available."
+                res = await transport.send_request("tools/call", params, timeout=45.0)
         except MCPTimeoutError:
             return f"Tool '{tool_name}' on server '{server_name}' timed out after 45s."
         except MCPProtocolError as exc:
@@ -268,7 +345,9 @@ class MCPManager:
             output = f"Error: {output}"
         return output
 
-    def _create_transport(self, server: StoredMCPServer) -> BaseMCPTransport:
+    def _create_transport(
+        self, server: StoredMCPServer, *, bearer: str | None = None
+    ) -> BaseMCPTransport:
         transport_type = (server.transport or "").lower()
         if transport_type == "stdio":
             if not server.command:
@@ -286,9 +365,14 @@ class MCPManager:
                 raise MCPError(
                     f"Server '{server.name}' requires a URL for {transport_type} transport"
                 )
+            headers = server.parsed_headers()
+            # A token the reader configured themselves (a PAT in the headers)
+            # wins over a signed-in one: they chose it on purpose.
+            if bearer and not any(k.lower() == "authorization" and v for k, v in headers.items()):
+                headers["Authorization"] = f"Bearer {bearer}"
             return HttpSseTransport(
                 url=server.url,
-                headers=server.parsed_headers(),
+                headers=headers,
                 # "http"/"streamable-http" mean Streamable HTTP even when the
                 # path happens to end in /sse; only "sse" forces the legacy shape.
                 mode="sse" if transport_type == "sse" else "streamable",

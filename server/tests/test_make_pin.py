@@ -36,10 +36,14 @@ class _Scripted:
         self.rounds = list(rounds)
         self.tools: list = []
         self.systems: list[str] = []
+        self.asked: list[str] = []
 
     async def stream(self, messages, *, think=None, tools=None):
         self.tools.append({t["name"] for t in tools or []})
         self.systems.append(messages[0].content)
+        # The turn's own message: the last one from the user before any of
+        # this turn's rounds.
+        self.asked.append(next(m.content for m in messages if m.role == "user"))
         if self.rounds:
             calls = self.rounds.pop(0)
             yield Chunk(done=True, tool_calls=tuple(
@@ -98,7 +102,10 @@ async def test_a_pinned_turn_offers_only_that_way_of_making(store: Store):
     offered = provider.tools[0]
     assert "write_wireframe" in offered and "read_canvas" in offered
     assert not offered & {"write_slides", "write_sheet", "write_canvas", "wireframe_to_slides"}
-    assert "chose **Wireframe** in the composer's Make menu" in provider.systems[0]
+    # Said on the turn's own message, and kept out of the system prompt so the
+    # cached prefix does not change on a pinned turn.
+    assert "chose **Wireframe** in the composer's Make menu" in provider.asked[0]
+    assert "Make menu" not in provider.systems[0]
     assert store.session_canvases(sid)[0].kind == "wireframe"
 
 
@@ -118,7 +125,7 @@ async def test_auto_leaves_every_tool_and_says_nothing(store: Store):
     sid = store.create_session()["id"]
     await _run(orch, sid, "Hello", make="auto")
     assert {"write_wireframe", "write_slides", "write_sheet", "write_canvas"} <= provider.tools[0]
-    assert "chose **" not in provider.systems[0]
+    assert "chose **" not in provider.asked[0]
 
 
 @pytest.mark.asyncio
@@ -127,7 +134,7 @@ async def test_a_pin_to_a_switched_off_tool_is_ignored(store: Store):
     orch.registry.set_enabled("write_wireframe", False)
     sid = store.create_session()["id"]
     await _run(orch, sid, "Hello", make="wireframe")
-    assert "chose **" not in provider.systems[0]
+    assert "chose **" not in provider.asked[0]
     assert "write_slides" in provider.tools[0]
 
 

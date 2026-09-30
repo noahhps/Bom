@@ -128,15 +128,23 @@ export const KINDS = [
   { id: "design", label: "Design", icon: "design" },
 ];
 
-function KindControl({ value, onChange, disabled }) {
+/* In Studio the choice is Design or Code; Home starts chats only and draws
+   none of this. `kinds` is which of KINDS to offer, in order. */
+export const STUDIO_KINDS = ["design", "code"];
+
+function KindControl({ value, onChange, disabled, kinds = KINDS.map((k) => k.id) }) {
+  const offered = KINDS.filter((k) => kinds.includes(k.id));
   return (
     <div
       className="composer-kind"
       role="radiogroup"
       aria-label="Conversation type"
-      style={{ "--i": Math.max(0, KINDS.findIndex((k) => k.id === value)) }}
+      style={{
+        "--i": Math.max(0, offered.findIndex((k) => k.id === value)),
+        "--n": offered.length,
+      }}
     >
-      {KINDS.map((kind) => (
+      {offered.map((kind) => (
         <button
           key={kind.id}
           type="button"
@@ -224,6 +232,7 @@ export function Composer({
   onMake = null,
   kind = null,
   onKind = null,
+  kinds,
   projects = [],
   projectId = null,
   onProject = null,
@@ -731,7 +740,7 @@ export function Composer({
             to show the tray is not drawn at all. */}
         {onKind || onMake || agents.length > 0 || onProject || sessionLabel ? (
           <div className="composer-tray">
-            {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} /> : null}
+            {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} kinds={kinds} /> : null}
 
             {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
 

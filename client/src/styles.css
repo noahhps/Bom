@@ -3329,7 +3329,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   position: relative;
   isolation: isolate;
   display: inline-grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* As many columns as kinds on offer (`--n`, set by KindControl). */
+  grid-template-columns: repeat(var(--n, 3), 1fr);
   gap: 0;
   padding: 3px;
   border: 1px solid var(--line);
@@ -3352,7 +3353,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc((100% - 6px) / 3);
+  width: calc((100% - 6px) / var(--n, 3));
   border-radius: calc(var(--r-pill) - 2px);
   transform: translateX(calc(var(--i, 0) * 100%));
   background: var(--kind-grad);
@@ -5581,6 +5582,29 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
    The group keeps a floor, so on a very short window it holds a few rows and
    the column scrolls as a whole, as it did before. */
+/* Home and Studio, at the head of the rail (see NavRail's SPACES). The
+   segmented control, full width while the rail is open; shut, a column of
+   the two glyphs, like everything else in a shut rail. Pulled up toward the
+   logo, which the panel's 28px gap would otherwise hold it away from. */
+.navrail-spaces {
+  display: flex;
+  width: 100%;
+  margin-top: -12px;
+}
+.navrail-spaces > button {
+  flex: 1;
+  justify-content: center;
+  height: 32px;
+  padding: 0 10px;
+}
+.navrail:not([data-open]) .navrail-spaces {
+  flex-direction: column;
+  width: auto;
+  align-self: center;
+}
+.navrail:not([data-open]) .navrail-spaces > button { flex: none; padding: 0 8px; }
+.navrail:not([data-open]) .navrail-space-label { display: none; }
+
 /* The rule between the pages and the conversations. A soft, round-ended
    line rather than a border: shut it is as wide as the icons, open it runs
    the width of the rows. */

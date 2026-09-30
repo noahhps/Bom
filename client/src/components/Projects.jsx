@@ -545,8 +545,9 @@ export function Projects({
 
       <div className="page-body" style={{ flexDirection: "column" }}>
         <div className="page-col" style={{ alignSelf: "stretch" }}>
+          {tabs.length > 1 ? (
           <div className="segmented prj-tabs" role="tablist" aria-label="Kinds of project">
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const count = projects.filter((p) => kindOf(p) === t.id).length;
               return (
                 <button
@@ -564,6 +565,7 @@ export function Projects({
               );
             })}
           </div>
+          ) : null}
 
           {mine.length === 0 ? (
             <p className="p prj-none">

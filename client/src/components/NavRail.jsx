@@ -32,15 +32,29 @@ const LIST_KEY = "unified-llm-rail-list-open";
 
 // The conversations are not in this list: they are a group with the list
 // folded under it, drawn by `RailGroup` below the plain destinations.
-const DESTINATIONS = [
-  { id: "projects", label: "Projects", icon: "folder" },
-  { id: "skills", label: "Skills", icon: "skills" },
-  // The design.md files designs are held to.
-  { id: "standards", label: "Standards", icon: "design" },
-  { id: "agents", label: "Agents", icon: "agents" },
-  // Memory and Settings are not here: they are screens of the settings
-  // window, behind the gear at the top right of the app bar.
+/* The two spaces, switched at the head of the rail. Home is conversation:
+   chats, quick asks, and the agents you keep talking to. Studio is the
+   longer work -- designs and code -- with its own conversations and
+   projects. Each has its own pages; Skills is in both, being what the model
+   can do wherever it is asked. */
+export const SPACES = [
+  { id: "home", label: "Home", icon: "home" },
+  { id: "studio", label: "Studio", icon: "code" },
 ];
+
+const DESTINATIONS = {
+  home: [
+    { id: "projects", label: "Projects", icon: "folder" },
+    { id: "skills", label: "Skills", icon: "skills" },
+    { id: "agents", label: "Agents", icon: "agents" },
+  ],
+  studio: [
+    { id: "projects", label: "Projects", icon: "folder" },
+    { id: "skills", label: "Skills", icon: "skills" },
+  ],
+  // Memory, Settings and the design standards are not here: they are
+  // screens of the settings window, behind the gear in the app bar.
+};
 
 /* The destination's name.
  *
@@ -241,6 +255,8 @@ function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDe
 }
 
 export function NavRail({
+  space = "home",
+  onSpace,
   view,
   onView,
   status,
@@ -375,11 +391,32 @@ export function NavRail({
 
         </div>
 
+        {/* Home or Studio -- the app's segmented control, at the head of the
+            rail the way Claude puts Home and Code. Open, the two sit side by
+            side with their names; shut, the rail is a column of glyphs and so
+            are they. */}
+        <div className="segmented navrail-spaces" role="tablist" aria-label="Space">
+          {SPACES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={space === item.id}
+              data-active={space === item.id ? "" : undefined}
+              title={item.label}
+              onClick={() => onSpace?.(item.id)}
+            >
+              <Icon name={item.icon} />
+              <span className="navrail-space-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+
         <div className="navrail-dest">
           {/* The app's pages first, then the conversations -- the list is the
               one part of the rail that grows, so it goes last, where it can
               run on without pushing the pages out of reach. */}
-          {DESTINATIONS.map((destination) => (
+          {DESTINATIONS[space].map((destination) => (
             <button
               key={destination.id}
               type="button"
@@ -402,13 +439,13 @@ export function NavRail({
               a new one is gets chosen in its composer. */}
           <RailGroup
             id="chat"
-            label="Conversations"
-            icon="chat_bubble"
+            label={space === "studio" ? "Designs & code" : "Conversations"}
+            icon={space === "studio" ? "design" : "chat_bubble"}
             current={view === "chat" || view === "code"}
             open={listOpen}
             onToggle={toggleList}
             onGo={() => onView("chat")}
-            newLabel="+ New conversation"
+            newLabel={space === "studio" ? "+ New design or code" : "+ New conversation"}
             onNew={onNewSession}
           >
             {/* Every conversation, in one flat list.

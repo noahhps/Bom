@@ -8,7 +8,6 @@ import { AgentGreeting, AgentsScreen } from "./components/AgentRoom";
 import { lookOf } from "./lib/accessories";
 import { AgentGallery } from "./components/Agents";
 import { AppBar } from "./components/AppBar";
-import { Design } from "./components/Design";
 import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
 import { CodeStarters, CodeStartersHead } from "./components/code/CodeStarters";
@@ -16,7 +15,7 @@ import { CodeView } from "./components/code/CodeView";
 import { FolderPicker } from "./components/code/FolderPicker";
 import { NewProject } from "./components/code/NewProject";
 import { Icon } from "./components/Icon";
-import { Composer } from "./components/Composer";
+import { Composer, STUDIO_KINDS } from "./components/Composer";
 import { Projects } from "./components/Projects";
 import { MessageList } from "./components/MessageList";
 import { NavRail } from "./components/NavRail";
@@ -48,6 +47,11 @@ const TOKEN_KEY = "unified-llm-token";
 // Whether the rail stays out. A layout preference rather than data, so it is
 // the one thing besides the token this client is allowed to remember.
 const PIN_KEY = "unified-llm-rail-pinned";
+// Home or Studio, remembered on this device like the pinned rail.
+const SPACE_KEY = "bom.space";
+// Which space a conversation belongs to: designs and code are Studio's.
+const spaceOf = (session) =>
+  session && (session.mode === "design" || session.mode === "code") ? "studio" : "home";
 
 // "boot" is the silent pass with a token already in storage -- the common
 // case, and the one that must not flash a login screen on every launch.
@@ -70,13 +74,37 @@ export default function App() {
   // Which of the rail's destinations is on screen. "chat" is the conversation
   // screen, for a chat or a design and for every conversation not yet sent;
   // "code" is a code session's editor with the conversation beside it; and
-  // "standards" is the library of design.md files designs are held to.
+  // "projects", "skills" and "agents" are the rail's pages. (The design
+  // standards are a screen of Settings.)
   const [view, setView] = useState("chat");
   const talking = view === "chat";
   // What the conversation on the new-conversation page will be started as --
   // chosen in its composer. One page for all three: the composer and what is
   // under it change to suit, rather than each kind having a page of its own.
   const [newKind, setNewKind] = useState("chat");
+  // The space the rail is in -- Home (chats, agents) or Studio (designs and
+  // code). It follows what is on screen (see the effect below); the switch at
+  // the head of the rail moves it, and it is remembered for the next launch.
+  const [space, setSpace] = useState(() => {
+    try {
+      return localStorage.getItem(SPACE_KEY) === "studio" ? "studio" : "home";
+    } catch {
+      return "home";
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPACE_KEY, space);
+    } catch {
+      /* private window: the space is simply not remembered */
+    }
+  }, [space]);
+  // What Studio starts as when there is nothing of its own to go back to:
+  // whichever of design and code was picked last.
+  const studioKind = useRef("design");
+  useEffect(() => {
+    if (newKind === "design" || newKind === "code") studioKind.current = newKind;
+  }, [newKind]);
   const rail = useRailWidth();
   const canvasSize = useCanvasWidth();
   const screenRef = useRef(null);
@@ -268,6 +296,12 @@ export default function App() {
     () => sessions.sessions.filter((s) => !agentChatIds.has(s.id)),
     [sessions.sessions, agentChatIds],
   );
+  // The rail's list is the space's own: chats in Home, designs and code in
+  // Studio.
+  const spaceSessions = useMemo(
+    () => plainSessions.filter((s) => spaceOf(s) === space),
+    [plainSessions, space],
+  );
 
   // The open conversation's row, for its mode, its standard and its filing.
   const current = sessions.sessions.find((s) => s.id === chat.sessionId) || null;
@@ -404,15 +438,24 @@ export default function App() {
 
         const list = await refresh();
         if (stale()) return;
-        if (list.length) {
-          if (list[0].mode === "code") setView("code");
+        // The newest conversation in the space the app was left in, so a
+        // Studio day reopens on its design or code rather than on a chat.
+        let remembered = "home";
+        try {
+          remembered = localStorage.getItem(SPACE_KEY) === "studio" ? "studio" : "home";
+        } catch {
+          /* no storage: Home */
+        }
+        const first = list.find((s) => spaceOf(s) === remembered) || list[0];
+        if (first) {
+          if (first.mode === "code") setView("code");
           // The newest conversation is, if it is an agent's, that agent's one
           // chat -- so it reopens where it lives, on the Agents screen.
-          else if (list[0].agent_id) {
+          else if (first.agent_id) {
             setView("agents");
-            setRoomAgentId(list[0].agent_id);
+            setRoomAgentId(first.agent_id);
           }
-          await openSession(list[0].id);
+          await openSession(first.id);
         } else startNew();
         setPhase(READY);
       } catch (error) {
@@ -520,6 +563,38 @@ export default function App() {
     },
     [startNew],
   );
+  // The space follows what is on screen: a design or a code conversation
+  // (or the empty page set to start one) is Studio's, a chat or an agent is
+  // Home's. Projects and Skills are in both, and leave it where it is.
+  const onScreen =
+    view === "code" ? "studio"
+    : view === "agents" ? "home"
+    : view === "chat" ? (designing || startingCode ? "studio" : "home")
+    : null;
+  useEffect(() => {
+    if (onScreen) setSpace(onScreen);
+  }, [onScreen]);
+
+  // The switch at the head of the rail. Going to a space goes back to what
+  // it had on screen, if that is still open; otherwise to a fresh one --
+  // a new chat in Home, a new design or code session in Studio.
+  const goToSpace = useCallback(
+    (next) => {
+      setSpace(next);
+      setSidebarOpen(false);
+      const open = current && !agentChatIds.has(current.id) ? current : null;
+      if (next === "home") {
+        if (open && spaceOf(open) === "home") setView("chat");
+        else startNewOf("chat");
+      } else if (open && spaceOf(open) === "studio") {
+        setView(open.mode === "code" ? "code" : "chat");
+      } else {
+        startNewOf(studioKind.current);
+      }
+    },
+    [current, agentChatIds, startNewOf],
+  );
+
   const enterRoom = useCallback(
     (agentId) => {
       const existing = agentChats.get(agentId);
@@ -905,7 +980,12 @@ export default function App() {
         // Only before the first message: a conversation is what
         // it was started as.
         kind={newKind}
-        onKind={!room && !chat.sessionId && chat.messages.length === 0 ? chooseKind : null}
+        // Design or Code, in Studio, before the first message. Home starts
+        // chats and has nothing to choose.
+        onKind={
+          !room && space === "studio" && !chat.sessionId && chat.messages.length === 0 ? chooseKind : null
+        }
+        kinds={STUDIO_KINDS}
         agents={chat.sessionId || room ? [] : agents.agents}
         // The project, in the tray: picked before the first message and sent
         // with it, or -- once the conversation exists -- filed straight away.
@@ -943,7 +1023,7 @@ export default function App() {
             designs={designs.designs}
             value={look}
             onChoose={(design) => handleLook(design).catch(() => {})}
-            onManage={() => goTo("standards")}
+            onManage={() => setSettingsAt("standards")}
           />
         ) : startingCode ? (
           <CodeStarters
@@ -1069,6 +1149,19 @@ export default function App() {
               }}
               theme={theme}
               appearance={appearance}
+              // The design standards live in Settings now. "Use" starts a
+              // design with one, in Studio, and shuts the window.
+              standards={{
+                designs: designs.designs,
+                presets: designs.presets,
+                onCreate: designs.create,
+                onUpdate: designs.update,
+                onDelete: designs.remove,
+                onUse: (design) => {
+                  setSettingsAt(null);
+                  handleDesignWith(design);
+                },
+              }}
             />
           ) : null}
 
@@ -1078,16 +1171,20 @@ export default function App() {
                 thread and no second place to look for the same list. */}
             <NavRail
               view={view}
+              space={space}
+              onSpace={goToSpace}
               onView={(next) => {
+                // The space's conversations, from a page: back to what the
+                // space had open, or a fresh one if what is loaded belongs to
+                // the other space.
+                if (next === "chat" && (!current || spaceOf(current) !== space || agentChatIds.has(current.id))) {
+                  if (space === "studio") startNewOf(studioKind.current);
+                  else handleNewSession();
+                  return;
+                }
                 // Back to Agents: the agent you were talking to, still open.
                 if (next === "agents" && roomAgentId && agents.agents.some((a) => a.id === roomAgentId)) {
                   enterRoom(roomAgentId);
-                  return;
-                }
-                // Out to Conversations from an agent's chat: that chat is the
-                // agent's, not one of these, so the page opens fresh.
-                if (next === "chat" && chat.sessionId && agentChatIds.has(chat.sessionId)) {
-                  handleNewSession();
                   return;
                 }
                 goTo(next);
@@ -1106,13 +1203,14 @@ export default function App() {
               onResizeStart={rail.start}
               onResizeKey={rail.nudge}
               railWidth={rail.width}
-              sessions={plainSessions}
+              sessions={spaceSessions}
               projects={projects.projects}
               agents={agents.agents}
               onFileSession={handleFileSession}
               activeId={chat.sessionId}
               onOpenSession={handleOpenSession}
-              onNewSession={handleNewSession}
+              // "+ New" and the logo start the space's own kind of thing.
+              onNewSession={space === "studio" ? () => startNewOf(studioKind.current) : handleNewSession}
               onDelete={handleDelete}
             />
 
@@ -1210,6 +1308,9 @@ export default function App() {
                 renderConversation(null)
               ) : view === "projects" ? (
                 <Projects
+                  // The space's kinds: chat projects in Home, design and code
+                  // in Studio.
+                  kinds={space === "studio" ? ["design", "code"] : ["chat"]}
                   projects={projects.projects}
                   sessions={sessions.sessions}
                   library={library.groups}
@@ -1270,16 +1371,7 @@ export default function App() {
                 >
                   {roomAgent ? renderConversation(roomAgent) : null}
                 </AgentsScreen>
-              ) : (
-                <Design
-                  designs={designs.designs}
-                  presets={designs.presets}
-                  onCreate={designs.create}
-                  onUpdate={designs.update}
-                  onDelete={designs.remove}
-                  onUse={handleDesignWith}
-                />
-              )}
+              ) : null}
             </div>
 
             {/* The document beside the conversation. A sibling of the sheet rather

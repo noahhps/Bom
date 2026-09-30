@@ -81,21 +81,31 @@ for want in ("publishable", "anon"):
             print(k.get("api_key", "")); sys.exit(0)
 ' || true)
 
+# Worked out before the summary, not inside it: macOS's bash 3.2 misreads
+# quotes inside ${VAR:-...} in a here-document and aborts the whole block.
+if [ -n "$KEY" ]; then
+  KEY_LINE="BOM_RELAY_KEY=$KEY"
+else
+  KEY_LINE="BOM_RELAY_KEY=  (copy the anon or publishable key from Project Settings > API Keys)"
+fi
+URL="https://$REF.supabase.co"
+DASHBOARD="https://supabase.com/dashboard/project/$REF"
+
 cat <<DONE
 
   Relay ready.
 
-    BOM_RELAY_URL=https://$REF.supabase.co
-    BOM_RELAY_KEY=${KEY:-<your project's anon / publishable key: Project Settings > API Keys>}
+    BOM_RELAY_URL=$URL
+    $KEY_LINE
 
-  Two things to check once in the dashboard (https://supabase.com/dashboard/project/$REF):
+  Three things to check once in the dashboard ($DASHBOARD):
     * Realtime > Settings: "Allow public access" is OFF.
     * Authentication > Emails > Magic Link: add {{ .Token }} to the template, so the
       email carries a 6-digit code as well as a link (the desktop app needs the code).
-    * Authentication > URL Configuration: add your web app's address (e.g. the Vercel URL).
+    * Authentication > URL Configuration: add your web app address (e.g. the Vercel URL).
   For a personal relay, turn off "Allow new users to sign up" once you have signed in once.
 
-  Next: put the two values in Vercel's environment (as VITE_BOM_RELAY_URL / VITE_BOM_RELAY_KEY)
+  Next: put the two values in the Vercel environment (as VITE_BOM_RELAY_URL / VITE_BOM_RELAY_KEY)
   and on the host (./run.sh --remote, or Settings > Remote access). See docs/remote.md.
 
 DONE

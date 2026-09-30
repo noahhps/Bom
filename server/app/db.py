@@ -709,6 +709,24 @@ MIGRATIONS: list[str] = [
       updated_at  INTEGER NOT NULL
     );
     """,
+    # Connections to OpenAI-compatible services (providers/openai_compat.py):
+    # OpenAI, Gemini, Groq, a vLLM box on the network... `preset` names the
+    # service in providers/presets.py; the address, key and model are the
+    # reader's. The key never leaves the server -- the API reports only
+    # whether one is set.
+    """
+    CREATE TABLE model_connections (
+      id          TEXT PRIMARY KEY,
+      preset      TEXT NOT NULL,
+      name        TEXT NOT NULL,
+      base_url    TEXT NOT NULL,
+      api_key     TEXT,
+      model       TEXT,
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+    """,
 ]
 
 

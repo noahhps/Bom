@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { providerLabel } from "./Providers";
+
 /* The menu behind the circle at the foot of the rail.
  *
  * Two levels, because there are two decisions and they are not the same one.
@@ -21,7 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const AUTO = {
   id: null,
   name: "Auto",
-  hint: "Local first, then whichever cloud is connected",
+  hint: "Local first, then the fallback order in Settings",
 };
 
 const LABELS = {
@@ -116,7 +118,7 @@ export function ModelMenu({
     }
     const found = backend(id);
     if (!found) return "";
-    if ((id === "openrouter" || id === "network") && !found.configured) return "not connected";
+    if ((id === "openrouter" || id === "network" || found.connection) && !found.configured) return "not connected";
     if (!found.healthy) return found.model ? `${found.model} · unreachable` : "unreachable";
     return found.model || LABELS[id]?.blurb || "";
   };
@@ -149,7 +151,7 @@ export function ModelMenu({
             ‹ back
           </button>
           <span className="mi" data-strong>
-            {LABELS[browsing]?.name || browsing}
+            {providerLabel(found) || browsing}
           </span>
         </div>
 
@@ -160,7 +162,7 @@ export function ModelMenu({
               value={filter}
               autoFocus
               placeholder="Filter models"
-              aria-label={`Filter ${LABELS[browsing]?.name || browsing} models`}
+              aria-label={`Filter ${providerLabel(found) || browsing} models`}
               onChange={(event) => setFilter(event.target.value)}
             />
           </div>
@@ -247,7 +249,7 @@ export function ModelMenu({
           >
             <span className="popover-dot" data-ok={healthy(entry.id) ? "" : undefined} />
             <span className="popover-text">
-              <span className="popover-name">{LABELS[entry.id]?.name || entry.name}</span>
+              <span className="popover-name">{providerLabel(entry)}</span>
               <span className="popover-hint">{detail(entry.id)}</span>
             </span>
             {value === entry.id ? <span className="popover-tick">✓</span> : null}
@@ -257,7 +259,7 @@ export function ModelMenu({
           <button
             type="button"
             className="popover-more"
-            aria-label={`Choose a ${LABELS[entry.id]?.name || entry.name} model`}
+            aria-label={`Choose a ${providerLabel(entry)} model`}
             title="Choose a model"
             onClick={() => browse(entry.id)}
           >

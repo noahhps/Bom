@@ -25,14 +25,13 @@ from .attachments import AttachmentError
 from .attachments import decode as decode_attachments
 from .config import Settings, ThinkingLevel, write_secret
 from .enterprise import describe as describe_enterprise
-from .thinking import control_for
+from .thinking import control_for, control_for_connection
 from .memory import MEMORY_DEFAULTS
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
 from .providers import (
     CLOUD,
-    FALLBACK_ORDER,
     LOCAL,
     NETWORK,
     NETWORK_URL_SETTING,
@@ -43,6 +42,9 @@ from .providers import (
     model_setting_key,
 )
 from .providers import lan
+from .providers.openai_compat import OpenAICompatProvider
+from .providers.presets import get_connection_preset, list_connection_presets
+from .providers.router import FALLBACK_SETTING
 from .mcp import icons as mcp_icons
 from .mcp.settings import MCP_DEFAULTS
 from .situation import Situation
@@ -186,6 +188,38 @@ class ProviderKey(BaseModel):
     # Empty clears it, as with a skill's key: "disconnect" is the same request
     # with nothing in it rather than a route of its own.
     key: str = Field(default="", max_length=400)
+
+
+class ConnectionIn(BaseModel):
+    preset: str = Field(min_length=1, max_length=40)
+    name: str = Field(default="", max_length=60)
+    # Taken from the preset when blank; only presets that allow it (local
+    # servers, Azure, "other") may be given another.
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=500)
+    model: str = Field(default="", max_length=200)
+
+
+class ConnectionCheck(BaseModel):
+    preset: str = Field(min_length=1, max_length=40)
+    # What the reader is calling it, so a refusal names it that way.
+    name: str = Field(default="", max_length=60)
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=500)
+    # Checking an existing connection again, with the key it already holds.
+    connection_id: str = Field(default="", max_length=60)
+
+
+class ConnectionPatch(BaseModel):
+    name: str | None = Field(default=None, max_length=60)
+    base_url: str | None = Field(default=None, max_length=500)
+    api_key: str | None = Field(default=None, max_length=500)
+    model: str | None = Field(default=None, max_length=200)
+    enabled: bool | None = None
+
+
+class FallbackOrder(BaseModel):
+    order: list[str] = Field(default_factory=list, max_length=50)
 
 
 class SignIn(BaseModel):
@@ -1617,7 +1651,25 @@ def build_router(
 
     def _thinking(provider_id: str) -> dict:
         provider = providers.by_id[provider_id]
+        if isinstance(provider, OpenAICompatProvider):
+            return control_for_connection(provider.preset).to_dict()
         return control_for(provider.name, provider.model).to_dict()
+
+    def _connection_out(row: dict) -> dict:
+        """A stored connection as the page sees it: never the key itself."""
+        preset = get_connection_preset(row["preset"]) or {}
+        return {
+            "id": row["id"],
+            "preset": row["preset"],
+            "name": row["name"],
+            "base_url": row["base_url"],
+            "model": row.get("model") or "",
+            "enabled": bool(row["enabled"]),
+            "has_key": bool(row.get("api_key")),
+            "kind": preset.get("kind", "cloud"),
+            "key_required": bool(preset.get("key_required")),
+            "url_editable": bool(preset.get("url_editable")),
+        }
 
     async def _provider_state(provider_id: str) -> dict:
         """One backend as the picker draws it, without its model list.
@@ -1632,9 +1684,14 @@ def build_router(
             healthy = await provider.health()
         except Exception:  # noqa: BLE001 -- an unreachable provider, not a 500
             healthy = False
+        connection = store.get_connection(provider_id) if isinstance(provider, OpenAICompatProvider) else None
         return {
             "id": provider_id,
             "name": provider.name,
+            # What the picker calls it: a connection's own name ("Groq",
+            # "Work vLLM"); the built-in four are named by the client.
+            "label": getattr(provider, "label", "") or "",
+            **({"connection": _connection_out(connection)} if connection else {}),
             "model": provider.model,
             "healthy": healthy,
             # Whether it has what it needs to be tried at all. Distinct from
@@ -1645,6 +1702,13 @@ def build_router(
             "thinking": _thinking(provider_id),
             # Where an Ollama is, so the page can say which machine answers.
             **({"url": provider.base_url} if provider_id in (LOCAL, NETWORK) else {}),
+            # Where the Anthropic key comes from: pasted in Settings, or the
+            # server's environment -- which a pasted key cannot be removed from.
+            **(
+                {"key_source": "settings" if providers.cloud.api_key
+                 else "environment" if getattr(provider, "configured", False) else ""}
+                if provider_id == CLOUD else {}
+            ),
         }
 
     async def _catalogue(provider_id: str) -> dict:
@@ -1691,7 +1755,14 @@ def build_router(
                     entry["account"] = await providers.openrouter.account()
                 except Exception:  # noqa: BLE001 -- a missing figure, not a 500
                     pass
-        return {"providers": listed}
+        return {
+            "providers": listed,
+            # Every stored connection, switched off ones included -- they are
+            # not backends until switched on, but the page still lists them.
+            "connections": [_connection_out(row) for row in store.list_connections()],
+            # The order Auto falls back in, after the local model.
+            "order": providers.fallback(),
+        }
 
     @router.put("/providers/{provider_id}/model")
     async def choose_model(provider_id: str, body: ModelChoice) -> dict:
@@ -1719,8 +1790,128 @@ def build_router(
             )
 
         providers.set_model(provider_id, model)
-        store.set_text_setting(model_setting_key(provider_id), model)
+        if store.get_connection(provider_id):
+            store.update_connection(provider_id, model=model)
+        else:
+            store.set_text_setting(model_setting_key(provider_id), model)
         return {"provider": provider_id, "model": model, "thinking": _thinking(provider_id)}
+
+    # -- connections to OpenAI-compatible services -------------------------
+
+    def _connection_address(preset: dict, given: str) -> str:
+        address = (given or "").strip().rstrip("/") if preset.get("url_editable") else ""
+        address = address or (preset.get("base_url") or "").rstrip("/")
+        if not address or "YOUR-RESOURCE" in address:
+            raise HTTPException(400, "Give the server's address.")
+        if not address.startswith(("http://", "https://")):
+            raise HTTPException(400, "The address has to start with http:// or https://")
+        return address
+
+    def _reload_connections() -> None:
+        providers.load_connections(store.list_connections())
+
+    @router.get("/connections/presets")
+    def connection_presets() -> dict:
+        return {"presets": list_connection_presets()}
+
+    @router.post("/connections/check")
+    async def check_connection(body: ConnectionCheck) -> dict:
+        """Try an address and key before saving them, and list the models
+        they reach -- so the form can offer a model to pick, and a wrong key
+        is caught on the form rather than on the first message."""
+        preset = get_connection_preset(body.preset)
+        if not preset:
+            raise HTTPException(404, f"no service called {body.preset!r}")
+        key = body.api_key.strip()
+        if not key and body.connection_id:
+            stored = store.get_connection(body.connection_id)
+            key = (stored or {}).get("api_key") or ""
+        if preset.get("key_required") and not key:
+            raise HTTPException(400, f"{preset['label']} needs an API key ({preset.get('key_help', '')}).")
+        probe = OpenAICompatProvider(
+            connection_id="check", name=body.preset, label=body.name.strip() or preset["label"],
+            base_url=_connection_address(preset, body.base_url), api_key=key, preset=preset,
+        )
+        try:
+            models = await probe.list_models(refresh=True)
+            return {"ok": True, "models": models, "error": ""}
+        except ProviderError as exc:
+            return {"ok": False, "models": [], "error": str(exc)}
+        finally:
+            await probe.aclose()
+
+    @router.post("/connections")
+    async def add_connection(body: ConnectionIn) -> dict:
+        preset = get_connection_preset(body.preset)
+        if not preset:
+            raise HTTPException(404, f"no service called {body.preset!r}")
+        if preset.get("key_required") and not body.api_key.strip():
+            raise HTTPException(400, f"{preset['label']} needs an API key.")
+        row = store.add_connection(
+            preset=body.preset.strip().lower(),
+            name=body.name.strip() or preset["label"],
+            base_url=_connection_address(preset, body.base_url),
+            api_key=body.api_key.strip(),
+            model=body.model.strip(),
+        )
+        _reload_connections()
+        return await _provider_state(row["id"])
+
+    @router.patch("/connections/{connection_id}")
+    async def edit_connection(connection_id: str, body: ConnectionPatch) -> dict:
+        row = store.get_connection(connection_id)
+        if not row:
+            raise HTTPException(404, "no such connection")
+        preset = get_connection_preset(row["preset"]) or {}
+        base_url = (
+            _connection_address(preset, body.base_url) if body.base_url is not None else None
+        )
+        store.update_connection(
+            connection_id,
+            name=(body.name.strip() or preset.get("label")) if body.name is not None else None,
+            base_url=base_url,
+            api_key=body.api_key.strip() if body.api_key is not None else None,
+            model=body.model.strip() if body.model is not None else None,
+            enabled=body.enabled,
+        )
+        _reload_connections()
+        if connection_id in providers.by_id:
+            return await _provider_state(connection_id)
+        return {"id": connection_id, "connection": _connection_out(store.get_connection(connection_id))}
+
+    @router.delete("/connections/{connection_id}")
+    def delete_connection(connection_id: str) -> dict:
+        if not store.delete_connection(connection_id):
+            raise HTTPException(404, "no such connection")
+        _reload_connections()
+        return {"ok": True}
+
+    @router.put("/providers/order")
+    def set_fallback_order(body: FallbackOrder) -> dict:
+        """The order Auto falls back in when the local model is not answering."""
+        order = providers.set_fallback_order(body.order)
+        store.set_text_setting(FALLBACK_SETTING, json.dumps(order))
+        return {"order": order}
+
+    @router.put("/providers/cloud/key")
+    async def set_anthropic_key(body: ProviderKey) -> dict:
+        """A key for the Anthropic backend, checked before it is kept. Empty
+        forgets it and goes back to whatever the environment provides."""
+        key = body.key.strip()
+        previous = providers.cloud.api_key
+        providers.cloud.set_api_key(key)
+        if key:
+            try:
+                client = providers.cloud._ensure_client()
+                await client.models.list(limit=1)
+            except ProviderError as exc:
+                providers.cloud.set_api_key(previous)
+                raise HTTPException(400, str(exc)) from exc
+            except Exception as exc:  # noqa: BLE001 -- the SDK's own error types
+                providers.cloud.set_api_key(previous)
+                raise HTTPException(400, f"Anthropic did not accept that key: {str(exc)[:200]}") from exc
+        write_secret(settings.anthropic_key_path, key)
+        return await _provider_state(CLOUD)
 
     @router.put("/providers/network/url")
     async def set_network_ollama(body: NetworkOllama) -> dict:
@@ -2422,7 +2613,7 @@ def build_router(
         # The same order `resolve()` walks, so "serving" is genuinely what the
         # next turn would use rather than a second opinion about it.
         serving = next(
-            (i for i in (LOCAL, *FALLBACK_ORDER) if states[i]["healthy"]), "none"
+            (i for i in (LOCAL, *providers.fallback()) if states[i]["healthy"]), "none"
         )
         return {
             "local": {**states[LOCAL], "url": providers.local.base_url},

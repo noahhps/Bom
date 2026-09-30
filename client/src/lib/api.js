@@ -121,6 +121,28 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "PUT",
         body: JSON.stringify({ key }),
       }),
+    // A key for the Anthropic backend, checked by the server before it is
+    // kept. Empty goes back to whatever the server's environment provides.
+    setAnthropicKey: (key) =>
+      json("/providers/cloud/key", { method: "PUT", body: JSON.stringify({ key }) }),
+    // Connections to OpenAI-compatible services (OpenAI, Gemini, Groq, a vLLM
+    // box...). `check` tries an address and key and lists the models they
+    // reach, before anything is saved.
+    connectionPresets: () => json("/connections/presets"),
+    checkConnection: (body) =>
+      json("/connections/check", { method: "POST", body: JSON.stringify(body) }),
+    addConnection: (body) =>
+      json("/connections", { method: "POST", body: JSON.stringify(body) }),
+    editConnection: (id, patch) =>
+      json("/connections/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    deleteConnection: (id) =>
+      json("/connections/" + encodeURIComponent(id), { method: "DELETE" }),
+    // The order Auto falls back in when the local model is not answering.
+    setProviderOrder: (order) =>
+      json("/providers/order", { method: "PUT", body: JSON.stringify({ order }) }),
     // An Ollama on another machine on this network. Empty disconnects; the
     // server checks it is local and that Ollama answers before keeping it.
     setNetworkOllama: (url) =>

@@ -843,6 +843,9 @@ class Orchestrator:
                 "user_message_id": user_message.id,
                 "message_id": assistant.id,
                 "provider": provider.name,
+                # What the reader calls it, for a connection they named
+                # ("Work gateway") rather than the service it speaks to.
+                "provider_label": getattr(provider, "label", "") or "",
                 "model": provider.model,
                 "source": route.reason,
                 # The Make menu, as the server took it: what was asked for, and

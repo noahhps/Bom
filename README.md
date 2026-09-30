@@ -39,6 +39,9 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
    The Tauri window will launch and you can start chatting.
 
 
+### More model providers
+Besides Ollama, Anthropic and OpenRouter, **Settings → Models → Add a provider** connects OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Cerebras, Together, Fireworks and Azure OpenAI. It also connects servers you run yourself (LM Studio, vLLM, llama.cpp, Jan) and any other OpenAI-compatible endpoint. Keys are checked before they're saved, and you set the order Auto falls back in. See [docs/providers.md](docs/providers.md).
+
 ### Optional: image generation
 Decks and pages can use generated pictures if you point Bom at an image generator. It is off until you do:
 ```

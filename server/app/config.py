@@ -191,6 +191,13 @@ class Settings:
     # `openrouter/auto` lets OpenRouter choose per prompt, which is the only
     # default that is right before anyone has picked. The picker overrides it,
     # and what it picks is stored in the database rather than here.
+    # A key for the Anthropic backend pasted in Settings > Models, kept beside
+    # the OpenRouter one. ANTHROPIC_API_KEY in the environment wins at boot.
+    anthropic_key_path: Path = field(
+        default_factory=lambda: Path(
+            _env("ANTHROPIC_KEY_PATH", str(REPO_ROOT / "data" / "anthropic_key"))
+        )
+    )
     openrouter_model: str = field(
         default_factory=lambda: _env("OPENROUTER_MODEL", "openrouter/auto")
     )

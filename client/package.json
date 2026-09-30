@@ -10,9 +10,10 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "node test/reveal.test.mjs && node test/motion.test.mjs && node test/sheet.test.mjs && node test/plaintext.test.mjs && node test/wireframe.test.mjs && node test/filepreview.test.mjs && node test/timeline.test.mjs"
+    "test": "node test/reveal.test.mjs && node test/motion.test.mjs && node test/sheet.test.mjs && node test/plaintext.test.mjs && node test/wireframe.test.mjs && node test/filepreview.test.mjs && node test/timeline.test.mjs && node test/relay.test.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "@tabler/icons-react": "^3.48.0",
     "@tauri-apps/api": "^2.11.1",
     "@xterm/addon-fit": "^0.11.0",

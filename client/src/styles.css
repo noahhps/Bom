@@ -4418,6 +4418,171 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--text-faint);
 }
 
+/* -- remote hosts: the relay gate and Settings > Remote access ------------- */
+
+/* A text button: secondary actions in the gate that should not compete with
+   its one filled button. */
+.remote-link {
+  align-self: center;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font: 400 var(--t-xs)/1.5 var(--font);
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-firm);
+}
+.remote-link:hover { color: var(--ink); text-decoration-color: currentColor; }
+.remote-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.remote-quiet {
+  margin: 0;
+  font: 400 var(--t-sm)/1.6 var(--font);
+  color: var(--text-dim);
+}
+.remote-quiet code,
+.remote-config code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+.remote-warn { color: var(--ochre); }
+
+.remote-account {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 var(--t-sm)/1.5 var(--font);
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.remote-account b { color: var(--ink); font-weight: 500; }
+
+.remote-hosts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+}
+.remote-host {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.remote-host + .remote-host { border-top: 1px solid var(--line-soft); }
+.remote-host-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.remote-host-name b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 var(--t-body)/1.3 var(--font);
+  color: var(--ink);
+}
+.remote-host-name span { font: 400 var(--t-xs)/1.3 var(--font); color: var(--text-faint); }
+.remote-host .btn { flex: none; }
+.remote-connect { flex: none; padding: 9px 14px; font-size: var(--t-sm); }
+
+/* Up or not, as a dot: green when the host checked in within the last few
+   minutes, a quiet grey otherwise. */
+.remote-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--quiet-mark);
+}
+.remote-host[data-online] .remote-dot,
+.remote-state[data-state="online"] .remote-dot { background: var(--green); }
+.remote-state[data-state="pairing"] .remote-dot,
+.remote-state[data-state="connecting"] .remote-dot { background: var(--ochre); }
+.remote-state[data-state="error"] .remote-dot { background: var(--danger); }
+.remote-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+}
+
+.remote-link-form { border-top: 1px solid var(--line-soft); padding-top: 16px; }
+.remote-code-row { display: flex; gap: 8px; }
+.remote-code-row .btn { flex: none; }
+.remote-code-input {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.remote-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--ground);
+}
+.remote-confirm p { margin: 0; font: 400 var(--t-sm)/1.55 var(--font); color: var(--text-dim); }
+.remote-confirm b { color: var(--ink); font-weight: 500; }
+.remote-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.remote-confirm-actions .gate-submit { padding: 9px 14px; font-size: var(--t-sm); }
+
+.remote-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.remote-pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 22px 18px;
+  text-align: center;
+}
+.remote-pairing p { margin: 0; font: 400 var(--t-sm)/1.6 var(--font); color: var(--text-dim); overflow-wrap: anywhere; }
+.remote-pairing a { color: var(--accent); }
+.remote-pairing-code {
+  font: 500 clamp(28px, 7vw, 40px)/1.1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  user-select: all;
+}
+.remote-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+  font: 400 var(--t-sm)/1.6 var(--font);
+  color: var(--text-dim);
+}
+.remote-layers b { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 480px) {
+  .remote-host { flex-wrap: wrap; }
+  .remote-host-name { flex-basis: calc(100% - 18px); }
+  .remote-host .btn { margin-left: 18px; }
+  .remote-connect { flex: 1; }
+  .remote-code-row { flex-direction: column; }
+}
+
 .gate-reveal:focus-visible,
 .gate-submit:focus-visible,
 .gate-help summary:focus-visible {

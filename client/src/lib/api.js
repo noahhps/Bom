@@ -75,17 +75,20 @@ export async function* readEvents(response) {
  * stopped working drops the whole app back to the gate no matter which call
  * happened to notice first.
  */
-export function createApi(token, onUnauthorized = () => {}) {
+export function createApi(token, onUnauthorized = () => {}, { transport = null } = {}) {
+  // `transport` is a host reached through the relay (lib/relay.js): the same
+  // fetch shape, carried over the relay instead of HTTP, and authenticated by
+  // the relay account rather than this server's token.
+  const remote = Boolean(transport);
   async function request(path, options = {}) {
-    // Absolute under Tauri, relative in a browser -- see serverOrigin.
-    const response = await fetch(serverOrigin() + "/api" + path, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token,
-        ...(options.headers || {}),
-      },
-    });
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    const response = remote
+      ? await transport(path, { ...options, headers })
+      : // Absolute under Tauri, relative in a browser -- see serverOrigin.
+        await fetch(serverOrigin() + "/api" + path, {
+          ...options,
+          headers: { ...headers, Authorization: "Bearer " + token },
+        });
     if (response.status === 401) {
       onUnauthorized();
       throw new UnauthorizedError();
@@ -98,8 +101,15 @@ export function createApi(token, onUnauthorized = () => {}) {
 
   const json = async (path, options) => (await request(path, options)).json();
 
+  // A socket or a page of the host's own, which the relay cannot carry: it
+  // forwards requests, not connections.
+  const hereOnly = (what) => {
+    throw new ApiError(`${what} only works on the host's own network, not through the relay.`, 501);
+  };
+
   return {
     request,
+    remote,
     status: () => json("/status"),
 
     // -- providers and models -------------------------------------------
@@ -156,11 +166,14 @@ export function createApi(token, onUnauthorized = () => {}) {
     // because the server has no browser and is often not even on the device
     // being used. `callback_base` is this origin -- how the browser reached
     // the server -- which is the only address it can be sent back to.
-    startOpenRouterSignIn: (callbackBase) =>
-      json("/providers/openrouter/signin", {
+    startOpenRouterSignIn: async (callbackBase) => {
+      // The sign-in page sends the browser back to the host's own address.
+      if (remote) hereOnly("Signing in to OpenRouter");
+      return json("/providers/openrouter/signin", {
         method: "POST",
         body: JSON.stringify({ callback_base: callbackBase }),
-      }),
+      });
+    },
     openRouterSignInStatus: (state) =>
       json("/providers/openrouter/signin/" + encodeURIComponent(state)),
     listSkills: () => json("/skills"),
@@ -214,11 +227,13 @@ export function createApi(token, onUnauthorized = () => {}) {
     // Signing in to a hosted MCP server (Atlassian, Linear, Notion, ...):
     // start it, then poll. `callbackBase` is this origin, which the sign-in
     // page sends the browser back to.
-    startMcpSignIn: (id, callbackBase) =>
-      json("/mcp/servers/" + encodeURIComponent(id) + "/signin", {
+    startMcpSignIn: async (id, callbackBase) => {
+      if (remote) hereOnly("Signing in to a hosted MCP server");
+      return json("/mcp/servers/" + encodeURIComponent(id) + "/signin", {
         method: "POST",
         body: JSON.stringify({ callback_base: callbackBase }),
-      }),
+      });
+    },
     mcpSignInStatus: (state) => json("/mcp/signin/" + encodeURIComponent(state)),
     mcpSignOut: (id) =>
       json("/mcp/servers/" + encodeURIComponent(id) + "/signin", { method: "DELETE" }),
@@ -492,6 +507,7 @@ export function createApi(token, onUnauthorized = () => {}) {
     // it would sit in logs. `hello` names the folder for a new shell, or the
     // id of one to reattach to.
     openTerminal: (hello) => {
+      if (remote) hereOnly("The terminal");
       const base = serverOrigin() || window.location.origin;
       const socket = new WebSocket(base.replace(/^http/, "ws") + "/api/terminal");
       socket.addEventListener("open", () => socket.send(JSON.stringify({ token, ...hello })));
@@ -503,6 +519,7 @@ export function createApi(token, onUnauthorized = () => {}) {
     // page to start on when there is an obvious one. The path is relative to
     // the server, so it is joined to its origin here.
     previewFiles: async (root) => {
+      if (remote) hereOnly("The preview");
       const found = await json("/workspace/preview", { method: "POST", body: JSON.stringify({ root }) });
       const base = (serverOrigin() || window.location.origin) + found.base;
       return { base, entry: found.entry };
@@ -547,5 +564,15 @@ export function createApi(token, onUnauthorized = () => {}) {
     // A blob for the same reason as an attachment: the route is behind the
     // bearer token, so a plain link would 401.
     exportMemory: async () => (await request("/memory/export")).blob(),
+
+    // -- remote access (this server as a host) ------------------------------
+    // Changing it is refused unless the request is made at the host itself;
+    // the status says whether this one was (`can_manage`).
+    remoteStatus: () => json("/remote/status"),
+    setRemoteConfig: (config) =>
+      json("/remote/config", { method: "PUT", body: JSON.stringify(config) }),
+    enableRemote: () => json("/remote/enable", { method: "POST" }),
+    disableRemote: () => json("/remote/disable", { method: "POST" }),
+    unlinkRemote: () => json("/remote/unlink", { method: "POST" }),
   };
 }

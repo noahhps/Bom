@@ -70,6 +70,14 @@ Long conversations are compacted rather than cut off: once the history fills hal
 ### Enterprise mode
 For company use, with long conversations, large codebases and big cloud context windows, switch on **Settings → Enterprise mode**. It raises the context window, tool-result sizes, round and timeout limits, compacts later while keeping more of the conversation verbatim, and holds the prompt cache for an hour. Safety settings don't change. See [docs/enterprise.md](docs/enterprise.md) for every limit and the `ENTERPRISE_*` variables that tune them.
 
+### Remote access
+Use your Bom, with its models, conversations and files, from anywhere, with no port forwarding. Your machine connects out to a relay in your own free Supabase project, and a web app on Vercel (or the desktop app) talks to it through that relay. It stays off until you turn it on **at the machine itself**, and it serves only the account you link it to with a one-time code shown on that machine.
+```
+./relay/setup.sh <supabase-project-ref>   # once: tables, access rules, pairing function
+./run.sh --remote                         # on the host: prints a code to link it
+```
+Or use **Settings → Remote access** on the host. See [docs/remote.md](docs/remote.md) for the Vercel deploy and how access is checked.
+
 ### Work tools (MCP)
 **Skills → MCP servers & presets → Work tools** connects Atlassian (Jira, Confluence), Linear, Notion, Sentry, Stripe and any other hosted MCP server that signs in with OAuth, including your company's own. Choose *Add & sign in*, approve Bom on the service's page, and its tools are ready. Jira and Confluence Server / Data Center connect with tokens. See [docs/work-tools.md](docs/work-tools.md).
 

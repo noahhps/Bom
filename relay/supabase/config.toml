@@ -1,0 +1,10 @@
+# The Supabase project Bom's relay runs in. Only what `supabase link`,
+# `supabase db push` and `supabase functions deploy` need -- everything else
+# keeps Supabase's defaults. See docs/remote.md.
+project_id = "bom-relay"
+
+[functions.bom-pair]
+# /start and /poll are called by a device that has no account yet, so the
+# gateway must let them through. The routes that need a signed-in caller
+# (lookup, approve, revoke) verify the token themselves.
+verify_jwt = false

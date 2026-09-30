@@ -30,6 +30,37 @@
         "--strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "bom-server-sandbox",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "PYTHONPATH=server",
+        "BIND_PORT=8093",
+        "DB_PATH=data/sandbox/chat.db",
+        "AUTH_TOKEN=sandbox-token",
+        "BOM_RELAY_PATH=data/sandbox/relay.json",
+        ".venv/bin/python",
+        "-m",
+        "app"
+      ],
+      "port": 8093
+    },
+    {
+      "name": "bom-client-sandbox",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "API_ORIGIN=http://127.0.0.1:8093",
+        "npx",
+        "--prefix",
+        "client",
+        "vite",
+        "client",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "port": 5176
     }
   ]
 }

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd client && npm ci",
+  "buildCommand": "cd client && VITE_BOM_REMOTE_ONLY=1 npm run build",
+  "outputDirectory": "client/dist",
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!api/|assets/|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Content-Security-Policy", "value": "frame-ancestors 'none'" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    },
+    {
+      "source": "/(index.html|sw.js|)",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
+}

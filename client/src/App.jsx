@@ -22,6 +22,7 @@ import { NavRail } from "./components/NavRail";
 import { Settings } from "./components/Settings";
 import { Skills } from "./components/Skills";
 import { Starters } from "./components/Starters";
+import { RemoteGate } from "./components/RemoteGate";
 import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
 import { useAgents } from "./hooks/useAgents";
@@ -42,6 +43,15 @@ import { UnauthorizedError, createApi } from "./lib/api";
 import { ApiContext } from "./lib/api-context";
 import { AppActions } from "./lib/appActions";
 import { listenForNew, listenForSettings } from "./lib/kinds";
+import { HostUnreachable } from "./lib/relay";
+import {
+  REMOTE_ONLY,
+  arrivedForRemote,
+  forgetHost,
+  openRelay,
+  saveHost,
+  savedHost,
+} from "./lib/remote";
 
 const TOKEN_KEY = "unified-llm-token";
 // Whether the rail stays out. A layout preference rather than data, so it is
@@ -68,7 +78,21 @@ function folderName(root) {
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || "");
-  const [phase, setPhase] = useState(() => (localStorage.getItem(TOKEN_KEY) ? BOOT : GATE));
+  // A host reached through the relay instead of this token's server:
+  // `{id, name}`, remembered so the next launch goes straight back to it.
+  const [remote, setRemote] = useState(() => savedHost());
+  // Which way in the gate offers. The hosted web app has only the relay; a
+  // page opened from a sign-in email or a device's link wants it too.
+  const [gateMode, setGateMode] = useState(() =>
+    REMOTE_ONLY || savedHost() || arrivedForRemote() ? "remote" : "token",
+  );
+  const [phase, setPhase] = useState(() => {
+    // Through the relay, the first answer takes a few seconds, so the gate
+    // is shown saying so rather than a blank window.
+    if (savedHost()) return CONNECTING;
+    if (REMOTE_ONLY || arrivedForRemote()) return GATE;
+    return localStorage.getItem(TOKEN_KEY) ? BOOT : GATE;
+  });
   const [gateError, setGateError] = useState("");
   const [focusToken, setFocusToken] = useState(0);
   // Which of the rail's destinations is on screen. "chat" is the conversation
@@ -176,15 +200,38 @@ export default function App() {
 
   const bootstrapped = useRef("");
   const signOutRef = useRef(() => {});
+  const remoteRef = useRef(remote);
+  remoteRef.current = remote;
 
+  // Back to the gate. Through the relay that means back to the device list:
+  // the relay account stays signed in, and a local token stays remembered.
   const signOut = useCallback((message) => {
-    localStorage.removeItem(TOKEN_KEY);
     bootstrapped.current = "";
-    setToken("");
+    if (remoteRef.current) {
+      forgetHost();
+      setRemote(null);
+      setGateMode("remote");
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      setToken("");
+    }
     setPhase(GATE);
     setGateError(message || "");
   }, []);
   signOutRef.current = signOut;
+
+  // One connection per chosen host. Joined on the first request, and left
+  // when another host is chosen or the gate comes back.
+  const relay = useMemo(() => (remote ? openRelay(remote.id) : null), [remote]);
+  // Closed when replaced rather than in an effect's cleanup: StrictMode runs
+  // every cleanup once on mount, which would drop the channel mid-bootstrap.
+  const lastRelay = useRef(null);
+  useEffect(() => {
+    if (lastRelay.current && lastRelay.current !== relay) lastRelay.current.close();
+    lastRelay.current = relay;
+  }, [relay]);
+  // What the bootstrap below runs once for: this token, or this host.
+  const identity = remote ? "relay:" + remote.id : token;
 
   // One client per token. The 401 handler goes through a ref so the identity
   // stays stable: every hook below keys its callbacks off this object.
@@ -194,10 +241,16 @@ export default function App() {
   // the message a real rejection left a moment earlier.
   const api = useMemo(
     () =>
-      createApi(token, () => {
-        if (token) signOutRef.current("That token was rejected.");
-      }),
-    [token],
+      relay
+        ? createApi(
+            "",
+            () => signOutRef.current("Your host didn't accept this account. Sign in again, or pick another host."),
+            { transport: relay.fetch },
+          )
+        : createApi(token, () => {
+            if (token) signOutRef.current("That token was rejected.");
+          }),
+    [token, relay],
   );
 
   const sessions = useSessions(api);
@@ -409,20 +462,23 @@ export default function App() {
   // -- bootstrap ------------------------------------------------------------
 
   useEffect(() => {
-    if (!token || bootstrapped.current === token) return;
-    bootstrapped.current = token;
+    if (!identity || bootstrapped.current === identity) return;
+    bootstrapped.current = identity;
 
     // Abandoned when the token this run belongs to is no longer the live one --
     // a sign-out mid-bootstrap must not land its results on the gate. Deliberately
     // not a captured `cancelled` flag: StrictMode tears the first effect down
     // immediately, and this run is the only one the guard above will allow.
-    const stale = () => bootstrapped.current !== token;
+    const stale = () => bootstrapped.current !== identity;
 
     (async () => {
       try {
         const reported = await api.status();
         if (stale()) return;
-        localStorage.setItem(TOKEN_KEY, token);
+        // Remembered only once it has answered, so a host that is down is
+        // not what the next launch waits on.
+        if (remote) saveHost(remote);
+        else localStorage.setItem(TOKEN_KEY, token);
         setStatus(reported);
 
         if (reported.serving === "none") {
@@ -461,11 +517,17 @@ export default function App() {
       } catch (error) {
         // A 401 has already been turned into a sign-out by the api client.
         if (!stale() && !(error instanceof UnauthorizedError)) {
-          signOutRef.current("Couldn't reach the server.");
+          signOutRef.current(
+            !remote
+              ? "Couldn't reach the server."
+              : error instanceof HostUnreachable
+                ? error.message
+                : `Couldn't reach ${remote.name || "your host"}: ${error.message || error}`,
+          );
         }
       }
     })();
-  }, [api, token, refresh, openSession, startNew, setBadge]);
+  }, [api, identity, remote, token, refresh, openSession, startNew, setBadge]);
 
   // Which backend the next message actually goes to: the one chosen, or --
   // on Auto -- whichever the router reports it is using.
@@ -509,7 +571,17 @@ export default function App() {
   const handleConnect = useCallback((value) => {
     if (!value) return;
     setGateError("");
+    forgetHost();
+    setRemote(null);
+    bootstrapped.current = "";
     setToken(value);
+    setPhase(CONNECTING);
+  }, []);
+
+  const handleRemoteConnect = useCallback((host) => {
+    setGateError("");
+    bootstrapped.current = "";
+    setRemote({ id: host.id, name: host.name });
     setPhase(CONNECTING);
   }, []);
 
@@ -877,11 +949,32 @@ export default function App() {
   if (phase === BOOT) return null;
 
   if (phase !== READY) {
+    if (gateMode === "remote") {
+      return (
+        <RemoteGate
+          error={gateError}
+          connectingTo={phase === CONNECTING && remote ? remote.id : null}
+          onConnect={handleRemoteConnect}
+          onUseToken={
+            REMOTE_ONLY
+              ? null
+              : () => {
+                  setGateError("");
+                  setGateMode("token");
+                }
+          }
+        />
+      );
+    }
     return (
       <TokenGate
         error={gateError}
         connecting={phase === CONNECTING}
         onSubmit={handleConnect}
+        onRemote={() => {
+          setGateError("");
+          setGateMode("remote");
+        }}
       />
     );
   }
@@ -1175,6 +1268,7 @@ export default function App() {
                 setSettingsAt(null);
                 signOut("");
               }}
+              remoteName={remote?.name || null}
               theme={theme}
               appearance={appearance}
               // The design standards live in Settings now. "Use" starts a

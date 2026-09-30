@@ -25,6 +25,7 @@ from .mcp.oauth import CALLBACK_PATH, MCPOAuthError, MCPOAuth
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
+from .remote import RemoteHost, build_remote_router
 from .schedule_api import build_schedule_router
 from .scheduler import Scheduler
 from .providers import (
@@ -280,6 +281,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     terminals = Terminals()
     previews = Previews()
+    # This machine as a remote host, reached through the relay -- off until
+    # someone at this machine turns it on. See remote/host.py.
+    remote = RemoteHost(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -295,7 +299,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # also called by the test suite and by one-liners, and none of those
         # should start acting on the user's schedule.
         schedule_loop = asyncio.create_task(scheduler.run_forever())
+        # Picks up where the last run left off: reconnects if remote access
+        # was on, and does nothing otherwise.
+        await remote.start()
         yield
+        await remote.aclose()
         schedule_loop.cancel()
         await scheduler.shutdown()
         # Every shell the terminals started goes with the server: a dev server
@@ -406,6 +414,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.mcp_oauth = mcp_oauth
     app.state.providers = providers
     app.state.openrouter_oauth = oauth
+    app.state.remote = remote
 
     auth = make_auth_dependency(settings)
     app.include_router(
@@ -422,6 +431,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         build_workbench_router(settings, auth, terminals, previews), prefix="/api"
     )
     mount_public(app, settings, terminals, previews)
+    app.include_router(build_remote_router(remote, auth, settings), prefix="/api")
     app.state.terminals = terminals
 
     @app.get("/openrouter/callback/{state}")

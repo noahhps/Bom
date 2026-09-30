@@ -11,6 +11,10 @@
 #   ./run.sh --no-build   skip the client build (use the existing dist/)
 #   ./run.sh --port 8090  serve somewhere else
 #   ./run.sh --model X    override OLLAMA_MODEL for this run
+#   ./run.sh --remote     reach this machine from anywhere through your relay:
+#                         prints a code to link it to your account the first
+#                         time (needs BOM_RELAY_URL / BOM_RELAY_KEY -- see
+#                         docs/remote.md)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -25,6 +29,7 @@ MODE=serve
 SKIP_BUILD=0
 PORT="${BIND_PORT:-8080}"
 MODEL="${OLLAMA_MODEL:-}"
+REMOTE="${BOM_REMOTE:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,7 +37,8 @@ while [ $# -gt 0 ]; do
     --no-build) SKIP_BUILD=1 ;;
     --port)     PORT="${2:?--port needs a number}"; shift ;;
     --model)    MODEL="${2:?--model needs a name}"; shift ;;
-    -h|--help)  sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --remote)   REMOTE=1 ;;
+    -h|--help)  sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "run.sh: unknown option $1 (try --help)" >&2; exit 1 ;;
   esac
   shift
@@ -82,7 +88,7 @@ fi
 # Cheapest honest check that the server's dependencies are actually installed.
 # Kept to what pyproject.toml actually declares: naming a package that is no
 # longer a dependency makes this fail forever and reinstall on every single run.
-if ! "$PY" -c "import fastapi, uvicorn, httpx, pydantic" >/dev/null 2>&1; then
+if ! "$PY" -c "import fastapi, uvicorn, httpx, pydantic, websockets" >/dev/null 2>&1; then
   say "installing server dependencies"
   "$PY" -m pip install --quiet --upgrade pip
   "$PY" -m pip install --quiet -e ./server
@@ -135,6 +141,18 @@ PY
 then :; else
   warn "port ${PORT} is already in use -- something is still running there"
   exit 1
+fi
+
+# --- remote access -----------------------------------------------------------
+# Only checked here; the server does the linking and prints the code. Named
+# now because a missing relay otherwise shows up as one line in the log.
+if [ "$REMOTE" = 1 ]; then
+  if [ -z "${BOM_RELAY_URL:-}" ] && ! grep -q '"url": "http' data/relay.json 2>/dev/null; then
+    warn "--remote needs your relay: export BOM_RELAY_URL and BOM_RELAY_KEY (see docs/remote.md)"
+    exit 1
+  fi
+  export BOM_REMOTE=1
+  say "remote access on -- this machine will be reachable through your relay"
 fi
 
 # --- run ---------------------------------------------------------------------

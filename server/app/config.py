@@ -75,6 +75,28 @@ class Settings:
     bind_host: str = field(default_factory=lambda: _env("BIND_HOST", "127.0.0.1"))
     bind_port: int = field(default_factory=lambda: _env_int("BIND_PORT", 8080))
 
+    # --- remote access ---------------------------------------------------
+    # Reaching this machine from anywhere, through a relay in your own
+    # Supabase project, without opening a port -- see docs/remote.md. Off
+    # until someone at this machine turns it on and links it to their account.
+    # The URL and key can also be set in Settings > Remote access, which keeps
+    # them in `relay_path`; these win when set.
+    relay_url: str = field(default_factory=lambda: _env("BOM_RELAY_URL", ""))
+    relay_key: str = field(default_factory=lambda: _env("BOM_RELAY_KEY", ""))
+    # Where the web client is hosted (a Vercel URL, say), so the pairing screen
+    # can say where to type the code.
+    relay_web_url: str = field(default_factory=lambda: _env("BOM_RELAY_WEB_URL", ""))
+    # The device's link to its owner: its own sign-in and whose it is. A
+    # secret, kept beside the bearer token.
+    relay_path: Path = field(
+        default_factory=lambda: Path(_env("BOM_RELAY_PATH", str(REPO_ROOT / "data" / "relay.json")))
+    )
+    # `./run.sh --remote`: turn remote access on at boot, and if this machine
+    # is not linked yet, print a pairing code in the terminal.
+    remote_on_boot: bool = field(default_factory=lambda: _env("BOM_REMOTE", "") == "1")
+    # What this machine is called in the device list. Defaults to its hostname.
+    remote_name: str = field(default_factory=lambda: _env("BOM_REMOTE_NAME", ""))
+
     # --- auth ------------------------------------------------------------
     # The perimeter. Generated and persisted on first run.
     auth_token: str = field(default_factory=lambda: _env("AUTH_TOKEN", ""))

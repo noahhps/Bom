@@ -22,6 +22,10 @@ dependencies = [
     # `memory.embedding`, so an environment that predates this line degrades to
     # keyword-only recall rather than failing to boot.
     "numpy>=1.26",
+    # Remote access: the host holds one WebSocket open to the relay's
+    # Realtime service (remote/realtime.py). uvicorn[standard] brings it too;
+    # named here because the server now uses it directly.
+    "websockets>=13.0",
 ]
 
 [project.optional-dependencies]

@@ -19,7 +19,7 @@ import {
  * Under it, one field and one button. Only the bundled desktop app asks where
  * the server is -- see needsExplicitOrigin. Under `tauri dev` the Vite proxy
  * answers that, so the gate stays the one-field form it is in a browser. */
-export function TokenGate({ error, connecting, onSubmit }) {
+export function TokenGate({ error, connecting, onSubmit, onRemote }) {
   const [value, setValue] = useState("");
   const [shown, setShown] = useState(false);
   const desktop = needsExplicitOrigin();
@@ -134,7 +134,17 @@ export function TokenGate({ error, connecting, onSubmit }) {
           </details>
         </form>
 
-        <p className="gate-foot">Runs on this machine. Nothing leaves it unless you send it.</p>
+        <p className="gate-foot">
+          Runs on this machine. Nothing leaves it unless you send it.
+          {onRemote ? (
+            <>
+              <br />
+              <button type="button" className="remote-link" onClick={onRemote}>
+                Away from it? Connect through your relay
+              </button>
+            </>
+          ) : null}
+        </p>
       </div>
     </main>
   );

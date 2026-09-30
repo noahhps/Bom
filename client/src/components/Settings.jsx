@@ -17,6 +17,7 @@ import { Icon } from "./Icon";
 import { ManageChats } from "./ManageChats";
 import { Memory } from "./Memory";
 import { Providers } from "./Providers";
+import { RemoteAccess } from "./RemoteAccess";
 import { ThemePicker } from "./ThemePicker";
 import { APPEARANCES } from "../lib/appearance";
 import { DEFAULT_ACCENT } from "../lib/theme";
@@ -49,6 +50,15 @@ export const SETTINGS_SCREENS = [
     title: "Models",
     lead: "",
     words: "provider providers model local cloud ollama openrouter api key connection",
+  },
+  {
+    group: "Settings",
+    id: "remote",
+    label: "Remote access",
+    icon: "globe",
+    title: "Remote access",
+    lead: "Reach this machine from anywhere — its models, conversations and files — through a relay in your own Supabase project. Off until you turn it on, here, at this machine.",
+    words: "remote access relay supabase vercel host hosting anywhere away phone link pair device web",
   },
   {
     group: "Settings",
@@ -94,7 +104,7 @@ function matches(screen, query) {
   return `${screen.label} ${screen.title} ${screen.words}`.toLowerCase().includes(q);
 }
 
-function General({ pinned, onTogglePin, onSignOut }) {
+function General({ pinned, onTogglePin, onSignOut, remoteName }) {
   return (
     <>
       <div className="settings-rows">
@@ -115,15 +125,27 @@ function General({ pinned, onTogglePin, onSignOut }) {
             <i />
           </button>
         </div>
-        <div className="settings-row">
-          <div>
-            <b>Sign out</b>
-            <p>Forgets the token on this device only. Your conversations stay on the server.</p>
+        {remoteName ? (
+          <div className="settings-row">
+            <div>
+              <b>Disconnect from {remoteName}</b>
+              <p>Back to your devices. You stay signed in to your relay account, and everything stays on the host.</p>
+            </div>
+            <button type="button" className="btn" onClick={onSignOut}>
+              Disconnect
+            </button>
           </div>
-          <button type="button" className="btn" onClick={onSignOut}>
-            Sign out
-          </button>
-        </div>
+        ) : (
+          <div className="settings-row">
+            <div>
+              <b>Sign out</b>
+              <p>Forgets the token on this device only. Your conversations stay on the server.</p>
+            </div>
+            <button type="button" className="btn" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -182,6 +204,8 @@ export function Settings({
   pinned,
   onTogglePin,
   onSignOut,
+  // The host's name, when this window is reaching it through the relay.
+  remoteName = null,
   api,
   sessions,
   onSessionsChanged,
@@ -282,11 +306,13 @@ export function Settings({
             </header>
 
             {screen.id === "general" ? (
-              <General pinned={pinned} onTogglePin={onTogglePin} onSignOut={onSignOut} />
+              <General pinned={pinned} onTogglePin={onTogglePin} onSignOut={onSignOut} remoteName={remoteName} />
             ) : screen.id === "appearance" ? (
               <Appearance theme={theme} appearance={appearance} />
             ) : screen.id === "models" ? (
               <Providers models={models} provider={provider} onProvider={onProvider} serving={status?.serving} />
+            ) : screen.id === "remote" ? (
+              <RemoteAccess api={api} />
             ) : screen.id === "enterprise" ? (
               <Enterprise api={api} />
             ) : screen.id === "standards" ? (

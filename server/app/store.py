@@ -266,6 +266,7 @@ class StoredAgent:
     updated_at: int
     icon: str | None = None      # a glyph name the client draws
     theme: str | None = None     # accent JSON, same shape as a session's
+    look: str | None = None      # JSON {"hat", "item"}: what its flower wears
 
     def parsed_skills(self) -> list[str] | None:
         """The allowed skill names, or None for "every enabled skill".
@@ -291,9 +292,23 @@ class StoredAgent:
             # Raw JSON string; the API parses it into an object with the same
             # _read_accent a session or project row goes through.
             "theme": self.theme,
+            "look": self.parsed_look(),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+
+    def parsed_look(self) -> dict | None:
+        """What the agent's flower wears, or None for a bare flower. A row
+        that no longer parses reads as bare rather than failing the list."""
+        if not self.look:
+            return None
+        try:
+            val = json.loads(self.look)
+        except Exception:
+            return None
+        if not isinstance(val, dict):
+            return None
+        return {k: val[k] for k in ("hat", "item") if isinstance(val.get(k), str)}
 
 
 @dataclass
@@ -1866,6 +1881,7 @@ class Store:
         skills: list[str] | None = None,
         icon: str | None = None,
         theme: str | None = None,
+        look: str | None = None,
     ) -> StoredAgent:
         now = _now()
         agent = StoredAgent(
@@ -1877,15 +1893,16 @@ class Store:
             updated_at=now,
             icon=icon,
             theme=theme,
+            look=look,
         )
         self.db.execute(
             """
             INSERT INTO agents
-                (id, name, instructions, skills, icon, theme, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, name, instructions, skills, icon, theme, look, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (agent.id, agent.name, agent.instructions, agent.skills, agent.icon,
-             agent.theme, agent.created_at, agent.updated_at),
+             agent.theme, agent.look, agent.created_at, agent.updated_at),
         )
         return agent
 
@@ -1918,10 +1935,12 @@ class Store:
         # `theme` arrives already serialised to JSON (or None), like the session
         # and project theme setters -- the API layer does the accent shaping.
         theme = changes["theme"] if "theme" in changes else current.theme
+        # `look`, like `theme`, arrives serialised (or None) from the API.
+        look = changes["look"] if "look" in changes else current.look
         self.db.execute(
             "UPDATE agents SET name = ?, instructions = ?, skills = ?, icon = ?, "
-            "theme = ?, updated_at = ? WHERE id = ?",
-            (name, instructions, skills, icon, theme, _now(), agent_id),
+            "theme = ?, look = ?, updated_at = ? WHERE id = ?",
+            (name, instructions, skills, icon, theme, look, _now(), agent_id),
         )
         return self.get_agent(agent_id)
 

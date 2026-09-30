@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Icon } from "./Icon";
-import { ThemePicker } from "./ThemePicker";
+import { ColorWheel } from "./ColorWheel";
 import { useDialog } from "./Dialog";
+import { seedFromContext } from "../lib/autotheme";
 import { swatchOf } from "../lib/theme";
 import { KIND_ICON, KIND_LABEL } from "../lib/designs";
 
@@ -53,12 +54,15 @@ function ProjectEditor({ project, accent, seed, onRename, onAccent, onClose }) {
   return (
     <div
       ref={node}
-      className="popover prj-popover"
+      className="popover prj-popover prj-editor"
       role="dialog"
       aria-label={`Edit ${project.name}`}
     >
+      {/* Two columns: the name at the top left, the colour's preview under
+          it, and the wheel down the right (the wheel and preview are laid
+          out into this grid -- see `.prj-editor` in styles.css). */}
       <form
-        className="prj-popover-row"
+        className="prj-popover-row prj-editor-name"
         onSubmit={(event) => {
           event.preventDefault();
           const clean = draft.trim();
@@ -76,20 +80,15 @@ function ProjectEditor({ project, accent, seed, onRename, onAccent, onClose }) {
         />
       </form>
 
-      <div className="prj-popover-row">
-        <span className="mi">Accent</span>
-        <ThemePicker
-          value={accent || null}
-          onChange={onAccent}
-          scope="project"
-          seed={seed}
-          inheritedLabel="Follow the app-wide accent"
-        />
-        <p className="caveat" style={{ margin: 0 }}>
-          Worn by every conversation in here that has not chosen a colour of
-          its own.
-        </p>
-      </div>
+      {/* Picked on a wheel, previewed as you drag. It is the dot beside each
+          of the project's conversations, and the accent those conversations
+          wear when they have none of their own. */}
+      <ColorWheel
+        value={accent || null}
+        fallbackSeed={seedFromContext({ title: project.name, id: project.id })}
+        onChange={onAccent}
+        sampleLabel={draft.trim() || project.name}
+      />
     </div>
   );
 }
@@ -154,16 +153,21 @@ export function Projects({
   accentOf,
   seedOfRecord,
   onProjectAccent,
+  // Which kinds this space shows: Home keeps chat projects, Studio design
+  // and code ones. The tabs are only drawn when there is more than one.
+  kinds = ["chat", "design", "code"],
 }) {
   const { confirm } = useDialog();
-  const [tab, setTab] = useState(() => {
+  const tabs = TABS.filter((t) => kinds.includes(t.id));
+  const [picked, setTab] = useState(() => {
     try {
-      const saved = localStorage.getItem(TAB_KEY);
-      return TABS.some((t) => t.id === saved) ? saved : "chat";
+      return localStorage.getItem(TAB_KEY) || "chat";
     } catch {
       return "chat";
     }
   });
+  // The remembered tab, if this space has it; otherwise the space's first.
+  const tab = tabs.some((t) => t.id === picked) ? picked : tabs[0].id;
   const [name, setName] = useState("");
   // Which folder has its editor open. One at a time -- the popup overlays the
   // card, and two of them would be two dialogs fighting for the same corner.
@@ -266,12 +270,18 @@ export function Projects({
     </li>
   );
 
+  // The project's colour, drawn exactly as the dot beside each of its
+  // conversations in the rail is (NavRail's accentOf): its chosen colour, or
+  // one derived from its name when it has none -- never a grey, so a project
+  // is always told apart by its dot.
+  const colourOf = (project) =>
+    swatchOf(
+      accentOf?.(project) || { mode: "auto" },
+      seedFromContext({ title: project.name, id: project.id }),
+    );
+
   const bead = (project) => (
-    <span
-      className="accent-bead"
-      aria-hidden="true"
-      style={{ background: swatchOf(accentOf?.(project), seedOfRecord?.(project)) }}
-    />
+    <span className="accent-bead" aria-hidden="true" style={{ background: colourOf(project) }} />
   );
 
   const editor = (project) =>
@@ -286,33 +296,47 @@ export function Projects({
       />
     ) : null;
 
-  const editButton = (project) => (
-    <button
-      type="button"
-      className="mi"
-      aria-expanded={editing === project.id}
-      aria-haspopup="dialog"
-      onClick={() => setEditing((was) => (was === project.id ? null : project.id))}
-    >
-      edit
+  /* What you can do to a project, as buttons rather than words: an icon and
+     a label each. The card's main action (a new chat or design, or opening
+     a code project) is the filled one; editing is a quiet pill; deleting is
+     pushed to the far end and set in the danger colour. */
+  // The label is its own span so a narrow card can drop Delete's to the
+  // icon alone (see `.prj-actions` in styles.css); the button keeps its name
+  // in `aria-label` and `title` either way.
+  const Action = ({ icon, label, tone, ...rest }) => (
+    <button type="button" className="prj-action" data-tone={tone} aria-label={label} title={label} {...rest}>
+      <Icon name={icon} />
+      <span className="prj-action-label">{label}</span>
     </button>
   );
 
+  const editButton = (project) => (
+    <Action
+      icon="pen"
+      label="Edit"
+      title="Rename it, or change its colour"
+      aria-expanded={editing === project.id}
+      aria-haspopup="dialog"
+      onClick={() => setEditing((was) => (was === project.id ? null : project.id))}
+    />
+  );
+
   const deleteButton = (project, label, question) => (
-    <button
-      type="button"
-      className="mi"
+    <Action
+      icon="trash"
+      label="Delete"
+      tone="danger"
       onClick={async () => {
+        // "Delete" on every kind; for a code project the question says what
+        // it means -- the project is forgotten, its folder is not touched.
         const yes = await confirm(question, {
-          title: label === "remove" ? "Remove project" : "Delete project",
-          confirmLabel: label === "remove" ? "Remove" : "Delete",
+          title: "Delete project",
+          confirmLabel: "Delete",
           destructive: true,
         });
         if (yes) onDeleteProject(project.id);
       }}
-    >
-      {label}
-    </button>
+    />
   );
 
   const DesignList = ({ designs }) =>
@@ -360,9 +384,7 @@ export function Projects({
         </ul>
         {editor(project)}
         <div className="prj-actions">
-          <button type="button" className="mi" onClick={() => onNewSessionIn(project.id)}>
-            new chat
-          </button>
+          <Action icon="plus" label="New chat" tone="primary" onClick={() => onNewSessionIn(project.id)} />
           {editButton(project)}
           {deleteButton(
             project,
@@ -414,18 +436,14 @@ export function Projects({
         </ul>
         {editor(project)}
         <div className="prj-actions">
-          <button type="button" className="mi" onClick={() => onNewDesignIn(project.id)}>
-            new design
-          </button>
-          <button
-            type="button"
-            className="mi"
+          <Action icon="plus" label="New design" tone="primary" onClick={() => onNewDesignIn(project.id)} />
+          <Action
+            icon="code"
+            label="Build in code"
             disabled={!designs.length}
             title={designs.length ? "Make a code project from these designs" : "Nothing to build yet"}
             onClick={() => onBuildInCode({ source: `p:${project.id}`, name: project.name })}
-          >
-            build in code
-          </button>
+          />
           {editButton(project)}
           {deleteButton(
             project,
@@ -481,22 +499,20 @@ export function Projects({
         </ul>
         {editor(project)}
         <div className="prj-actions">
-          <button
-            type="button"
-            className="mi"
+          <Action
+            icon="folder_open"
+            label="Open"
+            tone="primary"
             disabled={project.missing}
+            title="Its latest session, in the editor"
             onClick={() => (inside.length ? onOpenSession(inside[0].id) : onNewCodeIn(project))}
-          >
-            open
-          </button>
-          <button type="button" className="mi" disabled={project.missing} onClick={() => onNewCodeIn(project)}>
-            new session
-          </button>
+          />
+          <Action icon="plus" label="New session" disabled={project.missing} onClick={() => onNewCodeIn(project)} />
           {editButton(project)}
           {deleteButton(
             project,
             "remove",
-            `Remove "${project.name}" from Projects? The folder and its files are not touched, and its conversations are kept.`,
+            `Delete the project "${project.name}"? Only the project is deleted: its folder and files on this computer are not touched, and its conversations are kept.`,
           )}
         </div>
       </section>
@@ -540,8 +556,9 @@ export function Projects({
 
       <div className="page-body" style={{ flexDirection: "column" }}>
         <div className="page-col" style={{ alignSelf: "stretch" }}>
-          <div className="prj-tabs" role="tablist" aria-label="Kinds of project">
-            {TABS.map((t) => {
+          {tabs.length > 1 ? (
+          <div className="segmented prj-tabs" role="tablist" aria-label="Kinds of project">
+            {tabs.map((t) => {
               const count = projects.filter((p) => kindOf(p) === t.id).length;
               return (
                 <button
@@ -559,6 +576,7 @@ export function Projects({
               );
             })}
           </div>
+          ) : null}
 
           {mine.length === 0 ? (
             <p className="p prj-none">
@@ -606,16 +624,14 @@ export function Projects({
                 </ul>
                 {tab === "design" && unfiled.some((s) => (designsOf.get(s.id) || []).length) ? (
                   <div className="prj-actions">
-                    <button
-                      type="button"
-                      className="mi"
+                    <Action
+                      icon="code"
+                      label="Build one in code"
                       onClick={() => {
                         const first = unfiled.find((s) => (designsOf.get(s.id) || []).length);
                         onBuildInCode({ source: `s:${first.id}`, name: first.title || "" });
                       }}
-                    >
-                      build one in code
-                    </button>
+                    />
                   </div>
                 ) : null}
               </section>

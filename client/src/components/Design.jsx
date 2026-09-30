@@ -100,7 +100,9 @@ function forkOf(preset) {
  * so the headings have to be right; the person writing it reads the prose, and
  * catching "this section is empty" is much easier rendered than in source.
  */
-export function Design({ designs, presets, onCreate, onUpdate, onDelete, onUse }) {
+/* `embedded` draws it inside the Settings window, which has its own title
+   and lead: the page head goes, and only its two actions stay. */
+export function Design({ designs, presets, onCreate, onUpdate, onDelete, onUse, embedded = false }) {
   const { confirm, notify } = useDialog();
   // The id being edited, or "new". Null when nothing is open.
   const [editing, setEditing] = useState(null);
@@ -223,41 +225,50 @@ export function Design({ designs, presets, onCreate, onUpdate, onDelete, onUse }
     [reading, draft.markdown],
   );
 
+  // Upload and New, whichever head they sit in.
+  const actions = (
+    <div className="actions">
+      <button
+        type="button"
+        className="btn"
+        onClick={() => fileInput.current?.click()}
+      >
+        Upload .md
+      </button>
+      <button type="button" className="btnp" onClick={openNew}>
+        New standard
+      </button>
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        hidden
+        onChange={onFile}
+      />
+    </div>
+  );
+
   return (
-    <div className="page">
-      <div className="page-head" data-tint="ochre">
-        <div className="inner">
-          <div>
-            <h1 className="h">Design standards</h1>
-            <p>
-              A design.md is the brief a result is held to — type, colour,
-              layout, components and the voice the words are written in. When
-              the model is about to make a deck, a sheet or a page it stops and
-              asks which of these to follow, and the one you pick styles
-              everything else in that conversation too.
-            </p>
-          </div>
-          <div className="actions">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => fileInput.current?.click()}
-            >
-              Upload .md
-            </button>
-            <button type="button" className="btnp" onClick={openNew}>
-              New standard
-            </button>
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".md,.markdown,.txt,text/markdown,text/plain"
-              hidden
-              onChange={onFile}
-            />
+    <div className={embedded ? "design-embedded" : "page"}>
+      {embedded ? (
+        <div className="design-embedded-head">{actions}</div>
+      ) : (
+        <div className="page-head" data-tint="ochre">
+          <div className="inner">
+            <div>
+              <h1 className="h">Design standards</h1>
+              <p>
+                A design.md is the brief a result is held to — type, colour,
+                layout, components and the voice the words are written in. When
+                the model is about to make a deck, a sheet or a page it stops and
+                asks which of these to follow, and the one you pick styles
+                everything else in that conversation too.
+              </p>
+            </div>
+            {actions}
           </div>
         </div>
-      </div>
+      )}
 
       <div className="page-body design-body">
         {/* Yours above the presets. This page is where your own standards are

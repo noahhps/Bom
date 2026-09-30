@@ -229,8 +229,18 @@ class Orchestrator:
         # Additive, never a replacement -- the preamble carries what every
         # answer needs, and the agent specialises on top of it.
         agent = self.store.session_agent(session_id) if session_id else None
-        if agent and agent.instructions and agent.instructions.strip():
-            prompt = f"{prompt}\n\n{agent.instructions.strip()}"
+        if agent:
+            # Who it is, before what it is for. The preamble introduces Bom,
+            # and an agent is Bom with a specialty -- so without this line a
+            # researcher asked its name answers "Bom", which is true of the
+            # engine and wrong for the person talking to it in its room.
+            prompt = (
+                f"{prompt}\n\nIn this conversation you are {agent.name}, one of "
+                f"Bom's agents: Bom with a specialty and all of Bom's abilities. "
+                f"If you are asked who you are, you are {agent.name}."
+            )
+            if agent.instructions and agent.instructions.strip():
+                prompt = f"{prompt}\n\n{agent.instructions.strip()}"
 
         # A design conversation's working method. In the stable prefix beside
         # the agent, and for the same reason: a conversation's mode is fixed

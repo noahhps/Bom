@@ -661,6 +661,18 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_tasks_due ON scheduled_tasks(next_run_at) WHERE enabled = 1;
     CREATE INDEX idx_tasks_last_session ON scheduled_tasks(last_session_id);
     """,
+    # 24 -- what an agent wears.
+    #
+    # An agent is drawn as the app's flower with accessories on: a hat on its
+    # head and one thing on or beside its face -- a beanie and headphones for
+    # a coder, an explorer's helmet and a magnifying glass for a researcher.
+    # `look` is JSON, `{"hat": ..., "item": ...}`, each a name from the small
+    # set the client draws (validated at the API, like `icon`). NULL is a
+    # bare flower. Kept as one column rather than two because the pair is
+    # chosen together and nothing queries either half.
+    """
+    ALTER TABLE agents ADD COLUMN look TEXT;
+    """,
 ]
 
 

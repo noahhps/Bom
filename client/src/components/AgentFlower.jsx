@@ -1,12 +1,14 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { installMotion } from "../lib/drawkit";
+import { bloomTimeline, installMotion } from "../lib/drawkit";
 
 /* The agent's flower -- beside every answer, and the app's logo.
  *
- * Beside an answer it is a bud while the turn is at rest, and a flower while
- * it is live -- from the moment the message is sent, through the thinking, to
- * the last token. Then it folds back up. The turn's `streaming` flag is the
+ * Beside an answer it blooms while the turn is live -- from the moment the
+ * message is sent, through the thinking, to the last token -- and then comes
+ * to rest open, every petal out, still. Clicking a resting one plays the
+ * bloom once, from open back to open; hovering it does nothing. (The logo,
+ * `mark`, is the other way round: it blooms while hovered, never on click.) The turn's `streaming` flag is the
  * whole signal, so a reply that stops early, errors, or waits on a skill
  * approval opens and closes with exactly the same honesty as the stop button
  * does.
@@ -23,15 +25,27 @@ import { installMotion } from "../lib/drawkit";
  * its inner half tucked under the face, so the flower stays one piece. Plain
  * elements rather than an SVG: each petal is an arm pinned to the centre and
  * rotated about it, which is a transform-origin HTML boxes agree on in every
- * webview. The colours are accent tokens, so a chat in teal grows a teal
- * flower. Decorative -- the working label, and the controls the logo sits in,
- * say the same thing to a screen reader. */
+ * webview. The petals keep their own eight colours whatever the chat wears:
+ * the flower is where the app's palette comes from. Decorative -- the working
+ * label, and the controls the logo sits in, say the same thing to a screen
+ * reader.
+ *
+ * `mood` is for where the flower stands for the app's state rather than a
+ * turn's -- the model it is answering with, a turn that failed: "warn" droops,
+ * "down" goes grey and shuts its eyes. */
 
 installMotion();
 
 const PETALS = 8;
 
-function Flower({ open, bloom }) {
+// A replay starts where a resting flower already is -- fully open, the loop's
+// `shut` moment -- and runs one whole cycle back round to it: close, the beat
+// on the bare face, bloom, hold. Started anywhere else the petals would jump
+// to the loop's first frame (tucked) on the click, and stopped anywhere else
+// they would ease out to open afterwards, a second movement.
+const { shut: OPEN_AT, cycle: CYCLE } = bloomTimeline();
+
+function Flower({ open, bloom, mood, rest = false, replay = false, onClick }) {
   const petals = useRef(null);
   // What the DOM is doing, which lags `bloom` by one render on the way down.
   const [blooming, setBlooming] = useState(bloom);
@@ -74,11 +88,19 @@ function Flower({ open, bloom }) {
       className="flower"
       data-open={open ? "" : undefined}
       data-bloom={blooming ? "" : undefined}
+      data-mood={mood || undefined}
+      data-rest={rest ? "" : undefined}
+      data-playable={onClick ? "" : undefined}
       aria-hidden="true"
+      onClick={onClick}
     >
       <span className="flower-petals" ref={petals}>
         {Array.from({ length: PETALS }, (_, i) => (
-          <span key={i} className="flower-petal" style={{ "--i": i }} />
+          <span
+            key={i}
+            className="flower-petal"
+            style={replay ? { "--i": i, animationDelay: `-${OPEN_AT}ms` } : { "--i": i }}
+          />
         ))}
       </span>
       <span className="flower-face">
@@ -94,9 +116,40 @@ function Flower({ open, bloom }) {
 /* `blooming` keeps a mark blooming whether or not it is hovered -- for a logo
    that should look alive while something is under way, as the sign-in screen's
    does while it connects. */
-export function AgentFlower({ open, mark = false, size = 26, className, blooming = false }) {
+/* The flower beside an answer. `live` is the turn streaming. */
+function AnswerFlower({ live, mood }) {
+  const [playing, setPlaying] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  // A turn that starts again (a continue) takes over from a replay.
+  useEffect(() => {
+    if (live) {
+      clearTimeout(timer.current);
+      setPlaying(false);
+    }
+  }, [live]);
+
+  const play = () => {
+    if (live || playing) return;
+    setPlaying(true);
+    timer.current = setTimeout(() => setPlaying(false), CYCLE);
+  };
+
+  return (
+    <Flower
+      open
+      bloom={live || playing}
+      mood={mood}
+      rest={!live && !playing}
+      replay={playing}
+      onClick={live ? undefined : play}
+    />
+  );
+}
+
+export function AgentFlower({ open, mark = false, size = 26, className, blooming = false, mood }) {
   const [hovered, setHovered] = useState(false);
-  if (!mark) return <Flower open={open} bloom={Boolean(open)} />;
+  if (!mark) return <AnswerFlower live={Boolean(open)} mood={mood} />;
   return (
     <span
       className={className ? `flower-mark ${className}` : "flower-mark"}
@@ -106,7 +159,7 @@ export function AgentFlower({ open, mark = false, size = 26, className, blooming
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
     >
-      <Flower open={open} bloom={hovered || Boolean(blooming)} />
+      <Flower open={open} bloom={(hovered && mood !== "down") || Boolean(blooming)} mood={mood} />
     </span>
   );
 }

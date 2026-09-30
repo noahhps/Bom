@@ -11,6 +11,7 @@
  * is set up, and how to stop being connected. */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Design } from "./Design";
 import { Icon } from "./Icon";
 import { ManageChats } from "./ManageChats";
 import { Memory } from "./Memory";
@@ -47,6 +48,15 @@ export const SETTINGS_SCREENS = [
     title: "Models",
     lead: "",
     words: "provider providers model local cloud ollama openrouter api key connection",
+  },
+  {
+    group: "Studio",
+    id: "standards",
+    label: "Design standards",
+    icon: "design",
+    title: "Design standards",
+    lead: "A design.md is the brief a result is held to: type, colour, layout, components and voice. When a design conversation is about to make a deck, a sheet or a page, it asks which of these to follow.",
+    words: "design standards design.md look style brief type colour upload",
   },
   {
     group: "Your data",
@@ -167,6 +177,8 @@ export function Settings({
   onSessionsChanged,
   theme,
   appearance,
+  // Design standards: the library and what to do with one ("Use it").
+  standards,
 }) {
   const [query, setQuery] = useState("");
   const search = useRef(null);
@@ -265,6 +277,8 @@ export function Settings({
               <Appearance theme={theme} appearance={appearance} />
             ) : screen.id === "models" ? (
               <Providers models={models} provider={provider} onProvider={onProvider} serving={status?.serving} />
+            ) : screen.id === "standards" ? (
+              <Design embedded {...standards} />
             ) : screen.id === "memory" ? (
               <Memory api={api} embedded />
             ) : (

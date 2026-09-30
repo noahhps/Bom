@@ -1,3 +1,14 @@
+/* Inter, the app's text face (see styles.css). QuickView is its own entry
+   point with its own stylesheet, so it declares the face itself. */
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/inter-var.woff2") format("woff2-variations"),
+    url("/fonts/inter-var.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* QuickView's own stylesheet. */
 
 :root {
@@ -20,15 +31,19 @@
      it happens to be floating over. */
   --qv-pill: rgba(255, 255, 255, 0.14);
   --qv-edge: rgba(255, 255, 255, 0.18);
-  --qv-accent: #4d7dfa;
-  /* 10px, matching `--r-control` in styles.css. QuickView is a separate entry
+  /* The cornflower petal, as in styles.css. */
+  --qv-accent: #4a90e2;
+  /* 12px, matching `--r-control` in styles.css. QuickView is a separate entry
      point with its own stylesheet, so the value is repeated rather than shared,
-     but it is the same rounded-control radius the composer and gate input use --
-     it used to round itself to 18px doing the same job. Change both together. */
-  --qv-radius: 10px;
+     but it is the same rounded-control radius the composer and gate input use.
+     Change both together. */
+  --qv-radius: 12px;
   /* Duplicated verbatim as `--font-mono` in styles.css -- the two entry points
      do not share a stylesheet. Change both together. */
   --qv-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Duplicated verbatim as `--font-sans` in styles.css -- the face the words
+     are set in. The mono stays for machine text. */
+  --qv-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 }
 
 html,
@@ -39,7 +54,7 @@ body.qv-body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   color: var(--qv-ink);
-  font-family: var(--qv-mono);
+  font-family: var(--qv-font);
 }
 
 #quickview {
@@ -286,7 +301,7 @@ body.qv-body {
 .qv-drop-count {
   padding: 4px 10px;
   background: var(--qv-pill);
-  border-radius: 999px;
+  border-radius: 8px; /* --r-pill in styles.css */
   font-size: 11px;
 }
 .qv-drop-label {
@@ -311,7 +326,7 @@ body.qv-body {
   gap: 5px;
   padding: 3px 8px 3px 4px;
   background: var(--qv-pill);
-  border-radius: 999px;
+  border-radius: 8px; /* --r-pill in styles.css */
   font-size: 11px;
   color: var(--qv-dim);
 }

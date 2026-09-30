@@ -1,7 +1,8 @@
 import { useId } from "react";
 
 import { oklch } from "../lib/color";
-import { DEFAULT_STRENGTH, PRESETS, seedOf } from "../lib/theme";
+import { neighbours, PETAL_BY_ID } from "../lib/petals";
+import { canonicalPreset, DEFAULT_STRENGTH, PRESETS, seedOf } from "../lib/theme";
 
 /* The swatch row, in all three places an accent can be set.
  *
@@ -27,10 +28,12 @@ export function ThemePicker({
   const strength = value?.strength ?? DEFAULT_STRENGTH;
 
   // Keep the strength across a change of mode: someone who has turned the wash
-  // down to a hairline means it about the app, not about cobalt in particular.
+  // down to a hairline means it about the app, not about one petal in particular.
   const pick = (next) => onChange(next ? { ...next, strength } : null);
 
-  const autoSeed = seed || { hue: 264.5, chroma: 0.14 };
+  const autoSeed = seed || PETAL_BY_ID.get("cornflower");
+  const [, autoNext] = neighbours(autoSeed.hue);
+  const chosen = mode === "preset" ? canonicalPreset(value?.preset) : null;
 
   return (
     <div className="accents" data-disabled={disabled ? "" : undefined}>
@@ -62,7 +65,7 @@ export function ThemePicker({
           onClick={() => pick({ mode: "auto" })}
           style={{
             "--a": oklch(0.66, autoSeed.chroma, autoSeed.hue),
-            "--b": oklch(0.8, autoSeed.chroma * 0.8, autoSeed.hue + 40),
+            "--b": autoNext.hex,
           }}
         >
           <i />
@@ -74,12 +77,12 @@ export function ThemePicker({
             key={preset.id}
             type="button"
             className="accent"
-            data-on={mode === "preset" && value?.preset === preset.id ? "" : undefined}
+            data-on={chosen === preset.id ? "" : undefined}
             disabled={disabled}
-            aria-pressed={mode === "preset" && value?.preset === preset.id}
+            aria-pressed={chosen === preset.id}
             title={preset.name}
             onClick={() => pick({ mode: "preset", preset: preset.id })}
-            style={{ "--a": oklch(0.62, preset.chroma, preset.hue) }}
+            style={{ "--a": preset.hex || oklch(0.62, preset.chroma, preset.hue) }}
           >
             <i />
             <span className="mi">{preset.name}</span>

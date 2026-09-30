@@ -24,6 +24,21 @@ use server::ManagedServer;
 /// new-conversation screen with its composer set to that kind.
 const NEW_KINDS: &[(&str, &str)] = &[("new-chat", "chat"), ("new-code", "code"), ("new-design", "design")];
 
+/// The Dock icon, set from the bundled PNG. A built .app gets its icon from
+/// the bundle; `tauri dev` runs a bare binary, which the Dock draws generic.
+#[cfg(target_os = "macos")]
+fn set_dock_icon() {
+    use objc2::{AnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let data = NSData::with_bytes(include_bytes!("../icons/icon.png"));
+    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
+    }
+}
+
 /// The glass behind the rail.
 #[cfg(target_os = "macos")]
 fn apply_glass(window: &WebviewWindow) {
@@ -66,6 +81,19 @@ fn new_menu_event(app: &AppHandle, id: &str) -> bool {
     true
 }
 
+/// Bom ▸ Settings… (⌘,): the window comes forward and the page opens its
+/// settings window. False for any other menu item. The page also listens for
+/// ⌘, itself, but once the menu owns the accelerator the keystroke goes to
+/// the menu, so this is the path that has to work.
+fn settings_menu_event(app: &AppHandle, id: &str) -> bool {
+    if id != "settings" {
+        return false;
+    }
+    present_main_window(app);
+    let _ = app.emit_to("main", "bom://settings", ());
+    true
+}
+
 /// Bring the window back to the front, un-hiding it first if the close button
 /// put it away. Used by both the tray menu and a left-click on the icon.
 fn present_main_window(app: &tauri::AppHandle) {
@@ -98,7 +126,10 @@ pub fn run() {
         // alike. Checked by id, so the tray's own items -- handled on the
         // tray -- pass straight through.
         .on_menu_event(|app, event| {
-            new_menu_event(app, event.id().as_ref());
+            let id = event.id().as_ref();
+            if !new_menu_event(app, id) {
+                settings_menu_event(app, id);
+            }
         })
         .setup(|app| {
             let handle = app.handle();
@@ -121,9 +152,21 @@ pub fn run() {
                 let code_item = MenuItem::with_id(app, "new-code", "New Code Session", true, Some("CmdOrCtrl+2"))?;
                 let design_item = MenuItem::with_id(app, "new-design", "New Design", true, Some("CmdOrCtrl+3"))?;
                 let separator = PredefinedMenuItem::separator(app)?;
+                // Settings…, in the app menu (the first submenu, named after
+                // the app) under About, where every Mac app keeps it.
+                let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+                let settings_rule = PredefinedMenuItem::separator(app)?;
+                let mut app_menu_done = false;
                 let mut placed = false;
                 for item in menu.items()? {
                     if let MenuItemKind::Submenu(sub) = item {
+                        if !app_menu_done {
+                            app_menu_done = true;
+                            // After About and its rule: index 2.
+                            let at = sub.items()?.len().min(2);
+                            sub.insert_items(&[&settings_item, &settings_rule], at)?;
+                            continue;
+                        }
                         if sub.text()? == "File" {
                             sub.insert_items(&[&chat_item, &code_item, &design_item, &separator], 0)?;
                             placed = true;
@@ -136,6 +179,9 @@ pub fn run() {
                 }
                 app.set_menu(menu)?;
             }
+
+            #[cfg(target_os = "macos")]
+            set_dock_icon();
 
             quickview::setup(handle);
             let bound = quickview::register(handle);
@@ -160,13 +206,11 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&open, &quick, &code, &design, &quit])?;
 
             TrayIconBuilder::with_id("bom-tray")
-                // The flower as a template image: black on transparent, so the
-                // menu bar tints it for light, dark and the highlighted state.
-                // The full-colour app icon is for the Dock, not for here. Next
-                // event and reachability replace this once there is a server
-                // to ask.
+                // The flower in its own colours, at 22pt (44px for retina). The
+                // petals read on both light and dark menu bars; the
+                // face is white. Next event and reachability replace this once
+                // there is a server to ask.
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
-                .icon_as_template(true)
                 .menu(&menu)
                 // macOS convention: the icon is a menu, not a button. Left
                 // click opening the window instead would make the menu

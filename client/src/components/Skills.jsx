@@ -745,21 +745,30 @@ export function Skills({ api }) {
 
       <div className="page-body" style={{ flexDirection: "column" }}>
         <div className="page-col" style={{ alignSelf: "stretch" }}>
-          {/* Navigation Tabs */}
-          <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--line-soft)", paddingBottom: "12px", marginBottom: "16px" }}>
+          {/* The two halves of the page, as the app's segmented control --
+              the same one the Projects page switches kinds with. */}
+          <div className="segmented skills-tabs" role="tablist" aria-label="Skills and MCP servers">
             <button
               type="button"
-              className={tab === "skills" ? "btnp" : "btn"}
+              role="tab"
+              aria-selected={tab === "skills"}
+              data-active={tab === "skills" ? "" : undefined}
               onClick={() => setTab("skills")}
             >
-              Active Skills ({skills.length})
+              <Icon name="skills" />
+              Active skills
+              <span className="count">{skills.length}</span>
             </button>
             <button
               type="button"
-              className={tab === "mcp" ? "btnp" : "btn"}
+              role="tab"
+              aria-selected={tab === "mcp"}
+              data-active={tab === "mcp" ? "" : undefined}
               onClick={() => setTab("mcp")}
             >
-              MCP Servers ({mcpServers.length}) & Presets
+              <Icon name="apps" />
+              MCP servers &amp; presets
+              <span className="count">{mcpServers.length}</span>
             </button>
           </div>
 

@@ -35,6 +35,12 @@ window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# The Dock icon of a dev run, which no bundle supplies.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", features = ["NSData"] }
+
 # A release build of a webview shell spends almost all its size on debug
 # symbols and unoptimised glue. These are the standard Tauri release settings.
 [profile.release]

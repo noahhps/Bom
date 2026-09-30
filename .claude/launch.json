@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bom-client",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "client",
+        "vite",
+        "client",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "bom-client-agents",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "API_ORIGIN=http://127.0.0.1:8091",
+        "npx",
+        "--prefix",
+        "client",
+        "vite",
+        "client",
+        "--port",
+        "5175",
+        "--strictPort"
+      ],
+      "port": 5175
+    }
+  ]
+}

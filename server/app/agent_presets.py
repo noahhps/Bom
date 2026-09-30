@@ -1,17 +1,19 @@
 """Ready-made agents to start from.
 
-A preset is only what an agent is -- a name, a persona, and a subset of the
-skills by name -- so unlike the MCP presets there is nothing to resolve and no
-secret to fill in: the client hands one straight to `POST /agents`, or drops it
-into the editor to be tweaked first.
+A preset is what an agent is -- a name, a persona, a one-line tagline for its
+card, and what its flower wears -- so unlike the MCP presets there is nothing
+to resolve and no secret to fill in: the client hands one straight to
+`POST /agents`, or drops it into the editor to be tweaked first.
 
-The skill names are referenced whether or not this machine has them. An agent
-stores names, and a name that is not registered (web search with no key, the
-sandbox left off) is simply never offered -- so a preset can describe the ideal
-shape of a role and degrade quietly on a machine that has only some of it. The
-names here are the stable ones every install registers under; `search_history`
-is recall's real name, and the two sandbox skills only do anything once
-SANDBOX_ENABLED is set.
+Every preset has the same abilities as Bom itself (`skills: None`, every
+enabled skill). What makes a researcher a researcher is its instructions --
+the specialised system prompt -- not a narrower toolbox; a narrower one is
+still a choice the reader can make in the editor, and the store keeps an
+explicit list (even an empty one) distinct from None.
+
+`look` names a hat and an item from the set the client draws
+(client/src/lib/accessories.js): a researcher's explorer helmet and
+magnifying glass, a coder's beanie and headphones.
 """
 
 from __future__ import annotations
@@ -29,10 +31,9 @@ PRESETS: list[dict] = [
             "paragraph, write it into a canvas the user can keep, and keep your "
             "chat reply to the headline and what is still uncertain."
         ),
-        "skills": [
-            "web_search", "search_history", "current_time", "read_canvas",
-            "write_canvas", "edit_canvas", "write_slides", "edit_slides", "ask_for_design",
-        ],
+        "skills": None,
+        "tagline": "Looks things up and says where each answer came from.",
+        "look": {"hat": "explorer", "item": "magnifier"},
     },
     {
         "id": "coder",
@@ -45,10 +46,9 @@ PRESETS: list[dict] = [
             "error and fix it rather than guessing. Prefer the smallest change "
             "that answers the need."
         ),
-        "skills": [
-            "run_python", "run_shell", "read_canvas", "write_canvas", "edit_canvas",
-            "list_directory", "read_file", "search_files",
-        ],
+        "skills": None,
+        "tagline": "Writes code, runs it, and fixes what breaks.",
+        "look": {"hat": "beanie", "item": "headphones"},
     },
     {
         "id": "writer",
@@ -60,7 +60,9 @@ PRESETS: list[dict] = [
             "voice, cut what does not earn its place, and when you change "
             "something substantive say what you changed and why in a line."
         ),
-        "skills": ["read_canvas", "write_canvas", "edit_canvas", "search_history"],
+        "skills": None,
+        "tagline": "Drafts and edits prose in your voice.",
+        "look": {"hat": "beret", "item": "pencil"},
     },
     {
         "id": "planner",
@@ -73,10 +75,9 @@ PRESETS: list[dict] = [
             "would most change the plan before writing it, not after. Note where "
             "an estimate is a guess."
         ),
-        "skills": [
-            "write_canvas", "edit_canvas", "read_canvas", "write_sheet", "edit_sheet",
-            "current_time", "search_history",
-        ],
+        "skills": None,
+        "tagline": "Turns a goal into ordered, concrete steps.",
+        "look": {"hat": "hardhat", "item": "clipboard"},
     },
     {
         "id": "analyst",
@@ -90,11 +91,9 @@ PRESETS: list[dict] = [
             "canvas. Say plainly when the data does not support a conclusion "
             "the user is hoping for."
         ),
-        "skills": [
-            "run_python", "read_file", "list_directory", "read_canvas", "write_canvas",
-            "edit_canvas", "write_sheet", "edit_sheet", "write_slides", "edit_slides",
-            "ask_for_design",
-        ],
+        "skills": None,
+        "tagline": "Computes from the data rather than guessing.",
+        "look": {"hat": "gradcap", "item": "glasses_square"},
     },
     {
         "id": "designer",
@@ -111,23 +110,21 @@ PRESETS: list[dict] = [
             "rather than starting over. Reply briefly with the decisions that "
             "matter and what you would refine next."
         ),
-        "skills": [
-            "ask_for_design", "write_slides", "edit_slides", "write_sheet", "edit_sheet",
-            "write_canvas", "edit_canvas", "read_canvas", "list_images", "generate_image",
-            "write_wireframe", "edit_wireframe", "wireframe_to_slides", "open_canvas",
-            "check_design", "view_canvas",
-        ],
+        "skills": None,
+        "tagline": "Makes decks, sheets and pages that look finished.",
+        "look": {"hat": "bucket", "item": "paintbrush"},
     },
     {
         "id": "companion",
         "name": "Companion",
         "instructions": (
-            "You are here to talk. No tools, no lookups -- just attention. Be "
-            "warm and curious, follow what the user actually said, ask real "
-            "questions, and do not rush to solve. Match their tone and length."
+            "You are here to talk. Attention first: reach for a tool only when "
+            "the user asks for something a tool is for. Be warm and curious, "
+            "follow what the user actually said, ask real questions, and do not "
+            "rush to solve. Match their tone and length."
         ),
-        # Deliberately empty: a pure conversationalist, which the store keeps
-        # distinct from an agent that simply has not restricted its skills.
-        "skills": [],
+        "skills": None,
+        "tagline": "Here to talk -- warm, curious, unhurried.",
+        "look": {"item": "bowtie"},
     },
 ]

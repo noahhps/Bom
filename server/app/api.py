@@ -116,6 +116,10 @@ class ChatRequest(BaseModel):
     design: str | None = Field(default=None, max_length=120)
     # A new code conversation's project folder, likewise first-message-only.
     workspace: str | None = Field(default=None, max_length=4096)
+    # The project a new chat or design conversation is filed in, picked on
+    # the composer before anything was sent. First-message-only; a code
+    # conversation is filed by its folder (`workspace`) instead.
+    project_id: str | None = Field(default=None, max_length=120)
     attachments: list[AttachmentIn] = Field(default_factory=list)
     # Sent with every message, recorded only on the first one. A conversation
     # that starts from the phone should say so even when the client opened it
@@ -299,6 +303,23 @@ class CanvasPatch(BaseModel):
     language: str | None = Field(default=None, max_length=40)
 
 
+class AgentLook(BaseModel):
+    """What an agent's flower wears: a hat and one item. Names from the set the
+    client draws (lib/accessories.js), checked for shape here like `icon` -- an
+    unknown name is drawn as nothing, so the pattern is the guard that matters."""
+
+    hat: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
+    item: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
+
+
+def _look_json(look: "AgentLook | None") -> str | None:
+    """The column's JSON for a look, or None for a bare flower."""
+    if look is None:
+        return None
+    fields = look.model_dump(exclude_none=True)
+    return json.dumps(fields) if fields else None
+
+
 class AgentIn(BaseModel):
     """A new agent: a named persona with an optional subset of the skills."""
 
@@ -313,6 +334,8 @@ class AgentIn(BaseModel):
     icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
     # The agent's accent, the same shape a session or project carries.
     theme: Accent | None = None
+    # What its flower wears.
+    look: AgentLook | None = None
 
 
 class AgentPatch(BaseModel):
@@ -325,6 +348,7 @@ class AgentPatch(BaseModel):
     skills: list[str] | None = None
     icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
     theme: Accent | None = None
+    look: AgentLook | None = None
 
 
 class DesignIn(BaseModel):
@@ -1135,6 +1159,7 @@ def build_router(
             skills=body.skills,
             icon=body.icon,
             theme=json.dumps(theme) if theme else None,
+            look=_look_json(body.look),
         )
         return _read_accent(agent.to_dict())
 
@@ -1153,6 +1178,8 @@ def build_router(
         if "theme" in changes:
             accent = body.theme.model_dump(exclude_none=True) if body.theme else None
             changes["theme"] = json.dumps(accent) if accent else None
+        if "look" in changes:
+            changes["look"] = _look_json(body.look)
         updated = store.update_agent(agent_id, changes)
         if updated is None:
             raise HTTPException(404, "no such agent")
@@ -1316,14 +1343,30 @@ def build_router(
         else:
             if body.agent_id and not store.get_agent(body.agent_id):
                 raise HTTPException(404, "no such agent")
+            # Checked before the session exists, so a bad pick is refused
+            # rather than leaving an unfiled conversation behind -- by the
+            # same rules as filing one afterwards (PUT .../project).
+            mode = normalize_mode(body.mode)
+            project = None
+            if body.project_id and mode != "code":
+                project = store.get_project(body.project_id)
+                if project is None:
+                    raise HTTPException(404, "no such project")
+                kind = project.get("kind") or "chat"
+                if kind == "code":
+                    raise HTTPException(400, "a code project holds code conversations")
+                if kind == "design" and mode != "design":
+                    raise HTTPException(400, "a design project holds design conversations")
             session_id = store.create_session(
                 situation=situation,
-                mode=normalize_mode(body.mode),
+                mode=mode,
                 design=_valid_design(body.design),
                 workspace=_workspace(body.workspace),
             )["id"]
             if body.agent_id:
                 store.set_session_agent(session_id, body.agent_id)
+            if project is not None:
+                store.set_session_project(session_id, project["id"])
 
         async def frames():
             yield f'event: session\ndata: {{"session_id": "{session_id}"}}\n\n'

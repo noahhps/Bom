@@ -482,3 +482,32 @@ def test_a_project_holds_its_own_kind_of_conversation(client, base):
 
     gone = client.delete(f"/api/projects/{other['id']}").json()
     assert gone["files"] == "untouched" and two.exists()
+
+
+def test_a_new_conversation_is_filed_from_its_first_message(client, base, monkeypatch):
+    # The composer's project picker: the project rides on the first message,
+    # and the conversation is filed before the turn runs -- by the same rules
+    # as filing it afterwards.
+    async def fake_run_turn(self, session_id, text, **kw):
+        yield "event: done\ndata: {}\n\n"
+
+    monkeypatch.setattr(Orchestrator, "run_turn", fake_run_turn)
+    chats = client.post("/api/projects", json={"name": "Misc"}).json()
+    designs = client.post("/api/projects", json={"name": "Looks", "kind": "design"}).json()
+
+    def first(**extra):
+        r = client.post("/api/chat", json={"message": "hi", **extra})
+        r.read()
+        return r
+
+    filed = first(project_id=chats["id"])
+    assert filed.status_code == 200
+    listed = client.get("/api/sessions").json()["sessions"]
+    assert listed[0]["project_id"] == chats["id"]
+
+    before = len(listed)
+    assert first(project_id=designs["id"]).status_code == 400, "a chat is not a design"
+    assert first(project_id="prj_nope").status_code == 404
+    assert len(client.get("/api/sessions").json()["sessions"]) == before, "nothing left behind"
+
+    assert first(project_id=designs["id"], mode="design").status_code == 200

@@ -10,6 +10,11 @@ import { useCallback, useEffect, useState } from "react";
  */
 export function useAgents(api) {
   const [agents, setAgents] = useState([]);
+  // The ready-made agents, as the server ships them. Read here rather than on
+  // the Agents page because a room and a card both need them: an agent made
+  // before looks existed borrows its look and tagline from the preset it is
+  // named after (lib/accessories.js).
+  const [presets, setPresets] = useState([]);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
@@ -34,6 +39,12 @@ export function useAgents(api) {
         if (live) setError(problem.message || String(problem));
       }
     })();
+    api
+      .listAgentPresets()
+      .then((data) => {
+        if (live) setPresets(data.presets || []);
+      })
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -68,5 +79,5 @@ export function useAgents(api) {
     [api, refresh],
   );
 
-  return { agents, error, refresh, create, update, remove };
+  return { agents, presets, error, refresh, create, update, remove };
 }

@@ -8153,6 +8153,60 @@ html:not([data-shell]) .screen[data-glass] {
 .settings-row > .btn,
 .settings-row > .switch { flex: none; }
 
+/* A small label beside an MCP preset or server: "Sign in", "Signed in". */
+.mcp-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--text-dim);
+  font: 500 var(--t-micro)/1.4 var(--font);
+  vertical-align: 2px;
+}
+.mcp-chip[data-on] { background: var(--green-field); color: var(--green); }
+
+/* A sign-in to an MCP server in progress in another tab. */
+.mcp-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  font: 400 var(--t-sm)/1.5 var(--font);
+  color: var(--ink);
+}
+.mcp-signin > span { flex: 1; min-width: 12rem; }
+.mcp-signin a { color: var(--accent); }
+.mcp-signin[data-status="failed"] { border-color: var(--ochre); }
+.mcp-signin[data-status="connected"] { border-color: var(--green); }
+
+/* Enterprise mode's limits, standard beside enterprise, with the column in
+   force drawn in ink and the other dimmed. */
+.limits-table { display: flex; flex-direction: column; }
+.limits-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font: 400 var(--t-sm)/1.45 var(--font);
+  color: var(--text-dim);
+}
+.limits-row:last-child { border-bottom: 0; }
+.limits-row > span { min-width: 0; overflow-wrap: anywhere; }
+.limits-row > [role="rowheader"] { color: var(--ink); }
+.limits-row > [data-active] { color: var(--ink); font-weight: 500; }
+.limits-head { padding-top: 0; font-size: var(--t-xs); }
+.limits-head > span { color: var(--text-faint); font-weight: 400; }
+.limits-head > [data-active] { color: var(--accent); }
+@media (max-width: 720px) {
+  .limits-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+}
+
 .settings-close {
   position: absolute;
   top: 14px;

@@ -254,9 +254,8 @@ class ReadDesign(Skill):
     """One design, as text: what to build from."""
 
     modes = CODE_ONLY
-    max_result_chars = 42_000
 
-    def __init__(self, store: Store, max_chars: int = 40_000) -> None:
+    def __init__(self, store: Store, max_chars: int = 40_000, *, settings=None) -> None:
         super().__init__(
             name="read_design",
             description=(
@@ -278,7 +277,19 @@ class ReadDesign(Skill):
             },
         )
         self.store = store
-        self.max_chars = max(2000, int(max_chars))
+        self._max_chars = max_chars
+        # Read live when given, like read_canvas: Enterprise mode's larger
+        # pages apply on the next call.
+        self._settings = settings
+
+    @property
+    def max_chars(self) -> int:
+        live = getattr(self._settings, "canvas_read_chars", None) if self._settings is not None else None
+        return max(2000, int(live or self._max_chars))
+
+    @property
+    def max_result_chars(self) -> int:
+        return self.max_chars + 2000
 
     async def use(self, design=None, project=None, offset=1, **extra) -> str:
         title = plain_text(design).strip()
@@ -373,6 +384,6 @@ def project_skills(store: Store, settings) -> list[Skill]:
         CreateProject(store),
         CreateCodeProject(store, settings),
         ListDesigns(store),
-        ReadDesign(store, max_chars=getattr(settings, "canvas_read_chars", 40_000)),
+        ReadDesign(store, settings=settings),
         ImportDesign(store, settings),
     ]

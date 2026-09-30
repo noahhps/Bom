@@ -673,6 +673,42 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE agents ADD COLUMN look TEXT;
     """,
+    # Compaction (see compaction.py). A long conversation's older turns are
+    # summarised into one note that is replayed in their place. `through_id`
+    # is the last message the summary covers; everything after it is replayed
+    # word for word. A new compaction folds the previous one in, so only the
+    # newest row is ever read -- the older ones are kept as a record of what
+    # was said when. The messages themselves are never touched: the thread on
+    # screen is the whole conversation, and only the window is compacted.
+    """
+    CREATE TABLE compactions (
+      id            TEXT PRIMARY KEY,
+      session_id    TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      through_id    TEXT NOT NULL,
+      summary       TEXT NOT NULL,
+      covered       INTEGER NOT NULL,
+      tokens_before INTEGER,
+      tokens_after  INTEGER,
+      created_at    INTEGER NOT NULL
+    );
+
+    CREATE INDEX idx_compactions_session ON compactions(session_id, created_at);
+    """,
+    # Sign-ins to hosted MCP servers (see mcp/oauth.py). One row per server:
+    # what discovery found (`metadata`, JSON), the client this app registered
+    # there (`client`, JSON -- its id, any secret, and the redirect it was
+    # registered with), and the tokens (`tokens`, JSON). Kept beside the other
+    # MCP secrets, which already live in mcp_servers.headers; never sent to
+    # the client. Goes with its server.
+    """
+    CREATE TABLE mcp_auth (
+      server_id   TEXT PRIMARY KEY REFERENCES mcp_servers(id) ON DELETE CASCADE,
+      metadata    TEXT,
+      client      TEXT,
+      tokens      TEXT,
+      updated_at  INTEGER NOT NULL
+    );
+    """,
 ]
 
 

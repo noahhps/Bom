@@ -343,6 +343,47 @@ class Settings:
     carry_working: bool = field(
         default_factory=lambda: _env("CARRY_WORKING", "1").lower() not in ("0", "false", "no", "off")
     )
+    # How much of that recap each past turn carries: one line of each tool
+    # result, and the tail of the reasoning. Prepended to every later turn, so
+    # kept short -- it competes with the live conversation for the same budget.
+    carried_result_chars: int = field(
+        default_factory=lambda: _env_int("CARRIED_RESULT_CHARS", 240)
+    )
+    carried_reasoning_chars: int = field(
+        default_factory=lambda: _env_int("CARRIED_REASONING_CHARS", 400)
+    )
+    # How many pictures travel with a request, newest first. Older ones stay in
+    # the transcript as a named placeholder.
+    window_images: int = field(default_factory=lambda: _env_int("WINDOW_IMAGES", 4))
+    # How many paths code_glob lists, and entries code_ls walks, before saying
+    # there are more.
+    code_glob_limit: int = field(default_factory=lambda: _env_int("CODE_GLOB_LIMIT", 200))
+    code_ls_limit: int = field(default_factory=lambda: _env_int("CODE_LS_LIMIT", 400))
+
+    # --- compaction -------------------------------------------------------
+    # A long conversation is compacted rather than trimmed: once its history
+    # fills COMPACT_AT of the window, the older turns are summarised into one
+    # note and only the recent ones are replayed word for word. Trimming the
+    # oldest message every turn instead changes the start of the prompt every
+    # turn, which throws away every cached token behind it.
+    #
+    # COMPACT_KEEP is how much of the window the verbatim tail may take after a
+    # compaction, and COMPACT_SUMMARY_TOKENS roughly how long the summary runs.
+    compact_at: float = field(default_factory=lambda: _env_float("COMPACT_AT", 0.5))
+    compact_keep: float = field(default_factory=lambda: _env_float("COMPACT_KEEP", 0.25))
+    compact_summary_tokens: int = field(
+        default_factory=lambda: _env_int("COMPACT_SUMMARY_TOKENS", 1500)
+    )
+
+    # --- caching ----------------------------------------------------------
+    # How long a cloud backend keeps the prompt prefix cached between requests:
+    # "5m" or "1h". The hour costs more to write and pays for itself when turns
+    # are minutes apart.
+    cache_ttl: str = field(default_factory=lambda: _env("CACHE_TTL", "5m"))
+    # How long Ollama keeps the model -- and with it the cached prompt --
+    # loaded after a request ("30m", "1h", "-1" for always). Empty takes
+    # Ollama's own default of five minutes.
+    ollama_keep_alive: str = field(default_factory=lambda: _env("OLLAMA_KEEP_ALIVE", ""))
 
     system_preamble: str = field(
         default_factory=lambda: _env(

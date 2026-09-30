@@ -66,7 +66,8 @@ def blocked_by(choice: dict) -> set[str]:
 
 
 def pin_instruction(choice: dict) -> str:
-    """What the model is told about the pin, appended to the system prompt."""
+    """What the model is told about the pin, added to the user's message for
+    the turn it applies to."""
     kind = f' with kind "{choice["kind"]}"' if choice.get("kind") else ""
     return (
         f"For this message the user chose **{choice['label']}** in the composer's "

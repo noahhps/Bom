@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSkills } from "../hooks/useSkills";
 import { iconForServer } from "../lib/mcpIcons";
+import { serverOrigin } from "../lib/serverOrigin";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
@@ -172,6 +173,22 @@ function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, ask
   );
 }
 
+/* How the preset gallery is sectioned, in this order. A preset with a category
+ * not listed here lands in the last section rather than disappearing. */
+const PRESET_SECTIONS = [
+  { id: "work", label: "Work tools", note: "Sign in with your company account — no token to create or paste." },
+  { id: "code", label: "Code & docs" },
+  { id: "google", label: "Google Workspace" },
+  { id: "design", label: "Design" },
+  { id: "research", label: "Research & the web" },
+  { id: "local", label: "On this machine" },
+];
+
+// A sign-in is polled while the other tab is open: often enough to feel
+// immediate when the reader comes back, for up to ten minutes.
+const SIGNIN_POLL_MS = 2000;
+const SIGNIN_POLL_LIMIT = 300;
+
 function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState({});
@@ -181,11 +198,18 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   // -- or in an argv flag -- had nowhere to put one.
   const inputs = preset.inputs || Object.keys(preset.env || {}).map((key) => ({ key }));
   const unfilled = inputs.filter((i) => i.required && !values[i.key]);
+  // A preset that signs in does so unless the reader gave it a key instead.
+  const signsIn =
+    preset.auth === "oauth" && !inputs.some((i) => i.secret && (values[i.key] || "").trim());
 
   const handleInstall = async (e) => {
     e.preventDefault();
     if (unfilled.length) return;
-    await onInstall(preset.id, values);
+    // Opened here, in the click, because a tab opened after an await has lost
+    // the gesture that lets it open at all. It is pointed at the sign-in page
+    // once the server has made one -- or closed, if none is needed.
+    const tab = signsIn ? window.open("", "_blank") : null;
+    await onInstall(preset.id, values, tab);
     setOpen(false);
   };
 
@@ -207,6 +231,7 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
           <span className="h" style={{ fontSize: "var(--t-md)" }}>
             {preset.name}
           </span>
+          {preset.auth === "oauth" ? <span className="mcp-chip">Sign in</span> : null}
           <p style={{ margin: "4px 0 0", color: "var(--text-dim)", fontSize: "var(--t-sm)" }}>
             {preset.description}
           </p>
@@ -263,7 +288,9 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
           ) : null}
           {inputs.length === 0 ? (
             <p style={{ margin: 0, fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>
-              Nothing to configure — this server authenticates on its own.
+              {preset.auth === "oauth"
+                ? "Nothing to configure — a sign-in page opens in a new tab."
+                : "Nothing to configure — this server authenticates on its own."}
             </p>
           ) : null}
           {inputs.map((input) => (
@@ -303,7 +330,7 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
             style={{ alignSelf: "flex-start" }}
             disabled={busy || unfilled.length > 0}
           >
-            {busy ? "Connecting…" : "Activate Preset"}
+            {busy ? "Connecting…" : signsIn ? "Add & sign in" : "Activate Preset"}
           </button>
         </form>
       ) : null}
@@ -311,7 +338,18 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   );
 }
 
-function McpServerRow({ api, server, onToggle, onDelete, onSync, onLogo, onResetLogo, busy }) {
+function McpServerRow({
+  api,
+  server,
+  onToggle,
+  onDelete,
+  onSync,
+  onLogo,
+  onResetLogo,
+  onSignIn,
+  onSignOut,
+  busy,
+}) {
   const fileInput = useRef(null);
 
   const pickLogo = (event) => {
@@ -357,6 +395,7 @@ function McpServerRow({ api, server, onToggle, onDelete, onSync, onLogo, onReset
           <span className="h" style={{ fontSize: "var(--t-md)" }}>
             {server.name}
           </span>
+          {server.auth?.signed_in ? <span className="mcp-chip" data-on>Signed in</span> : null}
           <span
             style={{
               fontSize: "var(--t-micro)",
@@ -387,6 +426,28 @@ function McpServerRow({ api, server, onToggle, onDelete, onSync, onLogo, onReset
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {server.auth?.required && server.auth?.can_sign_in ? (
+          <button
+            type="button"
+            className="btnp"
+            disabled={busy}
+            title={`Sign in to ${server.name} in a new tab`}
+            onClick={() => onSignIn(server)}
+          >
+            Sign in
+          </button>
+        ) : null}
+        {server.auth?.signed_in ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            title="Forget this sign-in and disconnect"
+            onClick={() => onSignOut(server)}
+          >
+            Sign out
+          </button>
+        ) : null}
         <input
           ref={fileInput}
           type="file"
@@ -478,6 +539,12 @@ export function Skills({ api }) {
     homepage: "",
   });
 
+  // A sign-in in flight: which server, how it is going, and the page to open
+  // by hand if the browser blocked the tab.
+  const [signIn, setSignIn] = useState(null);
+  const signInPoll = useRef(null);
+  useEffect(() => () => clearInterval(signInPoll.current), []);
+
   const loadMcpData = useCallback(async () => {
     try {
       const [serversRes, presetsRes] = await Promise.all([
@@ -565,17 +632,86 @@ export function Skills({ api }) {
     }
   };
 
-  const handleInstallPreset = async (presetId, values) => {
+  /* Sign in to a hosted server in `tab` (opened by the click that asked, so
+   * the browser lets it open), then watch for the server to say how it went.
+   * The sign-in page comes back to this server, which keeps the tokens and
+   * connects; all the page here does is poll and redraw. */
+  const runSignIn = async (server, tab) => {
+    clearInterval(signInPoll.current);
+    setSignIn({ serverId: server.id, name: server.name, status: "starting", error: "" });
+    let started;
+    try {
+      started = await api.startMcpSignIn(server.id, serverOrigin() || window.location.origin);
+    } catch (err) {
+      tab?.close();
+      setSignIn({ serverId: server.id, name: server.name, status: "failed", error: err.message || String(err) });
+      return;
+    }
+    if (tab) tab.location = started.url;
+    setSignIn({ serverId: server.id, name: server.name, status: "pending", error: "", url: started.url });
+
+    let ticks = 0;
+    signInPoll.current = setInterval(async () => {
+      ticks += 1;
+      if (ticks > SIGNIN_POLL_LIMIT) {
+        clearInterval(signInPoll.current);
+        setSignIn((was) =>
+          was?.status === "pending" ? { ...was, status: "failed", error: "the sign-in timed out" } : was,
+        );
+        return;
+      }
+      let report;
+      try {
+        report = await api.mcpSignInStatus(started.state);
+      } catch {
+        return; // a blip in the poll is not a failed sign-in
+      }
+      if (report.status === "pending") return;
+      clearInterval(signInPoll.current);
+      // The list first, so the row and the banner change together.
+      if (report.status === "connected") {
+        await loadMcpData();
+        await refresh();
+      }
+      setSignIn({ serverId: server.id, name: server.name, status: report.status, error: report.error || "" });
+    }, SIGNIN_POLL_MS);
+  };
+
+  const handleSignIn = (server) => {
+    const tab = window.open("", "_blank");
+    runSignIn(server, tab);
+  };
+
+  const handleSignOut = async (server) => {
     setMcpBusy(true);
     try {
-      await api.instantiateMcpPreset({ preset: presetId, values });
+      await api.mcpSignOut(server.id);
       await loadMcpData();
       await refresh();
     } catch (err) {
-      await notify(`Failed activating preset: ${err.message || err}`);
+      await notify(`Could not sign out: ${err.message || err}`);
     } finally {
       setMcpBusy(false);
     }
+  };
+
+  const handleInstallPreset = async (presetId, values, tab = null) => {
+    setMcpBusy(true);
+    let added = null;
+    try {
+      added = await api.instantiateMcpPreset({ preset: presetId, values });
+      await loadMcpData();
+      await refresh();
+    } catch (err) {
+      tab?.close();
+      await notify(`Failed activating preset: ${err.message || err}`);
+      return;
+    } finally {
+      setMcpBusy(false);
+    }
+    // Added; now signed in, if it wants a person rather than a key.
+    if (added?.auth?.required && added.auth.can_sign_in) runSignIn(added, tab);
+    else tab?.close();
   };
 
   const handleToggleMcpServer = async (serverId, enabled) => {
@@ -875,33 +1011,76 @@ export function Skills({ api }) {
             </>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              {/* Presets */}
-              <div>
-                <div className="lane" style={{ marginBottom: "12px" }}>
-                  <span className="mi" data-strong>
-                    Pre-configured G Suite & Figma Integrations
+              {signIn ? (
+                <div className="mcp-signin" role="status" data-status={signIn.status}>
+                  <span>
+                    {signIn.status === "connected"
+                      ? `${signIn.name} is connected.`
+                      : signIn.status === "failed"
+                        ? `Signing in to ${signIn.name} didn't work: ${signIn.error}`
+                        : `Waiting for you to sign in to ${signIn.name} in the other tab…`}
                   </span>
-                  <i />
+                  {signIn.status === "pending" && signIn.url ? (
+                    <a href={signIn.url} target="_blank" rel="noreferrer">
+                      Open the sign-in page
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      clearInterval(signInPoll.current);
+                      setSignIn(null);
+                    }}
+                  >
+                    {signIn.status === "pending" ? "Cancel" : "Dismiss"}
+                  </button>
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  {mcpPresets.map((preset) => (
-                    <PresetCard
-                      key={preset.id}
-                      api={api}
-                      preset={preset}
-                      isInstalled={installedServerNames.has(preset.name)}
-                      onInstall={handleInstallPreset}
-                      busy={mcpBusy}
-                    />
-                  ))}
-                </div>
-              </div>
+              ) : null}
+
+              {/* Presets, by section */}
+              {PRESET_SECTIONS.map((section, index) => {
+                const known = PRESET_SECTIONS.map((s) => s.id);
+                const inSection = mcpPresets.filter((preset) =>
+                  index === PRESET_SECTIONS.length - 1
+                    ? preset.category === section.id || !known.includes(preset.category)
+                    : preset.category === section.id,
+                );
+                if (!inSection.length) return null;
+                return (
+                  <div key={section.id}>
+                    <div className="lane" style={{ marginBottom: section.note ? "6px" : "12px" }}>
+                      <span className="mi" data-strong>
+                        {section.label}
+                      </span>
+                      <i />
+                    </div>
+                    {section.note ? (
+                      <p className="settings-note" style={{ margin: "0 0 12px" }}>
+                        {section.note}
+                      </p>
+                    ) : null}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                        gap: "12px",
+                      }}
+                    >
+                      {inSection.map((preset) => (
+                        <PresetCard
+                          key={preset.id}
+                          api={api}
+                          preset={preset}
+                          isInstalled={installedServerNames.has(preset.name)}
+                          onInstall={handleInstallPreset}
+                          busy={mcpBusy}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
 
               {/* Installed MCP Servers */}
               <div>
@@ -1135,6 +1314,8 @@ export function Skills({ api }) {
                         onSync={handleSyncMcpServer}
                         onLogo={handleUploadLogo}
                         onResetLogo={handleResetLogo}
+                        onSignIn={handleSignIn}
+                        onSignOut={handleSignOut}
                         busy={mcpBusy}
                       />
                     ))}

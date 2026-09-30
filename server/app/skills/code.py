@@ -103,6 +103,16 @@ class _Code(Skill):
     def limit(self) -> int:
         return int(getattr(self.settings, "code_output_chars", 30_000))
 
+    @property
+    def max_result_chars(self) -> int:
+        # The turn loop cuts every result to RESULT_CHARS unless the skill
+        # says otherwise, and it cuts from the end. Without this, a command's
+        # output -- clipped here to its head *and* its tail, because a failing
+        # test's summary is at the end -- lost the tail again on the way to the
+        # model, and a code_read lost its "read on with offset=" line. The
+        # margin covers the header and footer a result carries.
+        return self.limit + 2_000
+
     async def use(self, session: str, **arguments) -> str:
         try:
             return await self.run(session, self.root(session), **arguments)
@@ -164,10 +174,12 @@ class CodeLs(_Code):
         lines: list[str] = []
         count = 0
 
+        cap = max(1, int(getattr(self.settings, "code_ls_limit", 400)))
+
         def walk(where: Path, depth: int) -> None:
             nonlocal count
             for entry in ws.list_dir(root, ws.relative(root, where)):
-                if count >= 400:
+                if count >= cap:
                     return
                 count += 1
                 indent = "  " * depth
@@ -181,7 +193,7 @@ class CodeLs(_Code):
 
         walk(folder, 0)
         head = f"{ws.relative(root, folder)}/" if folder != root else f"{root.name}/ (project root)"
-        more = "\n… more entries not shown" if count >= 400 else ""
+        more = "\n… more entries not shown" if count >= cap else ""
         return head + "\n" + ("\n".join(lines) if lines else "(empty)") + more
 
 
@@ -213,7 +225,7 @@ class CodeGlob(_Code):
         if not matches:
             return f"No files match {text!r}."
         matches.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
-        shown = [ws.relative(root, p) for p in matches[:GLOB_LIMIT]]
+        shown = [ws.relative(root, p) for p in matches[: max(1, int(getattr(self.settings, "code_glob_limit", GLOB_LIMIT)))]]
         more = len(matches) - len(shown)
         return "\n".join(shown) + (f"\n… and {more} more -- narrow the pattern" if more > 0 else "")
 
@@ -590,8 +602,8 @@ class CodeBash(_Code):
                 "Run a shell command in the project folder and see its output: "
                 "tests, builds, linters, package scripts, git. Each command starts "
                 "in the project root and runs non-interactively -- no prompts, no "
-                "editors, no pagers. `timeout` is in seconds (default "
-                f"{getattr(settings, 'code_timeout', 120)}). Prefer code_grep, "
+                "editors, no pagers. `timeout` is in seconds; the default and "
+                "the longest allowed are given with the project. Prefer code_grep, "
                 "code_glob and code_read over grep, find and cat. Never run a "
                 "destructive or outward-facing command the user did not ask for, "
                 "and never install packages or tools (pip, npm, brew…) without "

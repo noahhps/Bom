@@ -41,6 +41,11 @@ class OllamaProvider:
         self.model = model
         self.embed_model = embed_model
         self.context_tokens = context_tokens
+        # How long Ollama keeps the model loaded after a request. Unloading it
+        # drops the prompt it has already processed, so a long conversation
+        # that pauses past Ollama's five-minute default re-reads everything.
+        # None leaves Ollama's default alone.
+        self.keep_alive: str | None = None
         self.base_url = (base_url or "").rstrip("/")
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=_TIMEOUT)
         # What /api/show says about each model: the context it was trained
@@ -119,6 +124,8 @@ class OllamaProvider:
             "stream": True,
             "options": {"num_ctx": self._num_ctx()},
         }
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
         # Thinking and vision do not mix on the local runner. With a reasoning
         # pass on, gemma4 answered image prompts with "no image was provided" --
         # the picture is accepted, then lost before the model looks at it. A

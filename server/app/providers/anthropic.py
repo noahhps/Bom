@@ -35,16 +35,23 @@ class AnthropicProvider:
         # be cut off at 8k tokens.
         self.max_tokens = max_tokens
         self.context_tokens = context_tokens
-        # Each model's input window, from the Models API. Only answers are
-        # kept, so a failed lookup is tried again on the next turn.
+        # How long the prompt prefix stays cached between requests: "5m" or
+        # "1h". Set from settings by the router (Enterprise mode holds it for
+        # the hour).
+        self.cache_ttl = "5m"
+        # Each model's input window and output cap, from the Models API. Only
+        # answers are kept, so a failed lookup is tried again on the next turn.
         self._windows: dict[str, int] = {}
+        self._outputs: dict[str, int] = {}
         self._client = None
 
     async def context_window(self) -> int:
         """The window budget: the configured one, or the model's when smaller.
 
         The Models API reports `max_input_tokens` per model, which is what
-        tells a 200k Haiku from a 1M Opus without a table kept here.
+        tells a 200k Haiku from a 1M Opus without a table kept here -- and
+        `max_tokens`, the longest reply the model may write, which caps the
+        reply below so a large configured cap is not a 400 on a smaller model.
         """
         window = self._windows.get(self.model)
         if window is None:
@@ -52,11 +59,24 @@ class AnthropicProvider:
                 client = self._ensure_client()
                 entry = await client.models.retrieve(self.model)
                 window = int(getattr(entry, "max_input_tokens", 0) or 0)
+                output = int(getattr(entry, "max_tokens", 0) or 0)
             except Exception:  # noqa: BLE001 -- the configured budget stands
-                window = 0
+                window, output = 0, 0
             if window:
                 self._windows[self.model] = window
+            if output:
+                self._outputs[self.model] = output
         return min(self.context_tokens, window) if window else self.context_tokens
+
+    def _reply_cap(self) -> int:
+        output = self._outputs.get(self.model)
+        return min(self.max_tokens, output) if output else self.max_tokens
+
+    def _cache_control(self) -> dict:
+        control: dict = {"type": "ephemeral"}
+        if self.cache_ttl and self.cache_ttl != "5m":
+            control["ttl"] = self.cache_ttl
+        return control
 
     async def sees_images(self) -> bool:
         return True  # every current Claude model takes images
@@ -87,12 +107,23 @@ class AnthropicProvider:
 
         request: dict = {
             "model": self.model,
-            "max_tokens": self.max_tokens,
+            "max_tokens": self._reply_cap(),
             "messages": turns,
             "output_config": {"effort": think or _EFFORT},
+            # Prompt caching. Nothing is cached without a breakpoint, and
+            # every round of a tool loop resends the whole conversation -- so
+            # without these, a twenty-round turn paid full price for the same
+            # prefix twenty times. Two breakpoints: the system prompt (with the
+            # tools ahead of it, the part that holds for the whole
+            # conversation), and the top-level one, which the API places on
+            # the last block and so moves forward each round to cover
+            # everything the previous round already sent.
+            "extra_body": {"cache_control": self._cache_control()},
         }
         if system:
-            request["system"] = system
+            request["system"] = [
+                {"type": "text", "text": system, "cache_control": self._cache_control()}
+            ]
         if tools:
             request["tools"] = [
                 {
@@ -124,12 +155,25 @@ class AnthropicProvider:
                         )
                     )
 
+            usage = final.usage
+            cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0) if usage else 0
+            cache_write = int(getattr(usage, "cache_creation_input_tokens", 0) or 0) if usage else 0
             yield Chunk(
                 text="",
                 done=True,
                 tool_calls=tuple(tool_calls),
-                prompt_tokens=final.usage.input_tokens if final.usage else None,
-                completion_tokens=final.usage.output_tokens if final.usage else None,
+                # The whole prompt: `input_tokens` counts only what was neither
+                # read from the cache nor written to it.
+                prompt_tokens=(usage.input_tokens + cache_read + cache_write) if usage else None,
+                completion_tokens=usage.output_tokens if usage else None,
+                meta={
+                    key: value
+                    for key, value in (
+                        ("cache_read_tokens", cache_read),
+                        ("cache_write_tokens", cache_write),
+                    )
+                    if value
+                },
             )
         except ProviderError:
             raise

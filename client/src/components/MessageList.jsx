@@ -65,6 +65,8 @@ export function MessageList({
             truncated={m.truncated}
             continuable={m.continuable}
             pin={m.pin}
+            compaction={m.compaction}
+            usage={m.usage}
             sentAt={m.sentAt}
             look={m.role === "assistant" ? look : null}
             // Only the turn that is actually from the assistant carries the

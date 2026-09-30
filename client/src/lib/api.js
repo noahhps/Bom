@@ -189,6 +189,17 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "POST",
         body: JSON.stringify({ config, enabled }),
       }),
+    // Signing in to a hosted MCP server (Atlassian, Linear, Notion, ...):
+    // start it, then poll. `callbackBase` is this origin, which the sign-in
+    // page sends the browser back to.
+    startMcpSignIn: (id, callbackBase) =>
+      json("/mcp/servers/" + encodeURIComponent(id) + "/signin", {
+        method: "POST",
+        body: JSON.stringify({ callback_base: callbackBase }),
+      }),
+    mcpSignInStatus: (state) => json("/mcp/signin/" + encodeURIComponent(state)),
+    mcpSignOut: (id) =>
+      json("/mcp/servers/" + encodeURIComponent(id) + "/signin", { method: "DELETE" }),
     mcpSettings: () => json("/mcp/settings"),
     setMcpSettings: (patch) =>
       json("/mcp/settings", { method: "PATCH", body: JSON.stringify(patch) }),
@@ -202,6 +213,10 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "PATCH",
         body: JSON.stringify({ enabled }),
       }),
+    // Enterprise mode: the switch, and the limits either side of it.
+    getEnterprise: () => json("/enterprise"),
+    setEnterprise: (enabled) =>
+      json("/enterprise", { method: "PATCH", body: JSON.stringify({ enabled }) }),
     // The approval switch, and the standing per-skill grants behind it. Both
     // optional on the wire, so a page can send one without the other.
     setApprovalSettings: (patch) =>

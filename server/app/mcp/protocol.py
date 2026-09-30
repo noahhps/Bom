@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,6 +14,40 @@ class MCPError(Exception):
 
 class MCPTransportError(MCPError):
     """Raised when communication with an MCP server fails or disconnects."""
+
+
+class MCPAuthRequired(MCPTransportError):
+    """The server answered 401: it wants a signed-in user, not a request.
+
+    Carries what the server said in `WWW-Authenticate`, because under the MCP
+    authorization spec that header is where it names its protected-resource
+    metadata (and sometimes the scope it wants) -- the first step of signing
+    in. See oauth.py.
+    """
+
+    def __init__(self, url: str, www_authenticate: str = "", detail: str = "") -> None:
+        detail = (detail or "").strip()[:200]
+        super().__init__(
+            f"HTTP 401 from '{url}': sign-in required" + (f" ({detail})" if detail else "")
+        )
+        self.url = url
+        self.www_authenticate = www_authenticate or ""
+        params = parse_www_authenticate(self.www_authenticate)
+        self.resource_metadata = params.get("resource_metadata", "")
+        self.scope = params.get("scope", "")
+        self.error = params.get("error", "")
+
+
+def parse_www_authenticate(header: str) -> dict[str, str]:
+    """The parameters of a Bearer challenge: `Bearer realm="x", scope="a b"`.
+
+    Quoted values may hold commas and spaces, so this reads key="value" pairs
+    rather than splitting on commas.
+    """
+    found: dict[str, str] = {}
+    for key, quoted, bare in re.findall(r'([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,]+))', header or ""):
+        found[key.lower()] = (quoted if quoted else bare).replace('\\"', '"')
+    return found
 
 
 class MCPProtocolError(MCPError):

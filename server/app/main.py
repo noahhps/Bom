@@ -18,7 +18,9 @@ from .workbench import Previews, Terminals, build_workbench_router, mount_public
 from .auth import make_auth_dependency
 from .config import Settings, load_settings, write_secret
 from .db import Database
+from .enterprise import LiveSettings
 from .mcp import MCPManager
+from .mcp.oauth import CALLBACK_PATH, MCPOAuthError, MCPOAuth
 from .memory.facts import Curator
 from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
@@ -117,6 +119,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.db_path)
     store = Store(db)
+    # Everything below reads its limits through this, so the Enterprise mode
+    # switch takes effect on the next call without a restart.
+    settings = LiveSettings(settings, store)
     # The network Ollama's address: what someone set in Settings, else the
     # environment's.
     providers = ProviderRouter(
@@ -193,7 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # a side panel. write_canvas surfaces it to the client; read_canvas lets a
     # revision see what it is revising.
     registry.register(WriteCanvas(store))
-    registry.register(ReadCanvas(store, max_chars=settings.canvas_read_chars))
+    registry.register(ReadCanvas(store, settings=settings))
     registry.register(OpenCanvas(store))
     # Revising in place: a patch names what changes and leaves the rest
     # exactly as it was, where a rewrite has to reproduce all of it.
@@ -249,7 +254,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Register skill creator to help with skill management
 
     # Database-backed MCP manager: dynamically loads tools from mcp_servers table
-    mcp_manager = MCPManager(store, registry)
+    # Sign-ins to hosted MCP servers (Atlassian, Linear, Notion, ...): the
+    # manager asks it for a bearer token for each HTTP server it connects to.
+    mcp_oauth = MCPOAuth(store)
+    mcp_manager = MCPManager(store, registry, oauth=mcp_oauth)
     orchestrator = Orchestrator(settings, store, providers, registry)
     scheduler = Scheduler(store, orchestrator)
 
@@ -378,6 +386,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.scheduler = scheduler
     app.state.indexer = indexer
     app.state.mcp_manager = mcp_manager
+    app.state.mcp_oauth = mcp_oauth
     app.state.providers = providers
     app.state.openrouter_oauth = oauth
 
@@ -385,7 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(
         build_router(
             store, orchestrator, providers, auth, registry,
-            settings, indexer, curator, mcp_manager, oauth,
+            settings, indexer, curator, mcp_manager, oauth, mcp_oauth,
         ),
         prefix="/api",
     )
@@ -430,6 +439,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             flow.key = ""
         return _signin_page(
             "OpenRouter connected",
+            "You can close this tab and go back to Bom.",
+            ok=True,
+        )
+
+    @app.get(CALLBACK_PATH)
+    async def mcp_oauth_callback(
+        state: str = "", code: str = "", error: str = "", error_description: str = ""
+    ) -> HTMLResponse:
+        """Where a hosted MCP server's sign-in sends the browser back to.
+
+        Unauthenticated for the same reason as the OpenRouter callback -- the
+        redirect comes from the other service and carries none of this app's
+        headers -- and guarded the same way: `state` is 256 random bits,
+        minted by an authenticated request, single-use and short-lived.
+        Once the tokens are kept, the server is connected straight away, so
+        its tools are there by the time the reader is back in Bom.
+        """
+        if error:
+            mcp_oauth.fail(state, error_description or error)
+            return _signin_page("Sign-in cancelled", error_description or error, ok=False)
+        try:
+            flow = await mcp_oauth.complete(state, code)
+        except MCPOAuthError as exc:
+            return _signin_page("That didn't work", str(exc), ok=False)
+        server = store.get_mcp_server(flow.server_id)
+        if server is not None:
+            try:
+                await mcp_manager.sync_server(server)
+            except Exception as exc:  # noqa: BLE001 -- signed in; connecting is the next step
+                return _signin_page(
+                    f"Signed in to {flow.server_name}",
+                    f"But connecting failed: {exc}. Try Sync on the Skills page.",
+                    ok=True,
+                )
+        return _signin_page(
+            f"{flow.server_name} connected",
             "You can close this tab and go back to Bom.",
             ok=True,
         )

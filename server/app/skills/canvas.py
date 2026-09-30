@@ -355,7 +355,7 @@ class ReadCanvas(Skill):
     modes = NOT_CODE
     wants_session = True
 
-    def __init__(self, store: Store, max_chars: int = MAX_READ_CHARS) -> None:
+    def __init__(self, store: Store, max_chars: int = MAX_READ_CHARS, *, settings=None) -> None:
         super().__init__(
             name="read_canvas",
             description=(
@@ -384,10 +384,21 @@ class ReadCanvas(Skill):
             },
         )
         self.store = store
-        self.max_chars = max(1000, int(max_chars))
+        self._max_chars = max_chars
+        # When given, the page size is read from here on every call, so
+        # Enterprise mode's larger reads apply without rebuilding the skill.
+        self._settings = settings
+
+    @property
+    def max_chars(self) -> int:
+        live = getattr(self._settings, "canvas_read_chars", None) if self._settings is not None else None
+        return max(1000, int(live or self._max_chars))
+
+    @property
+    def max_result_chars(self) -> int:
         # The whole read has to survive the turn loop's cut on results, or the
         # paging here would be undone by the loop truncating the page.
-        self.max_result_chars = self.max_chars + 2000
+        return self.max_chars + 2000
 
     async def use(self, session: str, title=None, offset=1, **extra) -> str:
         canvases = self.store.session_canvases(session)

@@ -16,6 +16,7 @@ import {
   IconArtboard,
   IconBolt,
   IconBrain,
+  IconBuildingSkyscraper,
   IconCalendar,
   IconChartBar,
   IconCheck,
@@ -104,6 +105,8 @@ const GLYPHS = {
   spark: IconSparkles,
   compass: IconCompass,
   bolt: IconBolt,
+  // Enterprise mode, in Settings.
+  enterprise: IconBuildingSkyscraper,
   // The document beside the conversation, and a page made in it.
   canvas: IconArtboard,
   sidebar: IconLayoutSidebar,

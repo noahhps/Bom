@@ -62,6 +62,14 @@ MAX_TOOL_ROUNDS=24
 ```
 Lower `CONTEXT_TOKENS` if the local model runs short of memory: the KV cache grows with it.
 
+Long conversations are compacted rather than cut off: once the history fills half the window, the older turns are summarized and the recent ones are still sent word for word (`COMPACT_AT`, `COMPACT_KEEP`, `COMPACT_SUMMARY_TOKENS`; `COMPACT_AT=0` turns it off). Cloud requests ask for prompt caching, so a tool loop doesn't pay full price for the same conversation every round (`CACHE_TTL=5m` or `1h`).
+
+### Enterprise mode
+For company use, with long conversations, large codebases and big cloud context windows, switch on **Settings → Enterprise mode**. It raises the context window, tool-result sizes, round and timeout limits, compacts later while keeping more of the conversation verbatim, and holds the prompt cache for an hour. Safety settings don't change. See [docs/enterprise.md](docs/enterprise.md) for every limit and the `ENTERPRISE_*` variables that tune them.
+
+### Work tools (MCP)
+**Skills → MCP servers & presets → Work tools** connects Atlassian (Jira, Confluence), Linear, Notion, Sentry, Stripe and any other hosted MCP server that signs in with OAuth, including your company's own. Choose *Add & sign in*, approve Bom on the service's page, and its tools are ready. Jira and Confluence Server / Data Center connect with tokens. See [docs/work-tools.md](docs/work-tools.md).
+
 Work in the canvas is revised in place rather than rewritten: `edit_canvas` (find and replace, or `css_vars` to restyle a page built on tokens), `edit_wireframe` (layers and frames by id), `edit_slides` and `edit_sheet`. Every write and edit reports plain breakages -- contrast, unbalanced markup, layers off the screen -- and `check_design` gives a fuller review. For a model that can see, `view_canvas` shows it a picture of a page or a wireframe, drawn with Chrome/Chromium/Edge/Brave if one is installed (or `CHROME_PATH`) and otherwise Quick Look on a Mac; scripts don't run and nothing is fetched from the internet.
 
 All interactions stay on‑device; nothing is sent to external services (unless you want it to).

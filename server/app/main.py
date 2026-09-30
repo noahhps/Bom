@@ -18,6 +18,7 @@ from .workbench import Previews, Terminals, build_workbench_router, mount_public
 from .auth import make_auth_dependency
 from .config import Settings, load_settings, write_secret
 from .db import Database
+from .enterprise import LiveSettings
 from .mcp import MCPManager
 from .memory.facts import Curator
 from .memory.indexer import Indexer
@@ -117,6 +118,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.db_path)
     store = Store(db)
+    # Everything below reads its limits through this, so the Enterprise mode
+    # switch takes effect on the next call without a restart.
+    settings = LiveSettings(settings, store)
     # The network Ollama's address: what someone set in Settings, else the
     # environment's.
     providers = ProviderRouter(
@@ -193,7 +197,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # a side panel. write_canvas surfaces it to the client; read_canvas lets a
     # revision see what it is revising.
     registry.register(WriteCanvas(store))
-    registry.register(ReadCanvas(store, max_chars=settings.canvas_read_chars))
+    registry.register(ReadCanvas(store, settings=settings))
     registry.register(OpenCanvas(store))
     # Revising in place: a patch names what changes and leaves the rest
     # exactly as it was, where a rewrite has to reproduce all of it.

@@ -78,6 +78,9 @@ class OpenRouterProvider:
         self.api_key = (api_key or "").strip()
         self.max_tokens = max_tokens
         self.context_tokens = context_tokens
+        # How long a cache breakpoint holds, for the upstreams that need one
+        # asked for (see _mark_cache). Set from settings by the router.
+        self.cache_ttl = "5m"
         # Attribution headers. Optional, and worth sending: they are what puts
         # this app's name on the OpenRouter activity page, so a bill can be
         # read back as "Bom did this" rather than as an anonymous total.
@@ -119,9 +122,11 @@ class OpenRouterProvider:
         think: Any = None,
         tools: Sequence[dict] | None = None,
     ) -> AsyncIterator[Chunk]:
+        encoded = [_encode(m) for m in messages]
+        _mark_cache(encoded, self.model, self.cache_ttl)
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [_encode(m) for m in messages],
+            "messages": encoded,
             "stream": True,
             # Without this the usage block never arrives and every turn is
             # stored with null token counts. It costs one extra field and is
@@ -214,6 +219,10 @@ class OpenRouterProvider:
                     for key, value in (
                         ("served_model", served),
                         ("cost", usage.get("cost")),
+                        (
+                            "cache_read_tokens",
+                            (usage.get("prompt_tokens_details") or {}).get("cached_tokens"),
+                        ),
                     )
                     if value
                 },
@@ -345,6 +354,39 @@ class OpenRouterProvider:
 
 
 # -- encoding -------------------------------------------------------------
+
+
+#: Upstreams that cache only what a request marks. The rest -- OpenAI,
+#: DeepSeek, Grok and most others -- cache a repeated prefix on their own.
+_EXPLICIT_CACHE = ("anthropic/",)
+
+
+def _mark_cache(encoded: list[dict[str, Any]], model: str, ttl: str) -> None:
+    """Put cache breakpoints on the system prompt and the newest message,
+    for an upstream that caches nothing unmarked.
+
+    Two, for the same reason the Anthropic backend uses two: the system
+    prompt holds for the whole conversation, and the newest message moves the
+    cached prefix forward each round of a tool loop. A breakpoint rides on a
+    text part, so a string content becomes a one-part list.
+    """
+    if not model.startswith(_EXPLICIT_CACHE) or not encoded:
+        return
+    control: dict[str, Any] = {"type": "ephemeral"}
+    if ttl and ttl != "5m":
+        control["ttl"] = ttl
+    targets = [m for m in encoded[:1] if m.get("role") == "system"]
+    last = encoded[-1]
+    if last is not (targets[0] if targets else None) and last.get("role") in ("user", "tool"):
+        targets.append(last)
+    for message in targets:
+        content = message.get("content")
+        if isinstance(content, str) and content:
+            message["content"] = [{"type": "text", "text": content, "cache_control": control}]
+        elif isinstance(content, list):
+            texts = [part for part in content if part.get("type") == "text"]
+            if texts:
+                texts[-1]["cache_control"] = control
 
 
 def _encode(message: Message) -> dict[str, Any]:

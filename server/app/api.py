@@ -24,6 +24,7 @@ from .approvals import (
 from .attachments import AttachmentError
 from .attachments import decode as decode_attachments
 from .config import Settings, ThinkingLevel, write_secret
+from .enterprise import describe as describe_enterprise
 from .thinking import control_for
 from .memory import MEMORY_DEFAULTS
 from .memory.facts import Curator
@@ -159,6 +160,10 @@ class ApprovalSettings(BaseModel):
     # The global switch, and the per-skill "always" list it gates.
     ask_first: bool | None = None
     auto_approve: dict[str, bool] | None = None
+
+
+class EnterpriseIn(BaseModel):
+    enabled: bool
 
 
 class ApprovalDecision(BaseModel):
@@ -799,6 +804,22 @@ def build_router(
                     "attachments": [a.to_dict() for a in attached.get(m.id, ())],
                 }
                 for m in store.list_messages(session_id)
+            ],
+            # Where the model's copy of the conversation was compacted: the
+            # thread shows every message, and marks the point after which the
+            # model sees the earlier ones only as a summary. The summary goes
+            # too -- what the model was told is the reader's to see.
+            "compactions": [
+                {
+                    "id": row["id"],
+                    "through_id": row["through_id"],
+                    "covered": row["covered"],
+                    "tokens_before": row["tokens_before"],
+                    "tokens_after": row["tokens_after"],
+                    "created_at": row["created_at"],
+                    "summary": row["summary"],
+                }
+                for row in store.session_compactions(session_id)
             ],
         }
 
@@ -1781,6 +1802,29 @@ def build_router(
         if flow is None:
             return {"state": state, "status": "unknown", "error": ""}
         return {**flow.to_dict(), "provider": await _provider_state(OPENROUTER)}
+
+    # -- enterprise mode --------------------------------------------------
+
+    @router.get("/enterprise")
+    def get_enterprise() -> dict:
+        """The switch, and the limits either side of it, for the Settings
+        screen to show what turning it on changes."""
+        return describe_enterprise(settings)
+
+    @router.patch("/enterprise")
+    def set_enterprise(body: EnterpriseIn) -> dict:
+        switch = getattr(settings, "set_enterprise", None)
+        if not callable(switch):
+            # A router built by hand over plain settings has nothing live to
+            # switch; saying so beats a 200 that changed nothing.
+            raise HTTPException(409, "this server's settings cannot be switched at runtime")
+        switch(body.enabled)
+        # The backends now, rather than on the next turn, so the Models screen
+        # reports the window that will actually be used.
+        apply_limits = getattr(providers, "apply_limits", None)
+        if callable(apply_limits):
+            apply_limits(settings)
+        return describe_enterprise(settings)
 
     # -- memory -----------------------------------------------------------
 

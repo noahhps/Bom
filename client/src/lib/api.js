@@ -202,6 +202,10 @@ export function createApi(token, onUnauthorized = () => {}) {
         method: "PATCH",
         body: JSON.stringify({ enabled }),
       }),
+    // Enterprise mode: the switch, and the limits either side of it.
+    getEnterprise: () => json("/enterprise"),
+    setEnterprise: (enabled) =>
+      json("/enterprise", { method: "PATCH", body: JSON.stringify({ enabled }) }),
     // The approval switch, and the standing per-skill grants behind it. Both
     // optional on the wire, so a page can send one without the other.
     setApprovalSettings: (patch) =>

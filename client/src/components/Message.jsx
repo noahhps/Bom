@@ -66,6 +66,25 @@ function AnswerText({ text, live }) {
  * Memoised because a streaming answer re-renders on every animation frame and
  * the settled turns above it have not changed a character.
  */
+function roughTokens(n) {
+  if (!n) return "";
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+
+function compactionText(c) {
+  const parts = [];
+  if (c.status === "started") parts.push(`summarizing ${c.messages || "earlier"} earlier messages…`);
+  else if (c.status === "done") {
+    const size =
+      c.tokensBefore && c.tokensAfter
+        ? ` (~${roughTokens(c.tokensBefore)} → ${roughTokens(c.tokensAfter)} tokens)`
+        : "";
+    parts.push(`${c.messages || "earlier"} earlier messages summarized${size}`);
+  } else if (c.status === "failed") parts.push("could not summarize earlier messages; sent what fits");
+  if (c.cleared) parts.push(`${c.cleared} earlier tool result${c.cleared === 1 ? "" : "s"} cleared`);
+  return parts.join(" · ");
+}
+
 export const Message = memo(function Message({
   role,
   content,
@@ -81,6 +100,8 @@ export const Message = memo(function Message({
   continuable,
   model,
   pin = null,
+  compaction = null,
+  usage = null,
   sentAt,
   look = null,
 }) {
@@ -144,6 +165,26 @@ export const Message = memo(function Message({
                   : pin.status === "off"
                     ? "switched off in Skills, not enforced"
                     : `asking again (${pin.attempt || 1}/2)`}
+            </p>
+          </>
+        ) : null}
+        {/* The model's copy of the conversation, when it was compacted for
+            this answer: older messages summarized, or earlier results in a
+            long turn cleared. The thread above still shows every message. */}
+        {compaction ? (
+          <>
+            <span className="mi">Context</span>
+            <p data-soft data-compaction={compaction.status || "cleared"}>
+              {compactionText(compaction)}
+            </p>
+          </>
+        ) : null}
+        {usage?.cache_read_tokens && usage?.prompt_tokens ? (
+          <>
+            <span className="mi">Cache</span>
+            <p data-soft>
+              {Math.round((100 * usage.cache_read_tokens) / usage.prompt_tokens)}% of the prompt read
+              from cache
             </p>
           </>
         ) : null}

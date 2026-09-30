@@ -100,6 +100,39 @@ class ProviderRouter:
         }
         self._last_check = 0.0
         self._last_healthy = True
+        self.apply_limits(settings)
+
+    def apply_limits(self, settings) -> None:
+        """Bring every backend's window, reply cap and caching in line with
+        `settings` as they stand now.
+
+        Called at boot and at the start of every turn, so switching Enterprise
+        mode on or off reaches the backends on the next message. Attribute
+        writes on the live providers, like `set_model`: nothing is rebuilt, and
+        a turn already streaming keeps the request it sent.
+        """
+        local_window = getattr(settings, "context_tokens", None)
+        cloud_window = getattr(settings, "cloud_context_tokens", None)
+        max_tokens = getattr(settings, "cloud_max_tokens", None)
+        ttl = getattr(settings, "cache_ttl", None) or "5m"
+        keep_alive = getattr(settings, "ollama_keep_alive", None) or None
+        # Each looked up rather than assumed: a router assembled by hand (a
+        # test, a one-liner) may carry only some of them.
+        for ollama in (getattr(self, "local", None), getattr(self, "network", None)):
+            if ollama is None:
+                continue
+            if local_window:
+                ollama.context_tokens = int(local_window)
+            ollama.keep_alive = keep_alive
+        for cloud in (getattr(self, "cloud", None), getattr(self, "openrouter", None)):
+            if cloud is None:
+                continue
+            if cloud_window:
+                cloud.context_tokens = int(cloud_window)
+            cloud.cache_ttl = ttl
+        cloud = getattr(self, "cloud", None)
+        if cloud is not None and max_tokens:
+            cloud.max_tokens = int(max_tokens)
 
     def set_model(self, provider_id: str, model: str) -> str:
         """Point one backend at a different model.

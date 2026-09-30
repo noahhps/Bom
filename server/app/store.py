@@ -741,6 +741,61 @@ class Store:
     def delete_message(self, message_id: str) -> None:
         self.db.execute("DELETE FROM messages WHERE id = ?", (message_id,))
 
+    # -- compactions ------------------------------------------------------
+
+    def add_compaction(
+        self,
+        session_id: str,
+        *,
+        through_id: str,
+        summary: str,
+        covered: int,
+        tokens_before: int | None = None,
+        tokens_after: int | None = None,
+    ) -> dict:
+        row = {
+            "id": _new_id("cmp"),
+            "session_id": session_id,
+            "through_id": through_id,
+            "summary": summary,
+            "covered": covered,
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after,
+            "created_at": _now(),
+        }
+        self.db.execute(
+            """
+            INSERT INTO compactions
+                (id, session_id, through_id, summary, covered, tokens_before,
+                 tokens_after, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            tuple(row.values()),
+        )
+        return row
+
+    def latest_compaction(self, session_id: str) -> dict | None:
+        """The summary a turn replays, if the conversation was ever compacted.
+
+        By rowid as well as time: two compactions in the same millisecond are
+        possible in a test, and the later one is the one that folded the other.
+        """
+        row = self.db.query_one(
+            """
+            SELECT * FROM compactions WHERE session_id = ?
+             ORDER BY created_at DESC, rowid DESC LIMIT 1
+            """,
+            (session_id,),
+        )
+        return dict(row) if row else None
+
+    def session_compactions(self, session_id: str) -> list[dict]:
+        rows = self.db.query(
+            "SELECT * FROM compactions WHERE session_id = ? ORDER BY created_at, rowid",
+            (session_id,),
+        )
+        return [dict(row) for row in rows]
+
     # -- attachments ------------------------------------------------------
 
     def add_attachment(

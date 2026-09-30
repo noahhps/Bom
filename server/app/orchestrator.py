@@ -11,11 +11,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
 from . import attachments as files
+from . import compaction
 from .approvals import (
     ALLOW_ALWAYS,
     ALLOW_ONCE,
@@ -78,7 +80,8 @@ def estimate_tokens(text: str) -> int:
 # recoverable.
 IMAGE_TOKENS = 1600
 
-# How many images travel with a request, newest first.
+# How many images travel with a request, newest first, when settings do not
+# say (WINDOW_IMAGES).
 #
 # Resending every picture in a long conversation is not just expensive: asked
 # about the photo they just attached, a small vision model handed six images
@@ -86,6 +89,11 @@ IMAGE_TOKENS = 1600
 # a named placeholder, so the model knows they existed and can be asked to look
 # again by sending one afresh.
 MAX_WINDOW_IMAGES = 4
+
+# How full a turn's own window may get, as a share of its budget, before the
+# results of earlier rounds are cleared (see compaction.clear_old_results).
+# Short of the whole budget, so the round that crosses it still fits.
+TURN_CLEAR_AT = 0.9
 
 
 # The fallback round cap, when settings does not carry one (a bare test double).
@@ -98,6 +106,8 @@ MAX_TOOL_ROUNDS = 20
 # keeps the thread's context -- what it looked up and what it concluded --
 # rather than seeing only its own final wording. Prepended to every later turn,
 # so kept short: it competes with the live conversation for the same budget.
+# The fallbacks when settings do not say (CARRIED_RESULT_CHARS and
+# CARRIED_REASONING_CHARS; Enterprise mode carries more).
 CARRIED_RESULT_CHARS = 240      # per tool result, summarised to one line
 CARRIED_REASONING_CHARS = 400   # the tail of the deliberation
 
@@ -152,6 +162,14 @@ class Orchestrator:
         # approvals beside it, and for the same reason.
         self.choices = Choices()
         self._session_grants: dict[str, set[str]] = {}
+        # What each conversation's system prompt was built from the first
+        # time, kept so the prompt does not change under it turn to turn. A
+        # change anywhere in the system prompt throws away every cached token
+        # behind it -- the whole conversation -- so the project's listing and
+        # the remembered facts are taken once per conversation (per process),
+        # not re-read every turn. See _project_block and _facts_for.
+        self._project_summaries: dict[str, tuple[tuple, str]] = {}
+        self._fact_snapshots: dict[str, list[tuple[str, str]]] = {}
 
     def _skill_schemas(
         self,
@@ -265,19 +283,46 @@ class Orchestrator:
         if not self._memory_enabled():
             return prompt, []
 
-        facts = self.store.active_facts(limit=self.settings.memory_max_facts)
+        facts = self._facts_for(session_id)
         if not facts:
             return prompt, []
 
         lines = "\n".join(
-            f"- {fact.text[: self.settings.memory_fact_chars]}" for fact in facts
+            f"- {text[: self.settings.memory_fact_chars]}" for _, text in facts
         )
         return (
             f"{prompt}\n\n"
             "What you already know about the user, from previous "
             f"conversations:\n{lines}",
-            [fact.id for fact in facts],
+            [fact_id for fact_id, _ in facts],
         )
+
+    def _facts_for(self, session_id: str | None) -> list[tuple[str, str]]:
+        """The facts this conversation's prompt carries, as (id, text).
+
+        Taken once per conversation and then held: the curation pass rewrites
+        facts every few turns, and a fact list that moved with it changed the
+        system prompt -- and so threw away the cached conversation behind it --
+        for a change the conversation did not need. A fact learned since is
+        already in this conversation's own history.
+
+        Held, but not past its removal: a fact forgotten, deleted or faded
+        since leaves the prompt on the next turn, because "forget that" has to
+        mean it is gone now.
+        """
+        current = self.store.active_facts(limit=self.settings.memory_max_facts)
+        if not session_id:
+            return [(fact.id, fact.text) for fact in current]
+        snapshot = self._fact_snapshots.get(session_id)
+        if snapshot is None:
+            snapshot = [(fact.id, fact.text) for fact in current]
+            self._fact_snapshots[session_id] = snapshot
+            return snapshot
+        live = {fact.id for fact in current}
+        kept = [(fact_id, text) for fact_id, text in snapshot if fact_id in live]
+        if len(kept) != len(snapshot):
+            self._fact_snapshots[session_id] = kept
+        return kept
 
     def _project_block(self, session_id: str | None) -> str:
         """Where a code conversation is working: the folder, its branch, its top
@@ -302,7 +347,7 @@ class Orchestrator:
         # The machine before the folder: it decides how every command is
         # written, and the project's own instructions, which can be long, end
         # the block.
-        block = f"{environment(self.settings)}\n{project.summary(root)}"
+        block = f"{environment(self.settings)}\n{self._project_summary(session_id, root)}"
         # A conversation working in a folder is filed under that folder's
         # project -- made now if it is gone or was never made -- so working in
         # a folder is what puts it on the Projects page.
@@ -322,6 +367,32 @@ class Orchestrator:
                 "now, and import_design refreshes the copies."
             )
         return block
+
+    def _project_summary(self, session_id: str | None, root) -> str:
+        """The folder, its branch, its top level and its instructions file --
+        read once per conversation, and again only when the instructions file
+        changes.
+
+        It sits in the system prompt, and the listing changes whenever a file
+        is added at the top of the project; re-reading it every turn made the
+        first file the model created throw away the cached conversation. The
+        model has code_ls for the tree as it is now.
+        """
+        marks = []
+        for name in ("CLAUDE.md", "AGENTS.md", ".cursorrules"):
+            try:
+                marks.append((root / name).stat().st_mtime_ns)
+            except OSError:
+                marks.append(None)
+        key = (str(root), tuple(marks))
+        if session_id:
+            held = self._project_summaries.get(session_id)
+            if held is not None and held[0] == key:
+                return held[1]
+        text = project.summary(root)
+        if session_id:
+            self._project_summaries[session_id] = (key, text)
+        return text
 
     def _situation_block(self, session_id: str | None) -> str:
         """The user's time and rough whereabouts, as their device reported them.
@@ -440,12 +511,19 @@ class Orchestrator:
         budget: int | None = None,
         system: str | None = None,
         session_id: str | None = None,
+        summary: str | None = None,
     ) -> list[Message]:
         """Most recent turns that fit the budget, oldest-first.
 
-        Trimming from the head is a placeholder for real compaction
-        (summarise the middle, keep head and tail) -- that lands in phase 5
-        with the rest of the memory work.
+        `history` is what is replayed word for word -- after a compaction,
+        only the turns since it -- and `summary` is what stands in for the
+        rest. The summary opens the first replayed message rather than riding
+        as a message of its own, so the roles still alternate for the backends
+        that insist on it, and it stays put until the next compaction.
+
+        Compaction is what keeps a long conversation inside its budget (see
+        run_turn); the trim here is the backstop for when it could not run,
+        and it always starts the window on a user message.
 
         Attached files are charged against the same budget as the words around
         them, so a conversation full of screenshots trims to fewer turns rather
@@ -464,32 +542,24 @@ class Orchestrator:
             # that the prompt actually sent contains.
             system, _ = self.build_system_prompt(session_id)
         budget -= estimate_tokens(system)
+        opening = compaction.summary_block(summary) + "\n\n" if summary else ""
+        budget -= estimate_tokens(opening) if opening else 0
 
-        # Which images ride along is decided first, newest backwards, so the
-        # cost of a turn reflects what will actually be sent with it.
-        carried: set[str] = set()
-        for message in reversed(history):
-            for item in reversed(attached.get(message.id, ())):
-                if item.kind == "image" and len(carried) < MAX_WINDOW_IMAGES:
-                    carried.add(item.id)
-
-        carry_working = getattr(self.settings, "carry_working", True)
+        carried = self._carried_images(history, attached)
+        costs = self._costs(history, attached, carried)
 
         selected: list[StoredMessage] = []
         used = 0
-        for message in reversed(history):
-            cost = message.tokens or estimate_tokens(message.content)
-            cost += _attachment_cost(attached.get(message.id, ()), carried)
-            # The carried recap is synthesised here, not part of the stored
-            # tokens, so it has to be charged or a run of tool-heavy turns
-            # overflows the window it was counted out of.
-            if carry_working:
-                cost += estimate_tokens(_carried_trace(message))
+        for message, cost in zip(reversed(history), reversed(costs)):
             if used + cost > budget and selected:
                 break
             selected.append(message)
             used += cost
         selected.reverse()
+        # A window that opens on the assistant's side of a turn replays an
+        # answer to a question it does not show.
+        while len(selected) > 1 and selected[0].role != "user":
+            selected.pop(0)
 
         # Which picture in the library each image attachment became, so the
         # model is told the id beside the image it can see -- without it, the
@@ -502,12 +572,176 @@ class Orchestrator:
             else {}
         )
 
+        carry_working = getattr(self.settings, "carry_working", True)
+        limits = self._carried_limits()
         window = [Message(role="system", content=system)]
         window.extend(
-            _to_message(m, attached.get(m.id, ()), carried, carry_working, pictures)
+            _to_message(m, attached.get(m.id, ()), carried, carry_working, pictures, limits)
             for m in selected
         )
+        if opening and len(window) > 1:
+            window[1] = dataclasses.replace(window[1], content=opening + window[1].content)
         return window
+
+    def _carried_limits(self) -> tuple[int, int]:
+        return (
+            int(getattr(self.settings, "carried_result_chars", CARRIED_RESULT_CHARS)),
+            int(getattr(self.settings, "carried_reasoning_chars", CARRIED_REASONING_CHARS)),
+        )
+
+    def _carried_images(self, history, attached) -> set[str]:
+        """Which images ride along, decided newest backwards, so the cost of a
+        turn reflects what will actually be sent with it."""
+        limit = int(getattr(self.settings, "window_images", MAX_WINDOW_IMAGES))
+        carried: set[str] = set()
+        for message in reversed(history):
+            for item in reversed(attached.get(message.id, ())):
+                if item.kind == "image" and len(carried) < limit:
+                    carried.add(item.id)
+        return carried
+
+    def _costs(self, history, attached, carried) -> list[int]:
+        """What each message costs the window, as it will actually be sent.
+
+        By its words, not the stored `tokens`: for an assistant turn that is
+        the last round's completion count, which includes reasoning that is
+        never replayed and leaves out every earlier round -- so a turn that
+        thought hard was charged for thousands of tokens it does not send, and
+        one that worked across many rounds for fewer than it does.
+        """
+        carry_working = getattr(self.settings, "carry_working", True)
+        result_chars, reasoning_chars = self._carried_limits()
+        costs = []
+        for message in history:
+            cost = estimate_tokens(message.content)
+            cost += _attachment_cost(attached.get(message.id, ()), carried)
+            # The carried recap is synthesised here, not part of the stored
+            # tokens, so it has to be charged or a run of tool-heavy turns
+            # overflows the window it was counted out of.
+            if carry_working:
+                cost += estimate_tokens(_carried_trace(message, result_chars, reasoning_chars))
+            costs.append(cost)
+        return costs
+
+    # -- compaction -------------------------------------------------------
+
+    def _compacted(self, session_id: str | None, history: list[StoredMessage]) -> tuple[str | None, int]:
+        """The summary a turn replays, and where the verbatim history starts.
+
+        A summary whose last message has since been deleted is set aside: the
+        history it stood for is no longer the history, and replaying it in
+        full (and compacting again if it is long) is the honest answer.
+        """
+        if not session_id:
+            return None, 0
+        latest = getattr(self.store, "latest_compaction", None)
+        row = latest(session_id) if callable(latest) else None
+        if not row:
+            return None, 0
+        for index, message in enumerate(history):
+            if message.id == row["through_id"]:
+                return row["summary"], index + 1
+        return None, 0
+
+    async def _compact(
+        self,
+        session_id: str,
+        provider,
+        history: list[StoredMessage],
+        attached,
+        summary: str | None,
+        start: int,
+        room: int,
+        outcome: dict,
+    ):
+        """Fold older turns into the summary when the history has grown past
+        COMPACT_AT of `room` (the tokens the history may use this turn).
+
+        An async generator of SSE frames; the new summary and start are left
+        in `outcome` for the caller -- a holder per call rather than state on
+        the orchestrator, which serves scheduled turns alongside the reader's.
+        Never raises: a summary that cannot be written leaves the history as
+        it was, and the window's own trim takes over.
+        """
+        outcome["summary"], outcome["start"] = summary, start
+        at = float(getattr(self.settings, "compact_at", 0.5) or 0)
+        keep = float(getattr(self.settings, "compact_keep", 0.25) or 0)
+        if not (0 < at < 1) or room <= 0:
+            return
+        tail = history[start:]
+        carried = self._carried_images(tail, attached)
+        costs = self._costs(tail, attached, carried)
+        before = sum(costs) + (estimate_tokens(compaction.summary_block(summary)) if summary else 0)
+        if before <= at * room:
+            return
+        split = compaction.plan_split(costs, [m.role for m in tail], int(keep * room))
+        if split is None:
+            return
+        # The summary is sized to the room as well as to the setting: one that
+        # took more than a sliver of a small window would leave the history
+        # over the threshold straight after compacting, and every turn would
+        # compact again. And folding less than the summary will cost saves
+        # nothing, so that is left to the next turn.
+        target = max(
+            100,
+            min(
+                int(getattr(self.settings, "compact_summary_tokens", 1500)),
+                int(room * compaction.SUMMARY_SHARE),
+            ),
+        )
+        if sum(costs[:split]) <= target:
+            return
+        folded = tail[:split]
+        yield _sse("compaction", {"status": "started", "messages": len(folded)})
+        limits = self._carried_limits()
+        text = compaction.transcript(
+            folded,
+            lambda m: _carried_trace(m, *limits),
+            # Bounded by the window itself: the summariser runs on the same
+            # model, and what is folded plus the old summary is at most what
+            # was about to be sent anyway.
+            limit=room * 4,
+        )
+        try:
+            written = await compaction.summarize(provider, summary, text, target_tokens=target)
+        except Exception as exc:  # noqa: BLE001 -- the turn goes on uncompacted
+            yield _sse("compaction", {"status": "failed", "message": str(exc)[:300]})
+            return
+        after = estimate_tokens(compaction.summary_block(written)) + sum(costs[split:])
+        self.store.add_compaction(
+            session_id,
+            through_id=folded[-1].id,
+            summary=written,
+            covered=start + split,
+            tokens_before=before,
+            tokens_after=after,
+        )
+        outcome["summary"], outcome["start"] = written, start + split
+        yield _sse(
+            "compaction",
+            {
+                "status": "done",
+                "messages": len(folded),
+                "covered": start + split,
+                "tokens_before": before,
+                "tokens_after": after,
+            },
+        )
+
+    def _fit_turn(self, window: list[Message], anchor: int, budget: int, summary: str | None):
+        """Keep a turn's growing window inside its budget.
+
+        First the results of earlier rounds are cleared (the latest round is
+        what the model is working on); then, if that is not enough, the
+        history before this turn is dropped, keeping the summary. Returns the
+        window, the anchor's new index, and how many results were cleared.
+        """
+        cleared = 0
+        if _window_tokens(window) > TURN_CLEAR_AT * budget:
+            window, cleared = compaction.clear_old_results(window, anchor)
+        if _window_tokens(window) > budget and anchor > 1:
+            window, anchor = _drop_history(window, anchor, summary)
+        return window, anchor, cleared
 
     # -- the turn ---------------------------------------------------------
 
@@ -545,6 +779,12 @@ class Orchestrator:
             except Exception:  # noqa: BLE001 -- a picture that will not import is still in the chat
                 pass
 
+        # The backends' windows, reply caps and caching follow the settings
+        # in force now -- Enterprise mode may have been switched since the
+        # last turn.
+        apply_limits = getattr(self.router, "apply_limits", None)
+        if callable(apply_limits):
+            apply_limits(self.settings)
         route = await self.router.resolve(prefer)
         provider = route.provider
         history = self.store.list_messages(session_id)
@@ -584,13 +824,7 @@ class Orchestrator:
         sees = await self._sees_images(provider)
         if tools and not sees:
             tools = [t for t in tools if t["name"] not in PICTURE_SKILLS] or None
-        window = self.build_window(
-            history,
-            stored_files,
-            system=system,
-            budget=await self._window_budget(provider, tools),
-            session_id=session_id,
-        )
+        budget = await self._window_budget(provider, tools)
         # One batched update, not one statement per fact per turn. This is what
         # "12 answers" under a fact on the memory page is counting, and what
         # keeps an unused inferred fact fading rather than lingering forever.
@@ -629,9 +863,37 @@ class Orchestrator:
         # thing worth auditing about a turn that ran skills: what it read.
         reasoning: list[str] = []
         used: list[dict] = []
+        # What the turn cost, summed across its rounds: the prompt each round
+        # sent, what it wrote, and how much of the prompt the backend served
+        # from its cache.
+        usage: dict[str, int] = {}
         final: Chunk | None = None
         saved = False
         try:
+            # Compaction, before the window is built: a history that has grown
+            # past COMPACT_AT of the window has its older turns folded into the
+            # conversation's summary, and only the rest is replayed word for
+            # word. Inside the try, so whatever happens the reply row is kept.
+            summary, start = self._compacted(session_id, history)
+            outcome = {"summary": summary, "start": start}
+            room = budget - estimate_tokens(system)
+            async for frame in self._compact(
+                session_id, provider, history, stored_files, summary, start, room, outcome
+            ):
+                yield frame
+            summary, start = outcome["summary"], outcome["start"]
+            window = self.build_window(
+                history[start:],
+                stored_files,
+                system=system,
+                budget=budget,
+                session_id=session_id,
+                summary=summary,
+            )
+            # Where this turn begins in the window: everything after it is the
+            # turn's own working, which the round loop keeps in bounds.
+            anchor = len(window) - 1
+
             thinking_level = think or self.settings.ollama_think
             max_rounds = getattr(self.settings, "max_tool_rounds", MAX_TOOL_ROUNDS)
 
@@ -655,7 +917,7 @@ class Orchestrator:
             pin_nudges = 0
             silent_nudges = 0
 
-            for _ in range(max_rounds):
+            for round_number in range(max_rounds):
                 final = None
                 round_text: list[str] = []
                 round_state = {"garbled": False}
@@ -663,8 +925,19 @@ class Orchestrator:
                 # look at once every result of the round is in.
                 round_images: list = []
 
+                # Every round resends the window with the last round's results
+                # added, and a long run of reads can outgrow it. Checked
+                # before each round after the first, and cleared in one go
+                # when it is needed, so the cached prefix is disturbed once
+                # rather than every round.
+                if round_number:
+                    window, anchor, cleared = self._fit_turn(window, anchor, budget, summary)
+                    if cleared:
+                        yield _sse("compaction", {"status": "cleared", "results": cleared})
+
                 async for chunk in self._stream_tolerating_garbled(
-                    provider, window, thinking_level, tools, round_state
+                    provider, window, thinking_level, tools, round_state,
+                    anchor=anchor, summary=summary,
                 ):
                     # The model's working, not its answer -- kept apart from
                     # `parts` so it is never mistaken for the reply, but stored
@@ -678,6 +951,7 @@ class Orchestrator:
                         yield _sse("delta", {"text": chunk.text})
                     if chunk.done:
                         final = chunk
+                        _count_usage(usage, chunk)
 
                 # Nothing usable arrived: the backend could not parse the tool call
                 # the model wrote. The round is spent, so the model gets another and
@@ -1110,11 +1384,13 @@ class Orchestrator:
                 "message_id": assistant.id,
                 "tokens": final.completion_tokens if final else None,
                 "truncated": exhausted,
+                "usage": usage or None,
             },
         )
 
     async def _stream_tolerating_garbled(
-        self, provider, window, think, tools, state: dict
+        self, provider, window, think, tools, state: dict,
+        *, anchor: int | None = None, summary: str | None = None,
     ):
         """`_stream_with_recovery`, minus the one failure a retry can fix.
 
@@ -1126,7 +1402,7 @@ class Orchestrator:
         """
         try:
             async for chunk in self._stream_with_recovery(
-                provider, window, think=think, tools=tools
+                provider, window, think=think, tools=tools, anchor=anchor, summary=summary
             ):
                 yield chunk
         except MalformedToolCall:
@@ -1139,12 +1415,21 @@ class Orchestrator:
         *,
         think: str | None = None,
         tools: list[dict] | None = None,
+        anchor: int | None = None,
+        summary: str | None = None,
     ) -> AsyncIterator[Chunk]:
         """Section 7: on OOM or overflow, retry once with a smaller window.
 
         The tool loop wraps *around* this rather than inside it, so overflow
         recovery still applies to every round of a turn -- including the ones
         that come back carrying a skill's output.
+
+        The smaller window keeps what the turn cannot do without: the system
+        prompt, the conversation's summary, the user's message this turn and
+        every round since, with the results of earlier rounds cleared. It used
+        to be the system prompt and the last five messages, which dropped the
+        user's question in a long turn and could open on a tool result whose
+        call had been cut -- a request the Anthropic API rejects outright.
         """
         try:
             async for chunk in provider.stream(window, think=think, tools=tools):
@@ -1153,7 +1438,7 @@ class Orchestrator:
         except ContextOverflow:
             pass  # fall through to the reduced-context retry
 
-        reduced = [window[0], *window[-5:]] if len(window) > 6 else window
+        reduced = _reduced_window(window, anchor, summary)
         async for chunk in provider.stream(reduced, think=think, tools=tools):
             yield chunk
 
@@ -1275,8 +1560,13 @@ class Orchestrator:
             return f"{call.name} was called wrongly: {exc}"
         except Exception as exc:
             return f"{call.name} failed: {type(exc).__name__}: {exc}"
-        limit = getattr(skill, "max_result_chars", None) or getattr(
-            self.settings, "result_chars", MAX_RESULT_CHARS
+        # The larger of the skill's own allowance and the setting: a skill that
+        # sets one (a reader that pages, a code tool that clips its output
+        # itself) is saying its whole answer must survive, and Enterprise
+        # mode's larger RESULT_CHARS should not be lowered by it either.
+        limit = max(
+            int(getattr(skill, "max_result_chars", 0) or 0),
+            int(getattr(self.settings, "result_chars", MAX_RESULT_CHARS)),
         )
         text = clip_result(str(result), limit)
         if touched is not None:
@@ -1415,7 +1705,11 @@ def _gated_note(store: Store, gated: str | None, extra: dict, tool: str) -> str:
     )
 
 
-def _carried_trace(stored: StoredMessage) -> str:
+def _carried_trace(
+    stored: StoredMessage,
+    result_chars: int = CARRIED_RESULT_CHARS,
+    reasoning_chars: int = CARRIED_REASONING_CHARS,
+) -> str:
     """A compact recap of an assistant turn's working, for later turns.
 
     The turn loop feeds tool results and thinking to the model live, but only
@@ -1438,8 +1732,8 @@ def _carried_trace(stored: StoredMessage) -> str:
         for call in calls if isinstance(calls, list) else ():
             name = call.get("name", "a tool") if isinstance(call, dict) else "a tool"
             result = " ".join(str(call.get("result") or "").split()) if isinstance(call, dict) else ""
-            if len(result) > CARRIED_RESULT_CHARS:
-                result = result[:CARRIED_RESULT_CHARS] + "…"
+            if len(result) > result_chars:
+                result = result[:result_chars] + "…"
             lines.append(f"- {name}: {result}" if result else f"- {name}")
 
     trace: list[str] = []
@@ -1447,8 +1741,8 @@ def _carried_trace(stored: StoredMessage) -> str:
         trace.append("Tools you used and what they returned:\n" + "\n".join(lines))
     if stored.reasoning and stored.reasoning.strip():
         tail = " ".join(stored.reasoning.split())
-        if len(tail) > CARRIED_REASONING_CHARS:
-            tail = "…" + tail[-CARRIED_REASONING_CHARS:]
+        if len(tail) > reasoning_chars:
+            tail = "…" + tail[-reasoning_chars:]
         trace.append("Your reasoning then: " + tail)
 
     if not trace:
@@ -1462,6 +1756,7 @@ def _to_message(
     carried: set[str],
     carry_working: bool = False,
     pictures: dict[str, str] | None = None,
+    limits: tuple[int, int] = (CARRIED_RESULT_CHARS, CARRIED_REASONING_CHARS),
 ) -> Message:
     """One stored turn as the providers see it.
 
@@ -1508,7 +1803,7 @@ def _to_message(
     if stored.content:
         text.append(stored.content)
     if carry_working:
-        trace = _carried_trace(stored)
+        trace = _carried_trace(stored, *limits)
         if trace:
             text.append(trace)
 
@@ -1524,6 +1819,60 @@ def _readable(item) -> str:
     if item.kind == "document":
         return item.text or ""
     return (item.data or b"").decode("utf-8", "replace")
+
+
+def _window_tokens(window: list[Message]) -> int:
+    """What a window costs as sent: words, the arguments of every call it
+    replays, and its pictures."""
+    total = 0
+    for message in window:
+        total += estimate_tokens(message.content or "")
+        for call in message.tool_calls:
+            total += estimate_tokens(json.dumps(call.arguments or {}, ensure_ascii=False))
+        total += IMAGE_TOKENS * len(message.images)
+    return total
+
+
+def _drop_history(window: list[Message], anchor: int, summary: str | None) -> tuple[list[Message], int]:
+    """The window without the history before this turn, the summary kept on
+    the turn's own message. Returns the window and the anchor's new index."""
+    if anchor <= 1:
+        return window, anchor
+    turn = window[anchor]
+    if summary and not turn.content.startswith(compaction.SUMMARY_OPEN):
+        turn = dataclasses.replace(
+            turn, content=compaction.summary_block(summary) + "\n\n" + turn.content
+        )
+    return [window[0], turn, *window[anchor + 1:]], 1
+
+
+def _reduced_window(window: list[Message], anchor: int | None, summary: str | None) -> list[Message]:
+    """The smallest window a turn can go on with: see _stream_with_recovery.
+
+    Without an anchor (a caller outside the turn loop), the last user message
+    stands in: a user message never sits between a call and its result, so
+    cutting there keeps every call paired.
+    """
+    if anchor is None:
+        anchor = next(
+            (i for i in range(len(window) - 1, 0, -1) if window[i].role == "user"), 1
+        )
+    reduced, anchor = _drop_history(window, anchor, summary)
+    reduced, _ = compaction.clear_old_results(reduced, anchor)
+    return reduced
+
+
+def _count_usage(usage: dict[str, int], chunk: Chunk) -> None:
+    """Add one round's usage to the turn's."""
+    if chunk.prompt_tokens:
+        usage["prompt_tokens"] = usage.get("prompt_tokens", 0) + int(chunk.prompt_tokens)
+    if chunk.completion_tokens:
+        usage["completion_tokens"] = usage.get("completion_tokens", 0) + int(chunk.completion_tokens)
+    for key in ("cache_read_tokens", "cache_write_tokens"):
+        value = (chunk.meta or {}).get(key)
+        if value:
+            usage[key] = usage.get(key, 0) + int(value)
+    usage["rounds"] = usage.get("rounds", 0) + 1
 
 
 def _attachment_cost(attached, carried: set[str]) -> int:

@@ -8153,6 +8153,29 @@ html:not([data-shell]) .screen[data-glass] {
 .settings-row > .btn,
 .settings-row > .switch { flex: none; }
 
+/* Enterprise mode's limits, standard beside enterprise, with the column in
+   force drawn in ink and the other dimmed. */
+.limits-table { display: flex; flex-direction: column; }
+.limits-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font: 400 var(--t-sm)/1.45 var(--font);
+  color: var(--text-dim);
+}
+.limits-row:last-child { border-bottom: 0; }
+.limits-row > span { min-width: 0; overflow-wrap: anywhere; }
+.limits-row > [role="rowheader"] { color: var(--ink); }
+.limits-row > [data-active] { color: var(--ink); font-weight: 500; }
+.limits-head { padding-top: 0; font-size: var(--t-xs); }
+.limits-head > span { color: var(--text-faint); font-weight: 400; }
+.limits-head > [data-active] { color: var(--accent); }
+@media (max-width: 720px) {
+  .limits-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+}
+
 .settings-close {
   position: absolute;
   top: 14px;

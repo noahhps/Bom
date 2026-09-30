@@ -14,6 +14,38 @@ const message = (role, content = "", extra = {}) => ({
 });
 
 /**
+ * Put each compaction on the answer it happened in: the last assistant turn
+ * started before the compaction was written (the reply row is made first,
+ * then the history is compacted, then the model runs). That is where the
+ * notice was shown live, so a reopened conversation shows it in the same
+ * place.
+ */
+function markCompactions(list, compactions) {
+  if (!compactions.length) return list;
+  const marked = [...list];
+  let covered = 0;
+  for (const c of compactions) {
+    let at = -1;
+    for (let i = 0; i < marked.length; i += 1) {
+      if (marked[i].role === "assistant" && marked[i].sentAt <= c.created_at) at = i;
+    }
+    if (at >= 0) {
+      marked[at] = {
+        ...marked[at],
+        compaction: {
+          status: "done",
+          messages: Math.max(0, c.covered - covered),
+          tokensBefore: c.tokens_before,
+          tokensAfter: c.tokens_after,
+        },
+      };
+    }
+    covered = c.covered;
+  }
+  return marked;
+}
+
+/**
  * The conversation: which session is open, what is in it, and the turn in
  * flight. Everything durable lives on the server -- this is a view of it.
  */
@@ -112,24 +144,27 @@ export function useChat(
       setSessionId(id);
       setTitle(data.session.title || "Untitled");
       setMessages(
-        data.messages
-          // A turn can be nothing but a dropped image, so a message with no
-          // text but with files still belongs on screen.
-          .filter((m) => m.role !== "system" && (m.content || m.attachments?.length))
-          // The working comes back with the turn now, so a reopened
-          // conversation still shows what was thought and what was called.
-          // `skills` is already a list from the server; `|| undefined` so an
-          // empty one leaves the trace unrendered rather than drawing an empty
-          // frame around nothing.
-          .map((m) =>
-            message(m.role, m.content, {
-              // Milliseconds since the epoch, as the server stores it.
-              sentAt: m.created_at,
-              attachments: m.attachments,
-              reasoning: m.reasoning || undefined,
-              skills: m.skills?.length ? m.skills : undefined,
-            }),
-          ),
+        markCompactions(
+          data.messages
+            // A turn can be nothing but a dropped image, so a message with no
+            // text but with files still belongs on screen.
+            .filter((m) => m.role !== "system" && (m.content || m.attachments?.length))
+            // The working comes back with the turn now, so a reopened
+            // conversation still shows what was thought and what was called.
+            // `skills` is already a list from the server; `|| undefined` so an
+            // empty one leaves the trace unrendered rather than drawing an empty
+            // frame around nothing.
+            .map((m) =>
+              message(m.role, m.content, {
+                // Milliseconds since the epoch, as the server stores it.
+                sentAt: m.created_at,
+                attachments: m.attachments,
+                reasoning: m.reasoning || undefined,
+                skills: m.skills?.length ? m.skills : undefined,
+              }),
+            ),
+          data.compactions || [],
+        ),
       );
       jumpToEnd();
       onSessionsChanged();
@@ -349,6 +384,30 @@ export function useChat(
             setMessages((prev) =>
               prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
             );
+          } else if (event === "compaction") {
+            // The model's copy of the conversation was compacted before this
+            // answer (older messages summarized), or earlier tool results in
+            // this turn were cleared to stay within the window. Said on the
+            // answer, beside which model gave it.
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.key !== answer.key) return m;
+                const was = m.compaction || {};
+                return {
+                  ...m,
+                  compaction:
+                    data.status === "cleared"
+                      ? { ...was, cleared: (was.cleared || 0) + (data.results || 0) }
+                      : {
+                          ...was,
+                          status: data.status,
+                          messages: data.messages ?? was.messages,
+                          tokensBefore: data.tokens_before ?? was.tokensBefore,
+                          tokensAfter: data.tokens_after ?? was.tokensAfter,
+                        },
+                };
+              }),
+            );
           } else if (event === "workspace") {
             // A code tool changed files in the project: the editor reloads
             // them, the way the canvas panel takes a rewritten canvas.
@@ -370,11 +429,19 @@ export function useChat(
           } else if (event === "done") {
             // The model ran out of skill rounds with more it wanted to do.
             // Mark the turn so the thread can offer a Continue that just sends
-            // another turn with a fresh allowance of rounds.
-            if (data.truncated) {
+            // another turn with a fresh allowance of rounds. And what the turn
+            // cost, when the backend said -- how much of the prompt it served
+            // from its cache is the number that shows caching working.
+            if (data.truncated || data.usage) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.key === answer.key ? { ...m, truncated: true } : m,
+                  m.key === answer.key
+                    ? {
+                        ...m,
+                        truncated: data.truncated || m.truncated,
+                        usage: data.usage || undefined,
+                      }
+                    : m,
                 ),
               );
             }

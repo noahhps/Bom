@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Design } from "./Design";
+import { Enterprise } from "./Enterprise";
 import { Icon } from "./Icon";
 import { ManageChats } from "./ManageChats";
 import { Memory } from "./Memory";
@@ -48,6 +49,15 @@ export const SETTINGS_SCREENS = [
     title: "Models",
     lead: "",
     words: "provider providers model local cloud ollama openrouter api key connection",
+  },
+  {
+    group: "Settings",
+    id: "enterprise",
+    label: "Enterprise mode",
+    icon: "enterprise",
+    title: "Enterprise mode",
+    lead: "Bom's limits are sized for one person on one machine. Enterprise mode sizes them for company work, where conversations run long and every token of context counts.",
+    words: "enterprise company team business context window limits tokens compaction compact summary cache long conversation rounds",
   },
   {
     group: "Studio",
@@ -277,6 +287,8 @@ export function Settings({
               <Appearance theme={theme} appearance={appearance} />
             ) : screen.id === "models" ? (
               <Providers models={models} provider={provider} onProvider={onProvider} serving={status?.serving} />
+            ) : screen.id === "enterprise" ? (
+              <Enterprise api={api} />
             ) : screen.id === "standards" ? (
               <Design embedded {...standards} />
             ) : screen.id === "memory" ? (

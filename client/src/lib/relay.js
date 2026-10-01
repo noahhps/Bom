@@ -26,6 +26,15 @@ const JOIN_TIMEOUT = 15_000;
 // dropped, and the host never sees the request. 25 a second, as the host
 // paces its own.
 const PART_GAP = 40;
+// How many parts may be on their way before the host has said it has them.
+// The pacing above is no help on a slow uplink: the socket takes every part
+// at once and sends them as fast as the line allows -- minutes, for a PDF on
+// hotel Wi-Fi -- holding up the connection's heartbeats behind them, and the
+// clock for an answer would run out before the host had the request. Waiting
+// for the host keeps a few hundred KB in flight, whatever the line.
+const PART_WINDOW = 8;
+// No word of a part arriving for this long: the upload has stalled.
+const UPLOAD_STALL = 30_000;
 // Statuses a Response may not have a body with.
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
@@ -96,7 +105,8 @@ export class RelayConnection {
     on("res-body", (p) => this._onBody(p));
     on("res-alive", (p) => this._onAlive(p));
     on("res-end", (p) => this._onEnd(p));
-    on("pong", (p) => this.pings.get(p.id)?.());
+    on("pong", (p) => this.pings.get(p.id)?.(p));
+    on("req-ack", (p) => this._onAck(p));
     this.channel = channel;
 
     await new Promise((resolve, reject) => {
@@ -120,7 +130,9 @@ export class RelayConnection {
         }
       });
     });
-    await this.ping();
+    const pong = await this.ping();
+    // A host that says which parts it has, so uploads can wait for it.
+    this.acks = Number(pong?.v) >= 2;
   }
 
   /** Whether the host itself is on the other end, answering. */
@@ -135,10 +147,10 @@ export class RelayConnection {
           ),
         );
       }, timeout);
-      this.pings.set(id, () => {
+      this.pings.set(id, (pong) => {
         clearTimeout(timer);
         this.pings.delete(id);
-        resolve();
+        resolve(pong);
       });
     });
     await this._send("ping", { id });
@@ -190,6 +202,10 @@ export class RelayConnection {
         timer: null,
         signal,
         onAbort: null,
+        // Parts the host has said it has, and a wake-up for whoever waits on it.
+        parts: parts.length,
+        acked: 0,
+        onAck: null,
       };
       entry.arm = (ms, message) => {
         clearTimeout(entry.timer);
@@ -213,15 +229,27 @@ export class RelayConnection {
         parts: parts.length,
         body: parts[0],
       });
+      if (parts.length > 1 && this.acks) {
+        this.pending.get(id)?.arm(UPLOAD_STALL, "The upload stopped reaching your host.");
+      }
       for (let i = 1; i < parts.length; i += 1) {
         await new Promise((resolve) => setTimeout(resolve, PART_GAP));
+        const entry = this.pending.get(id);
+        while (this.acks && entry && this.pending.has(id) && i - entry.acked >= PART_WINDOW) {
+          await new Promise((resolve) => {
+            entry.onAck = resolve;
+          });
+        }
         // Stopped, or failed, while the body was still going out.
         if (!this.pending.has(id)) return response;
         await this._send("req-part", { id, i, body: parts[i] });
       }
-      // The wait for the reply starts once the body is all sent: a large
-      // upload shouldn't use up the time the host has to answer.
-      if (parts.length > 1) this.pending.get(id)?.arm(HEAD_TIMEOUT, "Your host took too long to answer.");
+      // Without acknowledgements (an older host), the wait for the reply
+      // starts once the body is all sent. With them, it starts when the host
+      // has the whole body -- see _onAck.
+      if (parts.length > 1 && !this.acks) {
+        this.pending.get(id)?.arm(HEAD_TIMEOUT, "Your host took too long to answer.");
+      }
     } catch (error) {
       const entry = this.pending.get(id);
       if (entry) this._fail(entry, error, false);
@@ -279,6 +307,21 @@ export class RelayConnection {
     }
   }
 
+  _onAck(p) {
+    const entry = this.pending.get(p.id);
+    if (!entry || entry.headed) return;
+    const got = Number(p.got) || 0;
+    if (got <= entry.acked) return;
+    entry.acked = got;
+    // Progress: the host has more of the body. Once it has all of it, the
+    // wait is for its answer.
+    if (got >= entry.parts) entry.arm(HEAD_TIMEOUT, "Your host took too long to answer.");
+    else entry.arm(UPLOAD_STALL, "The upload stopped reaching your host.");
+    const wake = entry.onAck;
+    entry.onAck = null;
+    wake?.();
+  }
+
   _onAlive(p) {
     const entry = this.pending.get(p.id);
     if (entry) entry.arm(entry.headed ? IDLE_TIMEOUT : HEAD_TIMEOUT, "Your host stopped answering.");
@@ -311,6 +354,7 @@ export class RelayConnection {
 
   _finish(entry) {
     clearTimeout(entry.timer);
+    entry.onAck?.();
     if (entry.signal && entry.onAbort) entry.signal.removeEventListener("abort", entry.onAbort);
     this.pending.delete(entry.id);
     if (entry.controller) {
@@ -325,6 +369,7 @@ export class RelayConnection {
   _fail(entry, error, tellHost = true) {
     if (!this.pending.has(entry.id)) return;
     clearTimeout(entry.timer);
+    entry.onAck?.();
     if (entry.signal && entry.onAbort) entry.signal.removeEventListener("abort", entry.onAbort);
     this.pending.delete(entry.id);
     if (tellHost) this._send("abort", { id: entry.id }).catch(() => {});

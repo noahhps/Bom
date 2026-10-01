@@ -280,9 +280,17 @@ The wire format, one broadcast each:
 client → host   req {id, jwt, method, path, content_type, parts, body} · req-part {id, i, body}
                 abort {id} · ping {id}
 host → client   res-head {id, status, headers} · res-body {id, seq, text|b64}
-                res-alive {id} · res-end {id, count, error?} · pong {id}
+                res-alive {id} · res-end {id, count, error?} · pong {id, v}
+                req-ack {id, got}
 ```
 
 Bodies travel in parts of up to 96 KB, under Supabase's per-message limit.
+A host whose pong says `v: 2` acknowledges parts as they arrive (the first,
+every fourth, and the last), and the client keeps at most eight
+unacknowledged. On a slow uplink that keeps the socket from filling with
+megabytes the line can't carry yet, which would hold up the connection's
+heartbeats and run out the clock for an answer before the host even had the
+request. The client's clock starts once the host has the whole body, and the
+host says a request is alive every 15 s until its answer is done.
 Streaming replies are sent in batches every 40 ms, so a fast model stays
 within the project's message-rate limit.

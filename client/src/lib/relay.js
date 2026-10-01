@@ -21,6 +21,11 @@ const HEAD_TIMEOUT = 45_000;
 const IDLE_TIMEOUT = 60_000;
 const PING_TIMEOUT = 8_000;
 const JOIN_TIMEOUT = 15_000;
+// Between the parts of a large request body (a PDF, say). Sent all at once,
+// a few dozen parts overrun the relay's messages-per-second limit, a part is
+// dropped, and the host never sees the request. 25 a second, as the host
+// paces its own.
+const PART_GAP = 40;
 // Statuses a Response may not have a body with.
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
@@ -209,8 +214,14 @@ export class RelayConnection {
         body: parts[0],
       });
       for (let i = 1; i < parts.length; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, PART_GAP));
+        // Stopped, or failed, while the body was still going out.
+        if (!this.pending.has(id)) return response;
         await this._send("req-part", { id, i, body: parts[i] });
       }
+      // The wait for the reply starts once the body is all sent: a large
+      // upload shouldn't use up the time the host has to answer.
+      if (parts.length > 1) this.pending.get(id)?.arm(HEAD_TIMEOUT, "Your host took too long to answer.");
     } catch (error) {
       const entry = this.pending.get(id);
       if (entry) this._fail(entry, error, false);

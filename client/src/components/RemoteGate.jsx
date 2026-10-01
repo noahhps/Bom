@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { AgentFlower } from "./AgentFlower";
 import { useDialog } from "./Dialog";
+import { isDesktop } from "../lib/serverOrigin";
 import {
   REMOTE_ONLY,
   currentAccount,
@@ -14,7 +15,10 @@ import {
   relayFromBuild,
   removeHost,
   saveRelayConfig,
+  handedToApp,
   sendSignInCode,
+  signInHereInstead,
+  signInLinkToken,
   signOutAccount,
   arrivalError,
   takeLinkCode,
@@ -80,6 +84,8 @@ export function RemoteGate({ error, connectingTo, onConnect, onUseToken }) {
         <p className="remote-quiet">Checking your account…</p>
       </div>
     );
+  } else if (!account && handedToApp()) {
+    body = <HandedToApp />;
   } else if (!account) {
     body = <SignIn problem={problem} />;
   } else {
@@ -199,6 +205,43 @@ function RelaySetup({ initial, onSaved, onCancel }) {
   );
 }
 
+/* The sign-in link opened the desktop app, which finishes signing in there.
+ * In case it only looked that way -- a browser question left unanswered, say
+ * -- this page can still sign in instead. */
+function HandedToApp() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <div className="gate-card">
+      <p className="remote-quiet">
+        <b>Opened the Bom app to finish signing in.</b> You can close this tab.
+      </p>
+      {error ? (
+        <p className="gate-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        className="remote-link"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError("");
+          try {
+            await signInHereInstead();
+          } catch (exc) {
+            setError(exc.message || String(exc));
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Signing in…" : "The app didn't open — sign in here instead"}
+      </button>
+    </div>
+  );
+}
+
 // The host's code: two groups of four letters and digits. Typed into the
 // email-code field by mistake often enough to be worth recognising.
 const DEVICE_CODE = /^[A-Z0-9]{4}-?[A-Z0-9]{4}$/i;
@@ -214,6 +257,9 @@ function SignIn({ problem }) {
   const emailId = useId();
   const codeId = useId();
   const codeRef = useRef(null);
+  // The desktop app: a link in an email opens the browser, never this.
+  const inApp = isDesktop();
+  const ready = signInLinkToken(code) !== null || /^\d{6,10}$/.test(code);
 
   useEffect(() => {
     if (sentTo) codeRef.current?.focus();
@@ -286,21 +332,29 @@ function SignIn({ problem }) {
         run(() => verifySignInCode(sentTo, code));
       }}
     >
-      <p className="remote-quiet">
-        We emailed <b>{sentTo}</b>. Open its sign-in link on this device — or, if the email
-        shows a code, type it here.
-      </p>
+      {inApp ? (
+        <p className="remote-quiet">
+          We emailed <b>{sentTo}</b>. Open its sign-in link — it brings you back to this app. If
+          your browser signs in instead, send a new email, then copy its link (right-click,{" "}
+          <b>Copy Link</b>) and paste it here. A code in the email works here too.
+        </p>
+      ) : (
+        <p className="remote-quiet">
+          We emailed <b>{sentTo}</b>. Open its sign-in link on this device — or paste the link
+          here, or type the code if the email shows one.
+        </p>
+      )}
       <div className="gate-field">
-        <label htmlFor={codeId}>Code from the email</label>
+        <label htmlFor={codeId}>Code or link from the email</label>
         <input
           id={codeId}
           ref={codeRef}
           className="gate-input remote-code-input"
           type="text"
-          inputMode="numeric"
           autoComplete="one-time-code"
-          placeholder="123456"
-          maxLength={12}
+          autoCapitalize="off"
+          spellCheck="false"
+          placeholder={inApp ? "https://…supabase.co/auth/v1/verify?token=…" : "123456"}
           aria-invalid={error ? true : undefined}
           value={code}
           onChange={(event) => {
@@ -309,6 +363,16 @@ function SignIn({ problem }) {
               setCode("");
               setError(
                 "That's your host's code. Sign in with the code from the email first — you'll enter the host's code on the next screen.",
+              );
+              return;
+            }
+            // A pasted link is kept whole; a code is digits only.
+            if (/^https?:\/\//i.test(typed)) {
+              setCode(typed);
+              setError(
+                signInLinkToken(typed)
+                  ? ""
+                  : "That isn't the sign-in link. Copy the link of the email's sign-in button — it ends in …/auth/v1/verify?token=…",
               );
               return;
             }
@@ -323,10 +387,10 @@ function SignIn({ problem }) {
       ) : null}
       {resent ? (
         <p className="remote-quiet" role="status">
-          Sent. Use the code from this newest email — the earlier one no longer works.
+          Sent. Use this newest email — the earlier one no longer works.
         </p>
       ) : null}
-      <button type="submit" className="gate-submit" disabled={code.length < 6 || busy}>
+      <button type="submit" className="gate-submit" disabled={!ready || busy}>
         {busy ? "Checking…" : "Sign in"}
       </button>
       <div className="remote-row-links">

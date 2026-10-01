@@ -121,6 +121,10 @@ pub fn run() {
                 )
                 .build(),
         )
+        // bom:// links. A sign-in link from an email lands on the web app,
+        // which hands the new session on to this app as bom://auth#... (see
+        // client/src/lib/remote.js); the page itself takes it from there.
+        .plugin(tauri_plugin_deep_link::init())
         .manage(ManagedServer::default())
         // New conversations, from the menu bar's File menu and from the tray
         // alike. Checked by id, so the tray's own items -- handled on the
@@ -182,6 +186,14 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             set_dock_icon();
+
+            // A link arriving brings the window forward, where the sign-in
+            // it carries is about to happen.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let linked = handle.clone();
+                app.deep_link().on_open_url(move |_event| present_main_window(&linked));
+            }
 
             quickview::setup(handle);
             let bound = quickview::register(handle);

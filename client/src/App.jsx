@@ -51,7 +51,10 @@ import {
   openRelay,
   saveHost,
   savedHost,
+  acceptAppLink,
+  watchAppLinks,
 } from "./lib/remote";
+import { useDialog } from "./components/Dialog";
 
 const TOKEN_KEY = "unified-llm-token";
 // Whether the rail stays out. A layout preference rather than data, so it is
@@ -583,6 +586,38 @@ export default function App() {
     bootstrapped.current = "";
     setRemote({ id: host.id, name: host.name });
     setPhase(CONNECTING);
+  }, []);
+
+  // The desktop app: an emailed sign-in link, handed on by the web app as a
+  // bom:// link, signs in to the relay here -- and, from the token screen,
+  // goes on to the relay's device list.
+  const { confirm } = useDialog();
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
+  useEffect(() => {
+    let live = true;
+    let stop = null;
+    const ask = (email) =>
+      confirmRef.current(
+        `A sign-in link wants to sign this app in to the relay as ${email}. Only say yes if you asked to sign in as ${email} — a device you link afterwards will belong to that account.`,
+        { title: "Sign in from a link?", confirmLabel: "Sign in" },
+      );
+    watchAppLinks(async (url) => {
+      try {
+        if (!(await acceptAppLink(url, ask)) || !live) return;
+        setGateError("");
+        setGateMode("remote");
+        setPhase((current) => (current === READY ? current : GATE));
+      } catch (exc) {
+        if (live) setGateError(exc.message || String(exc));
+      }
+    })
+      .then((off) => (live ? (stop = off) : off()))
+      .catch(() => {});
+    return () => {
+      live = false;
+      stop?.();
+    };
   }, []);
 
   // Going somewhere from the rail shuts it, on the layout where it is covering

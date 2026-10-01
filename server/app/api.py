@@ -1386,8 +1386,11 @@ def build_router(
         # Decoded before the session is touched: a refused file should leave no
         # trace, and the composer needs the reason back as a plain 400 rather
         # than as an error frame inside a stream it has already started.
+        # On a worker thread: reading a long PDF takes seconds, and on the
+        # event loop it would freeze every other request -- and the remote
+        # bridge, which shares this loop -- until it finished.
         try:
-            attached = decode_attachments(body.attachments)
+            attached = await asyncio.to_thread(decode_attachments, body.attachments)
         except AttachmentError as exc:
             raise HTTPException(400, str(exc)) from exc
 

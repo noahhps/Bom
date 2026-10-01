@@ -62,6 +62,11 @@ def stand_in() -> FastAPI:
     async def hello():
         return {"hello": "world"}
 
+    @app.get("/api/sleepy")
+    async def sleepy():
+        await asyncio.sleep(0.2)
+        return {"awake": True}
+
     @app.post("/api/echo")
     async def echo(request: Request):
         body = await request.body()
@@ -301,10 +306,46 @@ def test_a_body_in_parts_is_put_back_together(tmp_path):
         assert not host._inflight
         await host.handle("req-part", {"id": "p1", "i": 1, "body": parts[1]})
         await asyncio.gather(*list(host._inflight.values()))
+        # Each arrival short of every ACK_EVERY is quiet; the first part and
+        # the whole body are acknowledged, so the client can pace itself.
+        acks = [p["got"] for e, p in channel.sent if e == "req-ack" and p["id"] == "p1"]
+        assert acks == [1, 3]
         echoed = json.loads(channel.reply("p1")["body"])
         assert echoed["length"] == len(body.encode())
         assert echoed["body"] == body
         assert echoed["type"] == "application/json"
+
+    asyncio.run(run())
+
+
+def test_parts_are_acknowledged_as_they_arrive(tmp_path):
+    async def run():
+        host, channel = make_host(tmp_path)
+        await host.handle("req", {"id": "a1", "jwt": "owner-jwt", "method": "POST", "path": "/echo", "parts": 10, "body": "{"})
+        for i in range(1, 9):
+            await host.handle("req-part", {"id": "a1", "i": i, "body": ""})
+        # A part sent twice is counted once.
+        await host.handle("req-part", {"id": "a1", "i": 8, "body": ""})
+        await host.handle("req-part", {"id": "a1", "i": 9, "body": "}"})
+        await asyncio.gather(*list(host._inflight.values()))
+        acks = [p["got"] for e, p in channel.sent if e == "req-ack" and p["id"] == "a1"]
+        assert acks == [1, 4, 8, 10]
+        assert channel.reply("a1")["status"] == 200
+
+    asyncio.run(run())
+
+
+def test_a_slow_start_is_kept_alive(tmp_path, monkeypatch):
+    # The local API may take a while before its reply begins (reading a long
+    # PDF, say): the client hears that the request is alive meanwhile.
+    monkeypatch.setattr(host_module, "KEEPALIVE_SECONDS", 0.05)
+
+    async def run():
+        host, channel = make_host(tmp_path)
+        await serve(host, "k1", path="/sleepy")
+        sent = [e for e, p in channel.sent if p.get("id") == "k1"]
+        assert sent.index("res-alive") < sent.index("res-head")
+        assert channel.reply("k1")["status"] == 200
 
     asyncio.run(run())
 
@@ -382,7 +423,8 @@ def test_ping_is_answered_and_junk_ids_are_ignored(tmp_path):
         await host.handle("ping", {"id": "p"})
         await host.handle("req", {"id": "../../x", "jwt": "owner-jwt", "path": "/hello"})
         await host.handle("req", {"id": "x" * 65, "jwt": "owner-jwt", "path": "/hello"})
-        assert channel.sent == [("pong", {"id": "p"})]
+        # The pong says what this host supports: acknowledged uploads.
+        assert channel.sent == [("pong", {"id": "p", "v": 2})]
 
     asyncio.run(run())
 

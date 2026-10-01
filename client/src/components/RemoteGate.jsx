@@ -287,8 +287,8 @@ function SignIn({ problem }) {
       }}
     >
       <p className="remote-quiet">
-        We emailed <b>{sentTo}</b>. Type the code from that email here — or open its link on this
-        device.
+        We emailed <b>{sentTo}</b>. Open its sign-in link on this device — or, if the email
+        shows a code, type it here.
       </p>
       <div className="gate-field">
         <label htmlFor={codeId}>Code from the email</label>

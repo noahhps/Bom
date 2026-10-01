@@ -81,7 +81,8 @@ and isn't saved. Then it:
 - creates the tables and access rules, and deploys the `bom-pair` function
 - **sets up sign-in:** links in sign-in emails return to your web app, and
   every sign-in email, including the first one, carries a 6-digit code as
-  well as the link
+  well as the link (free-tier projects need their own SMTP for this; without
+  it the emails carry just the link, which is all the web app needs)
 - turns Realtime to **private channels only**
 - prints `BOM_RELAY_URL` and `BOM_RELAY_KEY`
 
@@ -147,8 +148,8 @@ Either way, the host shows a code, both on screen and in its terminal:
 ### 4. Link and connect
 
 Open the web app (or the desktop app's relay sign-in) and sign in with your
-email. Type the **6-digit code from the email**, or open its link on the same
-device. There's no password. Then the host's own code goes in the next screen. Under **Link a
+email. Open the email's link on the same device, or type the **6-digit code**
+if the email has one. There's no password. Then the host's own code goes in the next screen. Under **Link a
 device**, enter the host's code, check the device name, and choose **Link
 device**. Within a few seconds the host shows **Online**. Choose **Connect**.
 
@@ -212,17 +213,21 @@ access switched off. The device list shows when it was last seen.
 
 **The sign-in link opens a page that won't load (often `localhost:3000`).**
 Supabase doesn't know your web app's address. Run
-`./relay/setup.sh <project-ref> https://<your-app>.vercel.app`. Or just type
-the 6-digit code from the email; it works wherever you're signing in.
+`./relay/setup.sh <project-ref> https://<your-app>.vercel.app`. Or type the
+6-digit code from the email, if it has one; it works wherever you're signing in.
 
 **"That code didn't work."** Each code works once, and requesting another
 cancels the previous one. Use the code from the newest email. Supabase's
 built-in email sends only a few messages an hour; for more, connect your own
 SMTP under Authentication → Emails.
 
-**The email has a link but no code.** Run `setup.sh` again; it adds the code
-to both sign-in emails. It leaves alone any template you wrote that already
-includes `{{ .Token }}`.
+**The email has a link but no code.** On the free tier Supabase won't change
+the email templates until the project sends mail through your own SMTP, and
+`setup.sh` says so. The link is enough for the web app: open it on the device
+you're signing in on. The desktop app needs the code, so add SMTP under
+Authentication → Emails (Resend and others have free plans), then run
+`setup.sh` again. Templates you wrote that already include `{{ .Token }}` are
+left alone.
 
 **Linking fails with "Couldn't create the device's sign-in".** Your project's
 auth settings rejected the host's generated address. Set

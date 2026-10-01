@@ -16,6 +16,7 @@ import {
   saveRelayConfig,
   sendSignInCode,
   signOutAccount,
+  arrivalError,
   takeLinkCode,
   verifySignInCode,
 } from "../lib/remote";
@@ -198,12 +199,18 @@ function RelaySetup({ initial, onSaved, onCancel }) {
   );
 }
 
+// The host's code: two groups of four letters and digits. Typed into the
+// email-code field by mistake often enough to be worth recognising.
+const DEVICE_CODE = /^[A-Z0-9]{4}-?[A-Z0-9]{4}$/i;
+
 function SignIn({ problem }) {
   const [email, setEmail] = useState("");
   const [sentTo, setSentTo] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(problem || "");
+  const [resent, setResent] = useState(false);
+  // A sign-in link that failed says why in the address it came back to.
+  const [error, setError] = useState(() => arrivalError() || problem || "");
   const emailId = useId();
   const codeId = useId();
   const codeRef = useRef(null);
@@ -280,11 +287,11 @@ function SignIn({ problem }) {
       }}
     >
       <p className="remote-quiet">
-        We emailed a code to <b>{sentTo}</b>. Enter it here — or open the link in that email on
-        this device.
+        We emailed <b>{sentTo}</b>. Type the code from that email here — or open its link on this
+        device.
       </p>
       <div className="gate-field">
-        <label htmlFor={codeId}>Code</label>
+        <label htmlFor={codeId}>Code from the email</label>
         <input
           id={codeId}
           ref={codeRef}
@@ -296,7 +303,17 @@ function SignIn({ problem }) {
           maxLength={12}
           aria-invalid={error ? true : undefined}
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onChange={(event) => {
+            const typed = event.target.value.trim();
+            if (DEVICE_CODE.test(typed) && /[A-Z]/i.test(typed)) {
+              setCode("");
+              setError(
+                "That's your host's code. Sign in with the code from the email first — you'll enter the host's code on the next screen.",
+              );
+              return;
+            }
+            setCode(typed.replace(/\D/g, "").slice(0, 10));
+          }}
         />
       </div>
       {error ? (
@@ -304,20 +321,43 @@ function SignIn({ problem }) {
           {error}
         </p>
       ) : null}
-      <button type="submit" className="gate-submit" disabled={!code.trim() || busy}>
+      {resent ? (
+        <p className="remote-quiet" role="status">
+          Sent. Use the code from this newest email — the earlier one no longer works.
+        </p>
+      ) : null}
+      <button type="submit" className="gate-submit" disabled={code.length < 6 || busy}>
         {busy ? "Checking…" : "Sign in"}
       </button>
-      <button
-        type="button"
-        className="remote-link"
-        onClick={() => {
-          setSentTo("");
-          setCode("");
-          setError("");
-        }}
-      >
-        Use a different email
-      </button>
+      <div className="remote-row-links">
+        <button
+          type="button"
+          className="remote-link"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              setResent(false);
+              await sendSignInCode(sentTo);
+              setCode("");
+              setResent(true);
+            })
+          }
+        >
+          Send a new code
+        </button>
+        <button
+          type="button"
+          className="remote-link"
+          onClick={() => {
+            setSentTo("");
+            setCode("");
+            setError("");
+            setResent(false);
+          }}
+        >
+          Use a different email
+        </button>
+      </div>
     </form>
   );
 }
@@ -442,10 +482,7 @@ function Devices({ account, error, connectingTo, onConnect, onChangeRelay }) {
         {hosts === null ? (
           <p className="remote-quiet">Loading…</p>
         ) : hosts.length === 0 ? (
-          <p className="remote-quiet">
-            No devices linked yet. On the machine running Bom, open Settings → Remote access and
-            turn it on (or run <code>./run.sh --remote</code>), then enter the code it shows below.
-          </p>
+          <p className="remote-quiet">No devices linked yet — link one below.</p>
         ) : (
           <ul className="remote-hosts">
             {hosts.map((host) => (
@@ -491,6 +528,12 @@ function Devices({ account, error, connectingTo, onConnect, onChangeRelay }) {
         }}
       >
         <label htmlFor={codeId}>Link a device</label>
+        {found ? null : (
+          <p className="remote-quiet">
+            On the computer running Bom, open Settings → Remote access and turn it on. Enter the
+            code it shows.
+          </p>
+        )}
         {found ? (
           <div className="remote-confirm" role="group" aria-label="Confirm linking">
             <p>

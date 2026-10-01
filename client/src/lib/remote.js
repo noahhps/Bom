@@ -107,11 +107,59 @@ export async function relayClient() {
   return client.sb;
 }
 
+/* A sign-in link that failed comes back with the reason in the address
+ * (`#error_code=otp_expired&error_description=...`). Read once, when this
+ * module loads -- before anything else can rewrite the address -- so the
+ * sign-in screen can say what happened rather than show nothing. */
+let ARRIVAL_ERROR = (() => {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(
+    (window.location.hash || "").replace(/^#/, "") || window.location.search.replace(/^\?/, ""),
+  );
+  const code = params.get("error_code") || params.get("error") || "";
+  const text = params.get("error_description") || "";
+  if (!code && !text) return "";
+  try {
+    const url = new URL(window.location.href);
+    url.hash = "";
+    for (const key of ["error", "error_code", "error_description"]) url.searchParams.delete(key);
+    window.history.replaceState(null, "", url.pathname + url.search);
+  } catch {
+    // the address stays as it is; nothing else depends on it
+  }
+  if (/expired|otp_expired|invalid/i.test(code + " " + text)) {
+    return "That sign-in link had expired or was already used — some email apps open links to scan them. Use the code in the email instead, or send a new one.";
+  }
+  return text.replace(/\+/g, " ") || "The sign-in link didn't work. Use the code in the email instead.";
+})();
+
+/** Why the sign-in link this page was opened from failed, or "". Read as
+ * often as needed (React may run an initializer twice); cleared once a new
+ * code is on its way, when it has stopped being news. */
+export function arrivalError() {
+  return ARRIVAL_ERROR;
+}
+
+/** Supabase's wording, turned into what to do about it. */
+function signInProblem(message) {
+  const text = String(message || "");
+  if (/expired|invalid/i.test(text) && /token|otp|code/i.test(text)) {
+    return "That code didn't work. Codes work once, and only the newest one counts — use the code from the latest email, or send a new one.";
+  }
+  if (/rate limit|only request this after|too many/i.test(text)) {
+    return `${text}. Supabase's built-in email sends only a few messages an hour — use the code from the last email you got, or wait a little.`;
+  }
+  if (/signups not allowed|signup is disabled/i.test(text)) {
+    return "This relay doesn't allow new accounts. Sign in with the email you set it up with.";
+  }
+  return text;
+}
+
 /** Whether this page was opened from a sign-in email or a device's link. */
 export function arrivedForRemote() {
   if (typeof window === "undefined") return false;
   const { hash, search } = window.location;
-  return /access_token=|error_description=/.test(hash) || /[?&]link=/.test(search);
+  return Boolean(ARRIVAL_ERROR) || /access_token=/.test(hash) || /[?&]link=/.test(search);
 }
 
 /** The pairing code in `?link=`, taken out of the address so a reload does not reuse it. */
@@ -148,6 +196,7 @@ export async function onAccountChange(callback) {
 
 /** Email a sign-in code (and link) to this address. */
 export async function sendSignInCode(email) {
+  ARRIVAL_ERROR = "";
   const sb = await relayClient();
   const overHttp = /^https?:$/.test(window.location.protocol);
   const { error } = await sb.auth.signInWithOtp({
@@ -156,7 +205,7 @@ export async function sendSignInCode(email) {
     // app signs in with the code instead.
     options: overHttp ? { emailRedirectTo: window.location.origin + window.location.pathname } : {},
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(signInProblem(error.message));
 }
 
 export async function verifySignInCode(email, code) {
@@ -166,7 +215,7 @@ export async function verifySignInCode(email, code) {
     token: String(code).replace(/\s+/g, ""),
     type: "email",
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(signInProblem(error.message));
   return data.user;
 }
 

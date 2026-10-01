@@ -62,37 +62,39 @@ You need a free [Supabase](https://supabase.com) account, and a free
 
 ### 1. The relay (Supabase)
 
-Create a project in the Supabase dashboard, then from this repo run:
+Create a project in the Supabase dashboard. Then, from this repo:
 
 ```bash
-./relay/setup.sh <project-ref>
+./relay/setup.sh <project-ref> https://<your-app>.vercel.app
 ```
 
-`<project-ref>` is the id in your project's dashboard URL. The script:
+- `<project-ref>` is the id in your project's dashboard URL. Pasting the
+  whole URL works too.
+- The second argument is where the web app will live (step 2). Vercel shows
+  the address when you create the project. If you don't have it yet, leave it
+  out and run the script again once you do.
 
-- creates the tables and access rules
-- deploys the `bom-pair` function
-- turns Realtime to private channels only (when `SUPABASE_ACCESS_TOKEN` is
-  set; otherwise do it in the dashboard)
+The script asks once for a Supabase **access token**. Create one at
+<https://supabase.com/dashboard/account/tokens>. It's used only for this run
+and isn't saved. Then it:
+
+- creates the tables and access rules, and deploys the `bom-pair` function
+- **sets up sign-in:** links in sign-in emails return to your web app, and
+  every sign-in email, including the first one, carries a 6-digit code as
+  well as the link
+- turns Realtime to **private channels only**
 - prints `BOM_RELAY_URL` and `BOM_RELAY_KEY`
 
-It uses the Supabase CLI, through `npx` if you haven't installed it. To let
-only your own account link devices:
+There's nothing to change by hand in the dashboard. It uses the Supabase CLI,
+through `npx` if you haven't installed it. To let only your own account link
+devices:
 
 ```bash
-BOM_ALLOWED_EMAILS=you@example.com ./relay/setup.sh <project-ref>
+BOM_ALLOWED_EMAILS=you@example.com ./relay/setup.sh <project-ref> https://<your-app>.vercel.app
 ```
 
-Then check these once in the dashboard:
-
-- **Realtime → Settings:** "Allow public access" is **off**.
-- **Authentication → Emails → Magic Link:** add `{{ .Token }}` to the
-  template, so the email carries a 6-digit code as well as the link. The
-  desktop app signs in with the code.
-- **Authentication → URL Configuration:** add your web app's address from
-  step 2.
-- For a relay only you use: sign in once, then turn off **Allow new users to
-  sign up**.
+For a relay only you use: sign in once, then turn off **Allow new users to
+sign up** (Authentication → Sign In / Providers).
 
 ### 2. The web app (Vercel)
 
@@ -112,6 +114,9 @@ by your sign-in and the access rules, not by keeping the key secret.
 Skip this step if you only want the desktop app: its sign-in screen has
 **Away from it? Connect through your relay**, where you paste the same two
 values.
+
+Changed the Vercel address, or added one later? Run `setup.sh` again with the
+new one, so sign-in links go there.
 
 ### 3. The host (your machine)
 
@@ -142,7 +147,8 @@ Either way, the host shows a code, both on screen and in its terminal:
 ### 4. Link and connect
 
 Open the web app (or the desktop app's relay sign-in) and sign in with your
-email. You'll get a one-time code; there's no password. Under **Link a
+email. Type the **6-digit code from the email**, or open its link on the same
+device. There's no password. Then the host's own code goes in the next screen. Under **Link a
 device**, enter the host's code, check the device name, and choose **Link
 device**. Within a few seconds the host shows **Online**. Choose **Connect**.
 
@@ -204,14 +210,24 @@ elsewhere. Switch remote access on again for a new code.
 **"Your host isn't answering."** The host is off, asleep, or has remote
 access switched off. The device list shows when it was last seen.
 
+**The sign-in link opens a page that won't load (often `localhost:3000`).**
+Supabase doesn't know your web app's address. Run
+`./relay/setup.sh <project-ref> https://<your-app>.vercel.app`. Or just type
+the 6-digit code from the email; it works wherever you're signing in.
+
+**"That code didn't work."** Each code works once, and requesting another
+cancels the previous one. Use the code from the newest email. Supabase's
+built-in email sends only a few messages an hour; for more, connect your own
+SMTP under Authentication → Emails.
+
+**The email has a link but no code.** Run `setup.sh` again; it adds the code
+to both sign-in emails. It leaves alone any template you wrote that already
+includes `{{ .Token }}`.
+
 **Linking fails with "Couldn't create the device's sign-in".** Your project's
 auth settings rejected the host's generated address. Set
 `BOM_DEVICE_EMAIL_DOMAIN` to a domain you own (it is never mailed) with
 `supabase secrets set`, then link again.
-
-**Sign-in emails have a link but no code.** Add `{{ .Token }}` to the Magic
-Link email template (step 1). The web app works with the link alone; the
-desktop app needs the code.
 
 ## How it works (for contributors)
 

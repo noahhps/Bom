@@ -73,7 +73,7 @@ For company use, with long conversations, large codebases and big cloud context 
 ### Remote access
 Use your Bom, with its models, conversations and files, from anywhere, with no port forwarding. Your machine connects out to a relay in your own free Supabase project, and a web app on Vercel (or the desktop app) talks to it through that relay. It stays off until you turn it on **at the machine itself**, and it serves only the account you link it to with a one-time code shown on that machine.
 ```
-./relay/setup.sh <supabase-project-ref>   # once: tables, access rules, pairing function
+./relay/setup.sh <project-ref> https://<your-app>.vercel.app   # once: tables, rules, sign-in
 ./run.sh --remote                         # on the host: prints a code to link it
 ```
 Or use **Settings → Remote access** on the host. See [docs/remote.md](docs/remote.md) for the Vercel deploy and how access is checked.

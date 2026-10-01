@@ -60,8 +60,9 @@ COALESCE_SECONDS = 0.04
 # While a reply has nothing to say, say that it is still alive this often, so
 # the client can tell a long think from a vanished host.
 KEEPALIVE_SECONDS = 15.0
-# Parts of a request that never finishes arriving are dropped after this.
-PARTIAL_TIMEOUT = 60.0
+# A request whose parts stop arriving for this long is dropped, and the
+# caller told: a part was lost on the way.
+PARTIAL_TIMEOUT = 30.0
 MAX_INFLIGHT = 32
 # A caller's verified session is remembered at most this long.
 CALLER_TTL = 300.0
@@ -528,12 +529,28 @@ class RemoteHost:
             "parts": parts,
             "chunks": {0: str(payload.get("body") or "")},
             "started": time.monotonic(),
+            "last": time.monotonic(),
         }
         if parts == 1:
             self._dispatch(rid, entry)
         else:
             self._partial[rid] = entry
-            asyncio.get_running_loop().call_later(PARTIAL_TIMEOUT, self._partial.pop, rid, None)
+            asyncio.get_running_loop().call_later(PARTIAL_TIMEOUT, self._expire_partial, rid)
+
+    def _expire_partial(self, rid: str) -> None:
+        # Measured from the latest part, so a large upload arriving at a steady
+        # pace is never cut off -- only one that has stopped.
+        entry = self._partial.get(rid)
+        if entry is None:
+            return
+        idle = time.monotonic() - entry["last"]
+        if idle < PARTIAL_TIMEOUT:
+            asyncio.get_running_loop().call_later(PARTIAL_TIMEOUT - idle, self._expire_partial, rid)
+            return
+        self._partial.pop(rid, None)
+        asyncio.create_task(
+            self._refuse(rid, 408, "Part of the upload was lost on the way through the relay. Try sending it again.")
+        )
 
     def _add_part(self, rid: str, payload: dict[str, Any]) -> None:
         entry = self._partial.get(rid)
@@ -545,6 +562,7 @@ class RemoteHost:
             return
         if 0 < index < entry["parts"]:
             entry["chunks"][index] = str(payload.get("body") or "")
+            entry["last"] = time.monotonic()
         if len(entry["chunks"]) == entry["parts"]:
             self._partial.pop(rid, None)
             self._dispatch(rid, entry)

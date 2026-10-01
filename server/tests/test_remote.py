@@ -34,6 +34,7 @@ from app.remote.host import (
     denied,
     loopback_origin,
 )
+from app.remote import host as host_module
 from app.remote.realtime import RealtimeChannel, realtime_url
 from app.remote.supabase import token_expiry
 
@@ -304,6 +305,31 @@ def test_a_body_in_parts_is_put_back_together(tmp_path):
         assert echoed["length"] == len(body.encode())
         assert echoed["body"] == body
         assert echoed["type"] == "application/json"
+
+    asyncio.run(run())
+
+
+def test_an_upload_that_stops_arriving_is_reported(tmp_path, monkeypatch):
+    monkeypatch.setattr(host_module, "PARTIAL_TIMEOUT", 0.2)
+
+    async def run():
+        host, channel = make_host(tmp_path)
+        start = {"jwt": "owner-jwt", "method": "POST", "path": "/echo", "parts": 3, "body": "{"}
+        # Parts arriving steadily keep the upload alive past the timeout...
+        await host.handle("req", {"id": "slow", **start})
+        for i in (1, 2):
+            await asyncio.sleep(0.15)
+            await host.handle("req-part", {"id": "slow", "i": i, "body": "}" if i == 2 else ""})
+        await asyncio.gather(*list(host._inflight.values()))
+        assert channel.reply("slow")["status"] == 200
+        # ...and one whose last part never comes is answered, not dropped.
+        await host.handle("req", {"id": "lost", **start})
+        await host.handle("req-part", {"id": "lost", "i": 1, "body": ""})
+        await asyncio.sleep(0.35)
+        assert "lost" not in host._partial
+        reply = channel.reply("lost")
+        assert reply["status"] == 408
+        assert "lost on the way" in json.loads(reply["body"])["detail"]
 
     asyncio.run(run())
 

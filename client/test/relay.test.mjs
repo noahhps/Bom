@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 
 import { HostUnreachable, RelayConnection } from "../src/lib/relay.js";
+import { signInLinkToken } from "../src/lib/remote.js";
 import { MAX_PART, ResponseAssembler, frameBytes, splitBody } from "../src/lib/relayFrames.js";
 
 const decode = (chunks) => new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
@@ -141,13 +142,17 @@ async function run() {
   }
 
   {
-    // A long body goes in parts, and a 204 has no body at all.
-    const { client, sent } = fakeRelay(
-      host((req, emit) => {
-        emit("res-head", { id: req.id, status: 204, headers: {} });
-        emit("res-end", { id: req.id, count: 0 });
-      }),
-    );
+    // A long body goes in parts, spaced out so a burst can't overrun the
+    // relay's rate limit; and a 204 has no body at all.
+    const times = [];
+    const { client, sent } = fakeRelay((event, payload, emit) => {
+      if (event === "ping") emit("pong", { id: payload.id });
+      if (event === "req" || event === "req-part") times.push(Date.now());
+      if (event === "req-part" && payload.i === 2) {
+        emit("res-head", { id: payload.id, status: 204, headers: {} });
+        emit("res-end", { id: payload.id, count: 0 });
+      }
+    });
     const relay = new RelayConnection(async () => client, "abc");
     const body = JSON.stringify({ data: "z".repeat(MAX_PART * 2) });
     const response = await relay.fetch("/images", { method: "POST", body });
@@ -158,6 +163,25 @@ async function run() {
     assert.equal(req.parts, 3);
     assert.equal(req.content_type, "application/json");
     assert.equal(req.body + rest.map((p) => p.body).join(""), body);
+    for (let i = 1; i < times.length; i += 1) {
+      assert.ok(times[i] - times[i - 1] >= 30, "the parts don't go out in one burst");
+    }
+  }
+
+  {
+    // A reply that comes before the body is all sent (a refusal, say) stops
+    // the rest of it going out.
+    const { client, sent } = fakeRelay(
+      host((req, emit) => {
+        emit("res-head", { id: req.id, status: 413, headers: {} });
+        emit("res-end", { id: req.id, count: 0 });
+      }),
+    );
+    const relay = new RelayConnection(async () => client, "abc");
+    const response = await relay.fetch("/chat", { method: "POST", body: "y".repeat(MAX_PART * 4) });
+    assert.equal(response.status, 413);
+    await new Promise((r) => setTimeout(r, 200));
+    assert.ok(sent.filter((m) => m.event === "req-part").length < 3, "the rest isn't sent");
   }
 
   {
@@ -232,6 +256,21 @@ async function run() {
     relay.ping = RelayConnection.prototype.ping.bind(relay, 20);
     await assert.rejects(relay.fetch("/status"), /isn't answering/);
   }
+}
+
+{
+  // A sign-in link pasted instead of opened: its one-time token, verified
+  // directly. Anything else isn't taken for one.
+  const base = "https://abcd.supabase.co/auth/v1/verify";
+  assert.deepEqual(signInLinkToken(` ${base}?token=f00d&type=magiclink&redirect_to=https%3A%2F%2Fx.app `), {
+    token_hash: "f00d",
+    type: "magiclink",
+  });
+  assert.deepEqual(signInLinkToken(`${base}?token=beef&type=signup`), { token_hash: "beef", type: "signup" });
+  assert.equal(signInLinkToken(`${base}?token=beef&type=recovery`), null);
+  assert.equal(signInLinkToken(`${base}?type=magiclink`), null);
+  assert.equal(signInLinkToken("https://x.app/?token=1&type=magiclink"), null);
+  assert.equal(signInLinkToken("123456"), null);
 }
 
 await run();

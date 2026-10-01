@@ -156,6 +156,33 @@ device**. Within a few seconds the host shows **Online**. Choose **Connect**.
 From then on the host reconnects by itself after restarts, and the web app
 reopens your last host.
 
+### In the desktop app
+
+On a computer with no Bom server of its own, the desktop app opens on the
+token screen. Choose **Away from it? Connect through your relay**, paste the
+relay's address and key (the same two values as Vercel's), and enter your
+email.
+
+Then open the sign-in link in the email. It goes to the web app first, which
+hands the sign-in to the desktop app (through `bom://` links) and stays signed
+out itself. If no app answers within a few seconds, the web app signs in
+instead, and remembers not to wait for an app next time. On phones it signs
+in straight away.
+
+Two other ways in, if the link lands in the browser anyway:
+
+- copy the link (right-click, **Copy Link**) without opening it, and paste
+  it into the app's sign-in field
+- type the 6-digit code, if your emails carry one
+
+The app takes a link without asking only when it answers a sign-in the app
+itself asked for, for the same email. Any other link asks first, because a
+link carries a whole session: one made by someone else could sign the app in
+to their account, and a device linked after that would be theirs.
+
+`bom://` links are registered when the app is installed from its bundle
+(`npm run tauri build`), not for `tauri dev`.
+
 ## Everyday use
 
 - **Several hosts:** link as many as you like, up to 20 per account, and pick

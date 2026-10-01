@@ -41,6 +41,10 @@ If you didn't ask for it, you can ignore this email.</p>
 """
 
 
+class Refused(SystemExit):
+    """Supabase answered, and said no."""
+
+
 def call(method: str, path: str, token: str, body: dict | None = None):
     request = urllib.request.Request(
         API + path,
@@ -58,7 +62,7 @@ def call(method: str, path: str, token: str, body: dict | None = None):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")[:300]
-        raise SystemExit(f"Supabase said no to {method} {path}: HTTP {exc.code} {detail}") from None
+        raise Refused(f"Supabase said no to {method} {path}: HTTP {exc.code} {detail}") from None
     except urllib.error.URLError as exc:
         raise SystemExit(f"Couldn't reach Supabase's API: {exc.reason}") from None
 
@@ -93,15 +97,33 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    # Templates someone already wrote with a code in are left alone.
-    for kind in ("confirmation", "magic_link"):
-        if "{{ .Token }}" not in (current.get(f"mailer_templates_{kind}_content") or ""):
-            patch[f"mailer_templates_{kind}_content"] = TEMPLATE
-            patch[f"mailer_subjects_{kind}"] = SUBJECT
-
     if patch:
         call("PATCH", f"/{ref}/config/auth", token, patch)
-    print("==> sign-in: " + (f"links return to {web}; " if web else "") + "emails carry a code")
+    if web:
+        print(f"==> sign-in: links return to {web}")
+
+    # The templates go separately: on the free tier, Supabase refuses template
+    # changes until the project has its own SMTP, and that must not hold back
+    # the rest. Without them the emails carry the link only, which is enough
+    # for the web app. Templates someone already wrote with a code in are left
+    # alone.
+    templates: dict = {}
+    for kind in ("confirmation", "magic_link"):
+        if "{{ .Token }}" not in (current.get(f"mailer_templates_{kind}_content") or ""):
+            templates[f"mailer_templates_{kind}_content"] = TEMPLATE
+            templates[f"mailer_subjects_{kind}"] = SUBJECT
+    try:
+        if templates:
+            call("PATCH", f"/{ref}/config/auth", token, templates)
+        print("==> sign-in emails: a code as well as the link")
+    except Refused as exc:
+        print(
+            f"  !! {exc}\n"
+            "     Sign-in emails stay Supabase's default: a link, no code. The web app\n"
+            "     signs in with the link. For a code too (the desktop app needs it), add\n"
+            "     your own SMTP under Authentication > Emails and run this again.",
+            file=sys.stderr,
+        )
 
     # -- realtime ------------------------------------------------------------
     call("PATCH", f"/{ref}/config/realtime", token, {"private_only": True})

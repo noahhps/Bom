@@ -64,6 +64,14 @@ KEEPALIVE_SECONDS = 15.0
 # caller told: a part was lost on the way.
 PARTIAL_TIMEOUT = 30.0
 MAX_INFLIGHT = 32
+# A request body arriving in parts is acknowledged every this many parts, so
+# the client can keep only a few in flight: on a slow uplink, a body sent all
+# at once sits in the client's socket for minutes, starving the connection's
+# heartbeats, while the client's clock for an answer is already running.
+ACK_EVERY = 4
+# What this end of the relay supports, told to the client in each pong.
+# 2: acknowledges request parts (req-ack).
+PROTOCOL = 2
 # A caller's verified session is remembered at most this long.
 CALLER_TTL = 300.0
 # How many pairing codes may go unused in a row before remote access gives up
@@ -503,11 +511,11 @@ class RemoteHost:
         if not isinstance(rid, str) or not _ID.match(rid):
             return
         if event == "ping":
-            await self._send("pong", {"id": rid})
+            await self._send("pong", {"id": rid, "v": PROTOCOL})
         elif event == "req":
             await self._begin_request(rid, payload)
         elif event == "req-part":
-            self._add_part(rid, payload)
+            await self._add_part(rid, payload)
         elif event == "abort":
             task = self._inflight.get(rid)
             if task:
@@ -536,6 +544,7 @@ class RemoteHost:
         else:
             self._partial[rid] = entry
             asyncio.get_running_loop().call_later(PARTIAL_TIMEOUT, self._expire_partial, rid)
+            await self._send("req-ack", {"id": rid, "got": 1})
 
     def _expire_partial(self, rid: str) -> None:
         # Measured from the latest part, so a large upload arriving at a steady
@@ -552,7 +561,7 @@ class RemoteHost:
             self._refuse(rid, 408, "Part of the upload was lost on the way through the relay. Try sending it again.")
         )
 
-    def _add_part(self, rid: str, payload: dict[str, Any]) -> None:
+    async def _add_part(self, rid: str, payload: dict[str, Any]) -> None:
         entry = self._partial.get(rid)
         if entry is None:
             return
@@ -560,12 +569,16 @@ class RemoteHost:
             index = int(payload.get("i"))
         except (TypeError, ValueError):
             return
-        if 0 < index < entry["parts"]:
-            entry["chunks"][index] = str(payload.get("body") or "")
-            entry["last"] = time.monotonic()
-        if len(entry["chunks"]) == entry["parts"]:
+        if not 0 < index < entry["parts"] or index in entry["chunks"]:
+            return
+        entry["chunks"][index] = str(payload.get("body") or "")
+        entry["last"] = time.monotonic()
+        got = len(entry["chunks"])
+        if got == entry["parts"]:
             self._partial.pop(rid, None)
             self._dispatch(rid, entry)
+        if got == entry["parts"] or got % ACK_EVERY == 0:
+            await self._send("req-ack", {"id": rid, "got": got})
 
     def _dispatch(self, rid: str, entry: dict[str, Any]) -> None:
         if len(self._inflight) >= MAX_INFLIGHT:
@@ -631,21 +644,28 @@ class RemoteHost:
             content_type = meta.get("content_type")
             if isinstance(content_type, str) and 0 < len(content_type) < 200:
                 headers["Content-Type"] = content_type
-            async with self._local.stream(
-                str(meta.get("method") or "GET").upper(),
-                "/api" + str(meta["path"]),
-                content=body.encode("utf-8") if body else None,
-                headers=headers,
-            ) as response:
-                await self._send(
-                    "res-head",
-                    {
-                        "id": rid,
-                        "status": response.status_code,
-                        "headers": {k: response.headers[k] for k in PASSED_HEADERS if k in response.headers},
-                    },
-                )
-                await self._pump(rid, response, sent)
+            # Until the local API starts its reply (it reads an attached PDF
+            # first, say), say the request is still alive, as _pump does after.
+            alive = asyncio.create_task(self._keep_alive(rid))
+            try:
+                async with self._local.stream(
+                    str(meta.get("method") or "GET").upper(),
+                    "/api" + str(meta["path"]),
+                    content=body.encode("utf-8") if body else None,
+                    headers=headers,
+                ) as response:
+                    alive.cancel()
+                    await self._send(
+                        "res-head",
+                        {
+                            "id": rid,
+                            "status": response.status_code,
+                            "headers": {k: response.headers[k] for k in PASSED_HEADERS if k in response.headers},
+                        },
+                    )
+                    await self._pump(rid, response, sent)
+            finally:
+                alive.cancel()
             await self._send("res-end", {"id": rid, "count": sent["seq"]})
         except asyncio.CancelledError:
             # Aborted by the client, or the channel went away. Leaving the
@@ -657,6 +677,11 @@ class RemoteHost:
                 await self._send("res-end", {"id": rid, "count": sent["seq"], "error": str(exc) or type(exc).__name__})
             except Exception:  # noqa: BLE001
                 pass
+
+    async def _keep_alive(self, rid: str) -> None:
+        while True:
+            await asyncio.sleep(KEEPALIVE_SECONDS)
+            await self._send("res-alive", {"id": rid})
 
     async def _pump(self, rid: str, response: httpx.Response, sent: dict[str, int]) -> None:
         """Stream a reply back, a few frames a second rather than one per token."""

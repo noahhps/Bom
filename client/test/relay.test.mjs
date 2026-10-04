@@ -169,6 +169,48 @@ async function run() {
   }
 
   {
+    // A host that acknowledges parts: no more than a window's worth is ever
+    // unacknowledged, however fast the socket takes them.
+    let ack = null;
+    let got = 0;
+    let maxAhead = 0;
+    const { client, sent } = fakeRelay((event, payload, emit) => {
+      if (event === "ping") emit("pong", { id: payload.id, v: 2 });
+      if (event === "req") {
+        got = 1;
+        ack = (n) => emit("req-ack", { id: payload.id, got: n });
+        ack(1);
+      }
+      if (event === "req-part") {
+        const sentParts = sent.filter((m) => m.event === "req-part").length + 1;
+        maxAhead = Math.max(maxAhead, sentParts - got);
+        if (payload.i === 19) {
+          got = 20;
+          ack(20);
+          emit("res-head", { id: payload.id, status: 204, headers: {} });
+          emit("res-end", { id: payload.id, count: 0 });
+        }
+      }
+    });
+    const relay = new RelayConnection(async () => client, "abc");
+    const reply = relay.fetch("/chat", { method: "POST", body: "w".repeat(MAX_PART * 20) });
+    // The host sits on its acknowledgements; the client stops at the window.
+    await new Promise((r) => setTimeout(r, 900));
+    const before = sent.filter((m) => m.event === "req-part").length;
+    assert.equal(before, 8, "eight parts beyond the acknowledged one, then a wait");
+    // Acknowledged in steps, the rest goes out.
+    for (const n of [4, 8, 12, 16]) {
+      got = n;
+      ack(n);
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    const response = await reply;
+    assert.equal(response.status, 204);
+    assert.equal(sent.filter((m) => m.event === "req-part").length, 19);
+    assert.ok(maxAhead <= 8, `never more than the window ahead (was ${maxAhead})`);
+  }
+
+  {
     // A reply that comes before the body is all sent (a refusal, say) stops
     // the rest of it going out.
     const { client, sent } = fakeRelay(

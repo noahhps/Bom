@@ -11,6 +11,7 @@
  * is set up, and how to stop being connected. */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Browser } from "./Browser";
 import { Design } from "./Design";
 import { Enterprise } from "./Enterprise";
 import { Icon } from "./Icon";
@@ -59,6 +60,15 @@ export const SETTINGS_SCREENS = [
     title: "Remote access",
     lead: "Reach this machine from anywhere — its models, conversations and files — through a relay in your own Supabase project. Off until you turn it on, here, at this machine.",
     words: "remote access relay supabase vercel host hosting anywhere away phone link pair device web",
+  },
+  {
+    group: "Settings",
+    id: "browser",
+    label: "Browser",
+    icon: "globe",
+    title: "Browser",
+    lead: "Two browsers the model can work in: one of Bom's own, private and signed in to nothing, for anything that is about a page -- and yours, with your accounts in it, for the few things that need them, each step approved by you.",
+    words: "browser web page chrome chromium safari headless internet site url login signed in automation",
   },
   {
     group: "Settings",
@@ -313,6 +323,8 @@ export function Settings({
               <Providers models={models} provider={provider} onProvider={onProvider} serving={status?.serving} />
             ) : screen.id === "remote" ? (
               <RemoteAccess api={api} />
+            ) : screen.id === "browser" ? (
+              <Browser api={api} />
             ) : screen.id === "enterprise" ? (
               <Enterprise api={api} />
             ) : screen.id === "standards" ? (

@@ -54,6 +54,7 @@ export function useChat(
   {
     onSessionsChanged,
     onCanvas,
+    onBrowser,
     onWorkspace,
     onProjects,
     provider = null,
@@ -416,6 +417,11 @@ export function useChat(
             // A project was made or this conversation filed -- and a code
             // conversation may have been given its folder.
             onProjects?.(data, active);
+          } else if (event === "browser") {
+            // A browser step: the page as it now is -- a picture of Bom's
+            // tab, or the address of the user's. Handed up like a canvas, for
+            // the same reason: it belongs to the conversation, not the answer.
+            onBrowser?.(data, active);
           } else if (event === "canvas") {
             // write_canvas rewrote the document in the side panel. Handed
             // straight up rather than kept here: the canvas is a property of

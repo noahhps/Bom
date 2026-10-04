@@ -9032,3 +9032,48 @@ html:not([data-shell]) .screen[data-glass] {
 .navrail .navrail-mark { width: 20px; height: 20px; }
 .navrail .navrail-mark:hover { transform: scale(1.15); }
 
+/* -- the browser panel ------------------------------------------------------
+ * The page the model has open, on the canvas panel's shell (see
+ * components/BrowserPanel.jsx): an address line under the head, the picture,
+ * and a foot that says the picture is not live. */
+.browser-panel-title { cursor: default; }
+.browser-panel-url {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+}
+.browser-panel-url > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-panel-url .icon-btn { flex: none; color: inherit; }
+.browser-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: block;
+  background: var(--rail);
+}
+.browser-panel-body img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.browser-panel-body .canvas-empty { height: 100%; }
+.browser-panel-foot {
+  flex: none;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-faint);
+}

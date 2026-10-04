@@ -22,6 +22,10 @@ export function TopBar({
   canvasCount = 0,
   canvasOpen = false,
   onToggleCanvas,
+  // The browser panel: shown once the conversation has opened a page.
+  browserShown = false,
+  browserOpen = false,
+  onToggleBrowser,
   agents = [],
   agentId = null,
   onAgent,
@@ -150,6 +154,22 @@ export function TopBar({
           onClick={onToggleCanvas}
         >
           <Icon name="canvas" />
+        </button>
+      ) : null}
+
+      {/* The browser toggle, on the same terms: there once the model has
+          opened a page in this conversation, and lit while the panel is up. */}
+      {browserShown ? (
+        <button
+          type="button"
+          className="icon-btn canvas-btn"
+          data-on={browserOpen ? "" : undefined}
+          aria-label={browserOpen ? "Hide browser" : "Show browser"}
+          aria-pressed={browserOpen}
+          title="Browser"
+          onClick={onToggleBrowser}
+        >
+          <Icon name="globe" />
         </button>
       ) : null}
 

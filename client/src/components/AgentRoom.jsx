@@ -40,6 +40,9 @@ export function AgentsScreen({
   canvasCount = 0,
   canvasOpen = false,
   onToggleCanvas,
+  browserShown = false,
+  browserOpen = false,
+  onToggleBrowser,
   gallery,
   children,
 }) {
@@ -122,6 +125,20 @@ export function AgentsScreen({
                   onClick={onToggleCanvas}
                 >
                   <Icon name="canvas" />
+                </button>
+              ) : null}
+              {/* And the browser's, once the chat has opened a page. */}
+              {browserShown ? (
+                <button
+                  type="button"
+                  className="icon-btn canvas-btn"
+                  data-on={browserOpen ? "" : undefined}
+                  aria-label={browserOpen ? "Hide browser" : "Show browser"}
+                  aria-pressed={browserOpen}
+                  title="Browser"
+                  onClick={onToggleBrowser}
+                >
+                  <Icon name="globe" />
                 </button>
               ) : null}
               <button type="button" className="btn" onClick={() => onCustomize(selected)}>

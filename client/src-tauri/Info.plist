@@ -30,5 +30,8 @@
 
     <key>NSDownloadsFolderUsageDescription</key>
     <string>Bom reads files in your Downloads folder when you ask it about them.</string>
+
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Bom works in your own browser only after you choose one in Settings → Browser, and asks you before each step there. What it reads on a page is shown to the model you picked, and nothing else.</string>
   </dict>
 </plist>

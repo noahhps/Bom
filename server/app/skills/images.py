@@ -18,7 +18,7 @@ import re
 
 from ..images import sync_from_chat
 from ..store import Store
-from .skill import NOT_CODE, Skill
+from .skill import STUDIO, Skill
 
 #: How an image is written into an HTML page or a markdown document.
 SCHEME = "bom-image:"
@@ -131,7 +131,7 @@ def resolve_images_in(store: Store, session: str, value) -> list[str]:
 
 class ListImages(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     wants_session = True
 
     def __init__(self, store: Store) -> None:
@@ -180,7 +180,7 @@ class ListImages(Skill):
 class GenerateImage(Skill):
     """Make a picture on the configured generator and add it to the library."""
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
 
     wants_session = True
 

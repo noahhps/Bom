@@ -97,7 +97,7 @@ def test_unknown_or_auto_pins_nothing():
 @pytest.mark.asyncio
 async def test_a_pinned_turn_offers_only_that_way_of_making(store: Store):
     orch, provider = _orchestrator(store, [WIRE])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await _run(orch, sid, "Something for the launch", make="wireframe")
     offered = provider.tools[0]
     assert "write_wireframe" in offered and "read_canvas" in offered
@@ -105,14 +105,14 @@ async def test_a_pinned_turn_offers_only_that_way_of_making(store: Store):
     # Said on the turn's own message, and kept out of the system prompt so the
     # cached prefix does not change on a pinned turn.
     assert "chose **Wireframe** in the composer's Make menu" in provider.asked[0]
-    assert "Make menu" not in provider.systems[0]
+    assert "chose **Wireframe**" not in provider.systems[0]
     assert store.session_canvases(sid)[0].kind == "wireframe"
 
 
 @pytest.mark.asyncio
 async def test_a_model_that_reaches_past_the_pin_is_refused(store: Store):
     orch, provider = _orchestrator(store, [DECK], [WIRE])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "A pitch", make="wireframe")
     assert "write_slides did not run: the user chose Wireframe" in joined
     kinds = [c.kind for c in store.session_canvases(sid)]
@@ -122,7 +122,7 @@ async def test_a_model_that_reaches_past_the_pin_is_refused(store: Store):
 @pytest.mark.asyncio
 async def test_auto_leaves_every_tool_and_says_nothing(store: Store):
     orch, provider = _orchestrator(store)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await _run(orch, sid, "Hello", make="auto")
     assert {"write_wireframe", "write_slides", "write_sheet", "write_canvas"} <= provider.tools[0]
     assert "chose **" not in provider.asked[0]
@@ -132,7 +132,7 @@ async def test_auto_leaves_every_tool_and_says_nothing(store: Store):
 async def test_a_pin_to_a_switched_off_tool_is_ignored(store: Store):
     orch, provider = _orchestrator(store)
     orch.registry.set_enabled("write_wireframe", False)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await _run(orch, sid, "Hello", make="wireframe")
     assert "chose **" not in provider.asked[0]
     assert "write_slides" in provider.tools[0]
@@ -173,7 +173,7 @@ def _events(joined: str, name: str) -> list[dict]:
 async def test_a_model_that_answers_in_text_is_sent_back_to_make_it(store: Store):
     # Round 1 answers in prose (no calls); the nudge gets the wireframe.
     orch, provider = _orchestrator(store, [], [WIRE])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
     assert [e["status"] for e in _events(joined, "make")] == ["retry", "done"]
     assert [c.kind for c in store.session_canvases(sid)] == ["wireframe"]
@@ -185,7 +185,7 @@ async def test_a_model_that_answers_in_text_is_sent_back_to_make_it(store: Store
 async def test_a_refused_detour_is_followed_by_the_pinned_tool(store: Store):
     doc = ("write_canvas", {"title": "Plan", "kind": "markdown", "content": "# Plan"})
     orch, provider = _orchestrator(store, [doc], [], [WIRE])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
     assert "write_canvas did not run" in joined
     assert _events(joined, "make")[-1]["status"] == "done"
@@ -195,7 +195,7 @@ async def test_a_refused_detour_is_followed_by_the_pinned_tool(store: Store):
 @pytest.mark.asyncio
 async def test_a_model_that_never_complies_is_reported_not_hidden(store: Store):
     orch, provider = _orchestrator(store)  # answers in text, always
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "Plan the onboarding", make="wireframe")
     statuses = [e["status"] for e in _events(joined, "make")]
     assert statuses == ["retry", "retry", "missed"]
@@ -213,7 +213,7 @@ async def test_a_model_that_never_complies_is_reported_not_hidden(store: Store):
 async def test_a_pinned_document_cannot_come_out_as_a_page(store: Store):
     page = ("write_canvas", {"title": "Brief", "kind": "html", "content": "<h1>Brief</h1>"})
     orch, provider = _orchestrator(store, [page])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "A brief", make="document")
     assert [c.kind for c in store.session_canvases(sid)] == ["markdown"]
     assert _events(joined, "make")[-1]["status"] == "done"
@@ -225,7 +225,7 @@ async def test_a_wireframe_call_that_fails_does_not_count(store: Store):
     # It fails, the model then stops in text: that is not done, so it is
     # sent back, and only the real wireframe finishes the turn.
     orch, provider = _orchestrator(store, [broken], [], [WIRE])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = await _run(orch, sid, "An app", make="wireframe")
     assert "had no frames" in joined
     assert [e["status"] for e in _events(joined, "make")] == ["retry", "done"]

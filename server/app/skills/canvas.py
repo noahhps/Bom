@@ -31,7 +31,7 @@ from . import sheet as sheets
 from .args import as_dict, plain_text
 from . import slides as decks
 from .patch import apply_edits, parse_edits, set_css_variables
-from .skill import NOT_CODE, Skill
+from .skill import NOT_CODE, STUDIO, Skill
 
 # A full HTML document, or a fragment that opens with a structural tag. Used to
 # rescue content the model wrote as HTML but forgot to label -- stored as
@@ -656,7 +656,7 @@ class EditCanvas(Skill):
 class CheckDesign(Skill):
     """A design review of anything in the canvas panel."""
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
 
     wants_session = True
 

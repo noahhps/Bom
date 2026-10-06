@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import signal
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -120,10 +121,30 @@ def _signin_page(heading: str, detail: str, *, ok: bool) -> HTMLResponse:
     )
 
 
+def _one_conversation_per_agent(db: Database, store: Store, db_path: Path) -> None:
+    """Fold any agent's extra conversations into its newest, once.
+
+    Each agent has one conversation now; earlier builds started a new one each
+    time. Nothing is thrown away -- the older conversations' messages, canvases
+    and pictures move into the one that carries on -- and a copy of the
+    database is taken first, beside it in `backups/`, so the fold can be undone
+    by hand. After the first boot there is nothing left to fold, and this is
+    one query.
+    """
+    several = store.agents_with_several_conversations()
+    if not several:
+        return
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    backup = db.backup_to(db_path.parent / "backups" / f"before-one-conversation-{stamp}.db")
+    folded = store.consolidate_agent_conversations()
+    print(f"[agents] folded {folded} extra conversation(s) into each agent's one; backup at {backup}")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.db_path)
     store = Store(db)
+    _one_conversation_per_agent(db, store, settings.db_path)
     # Everything below reads its limits through this, so the Enterprise mode
     # switch takes effect on the next call without a restart.
     settings = LiveSettings(settings, store)

@@ -31,8 +31,8 @@ export const SETTINGS_SCREENS = [
     label: "General",
     icon: "gear",
     title: "General",
-    lead: "How this app is set up on this device. Nothing is stored here except the token and how you like the sidebar — everything else lives on the server.",
-    words: "sidebar pin rail device token sign out account",
+    lead: "How this app is set up on this device. Nothing is stored here except the token, the sidebar and whether Studio is on — everything else lives on the server.",
+    words: "sidebar pin rail device token sign out account studio design code",
   },
   {
     group: "Settings",
@@ -114,10 +114,27 @@ function matches(screen, query) {
   return `${screen.label} ${screen.title} ${screen.words}`.toLowerCase().includes(q);
 }
 
-function General({ pinned, onTogglePin, onSignOut, remoteName }) {
+function General({ pinned, onTogglePin, onSignOut, remoteName, studio, onStudio }) {
   return (
     <>
       <div className="settings-rows">
+        <div className="settings-row">
+          <div>
+            <b>Studio</b>
+            <p>Design and code workspaces: decks, wireframes, pages and code projects, with their own tools. Off by default -- a small local model does its best work on everyday tasks, and those tools stay out of every chat either way.</p>
+          </div>
+          <button
+            type="button"
+            className="switch"
+            role="switch"
+            aria-checked={studio}
+            aria-pressed={studio}
+            aria-label="Studio"
+            onClick={() => onStudio?.(!studio)}
+          >
+            <i />
+          </button>
+        </div>
         <div className="settings-row">
           <div>
             <b>Keep the sidebar open</b>
@@ -223,6 +240,9 @@ export function Settings({
   appearance,
   // Design standards: the library and what to do with one ("Use it").
   standards,
+  // Whether Studio -- designs and code -- is switched on for this device.
+  studio = false,
+  onStudio,
 }) {
   const [query, setQuery] = useState("");
   const search = useRef(null);
@@ -316,7 +336,14 @@ export function Settings({
             </header>
 
             {screen.id === "general" ? (
-              <General pinned={pinned} onTogglePin={onTogglePin} onSignOut={onSignOut} remoteName={remoteName} />
+              <General
+                pinned={pinned}
+                onTogglePin={onTogglePin}
+                onSignOut={onSignOut}
+                remoteName={remoteName}
+                studio={studio}
+                onStudio={onStudio}
+              />
             ) : screen.id === "appearance" ? (
               <Appearance theme={theme} appearance={appearance} />
             ) : screen.id === "models" ? (

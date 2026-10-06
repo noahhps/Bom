@@ -51,7 +51,7 @@ from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
 from .agent_presets import PRESETS as AGENT_PRESETS
-from . import code_projects, design_export
+from . import code_projects, design_export, group
 from . import workspace as project
 from .design_mode import normalize as normalize_mode
 from .images import ImageError, prepare as prepare_image, sync_from_chat
@@ -112,6 +112,12 @@ class ChatRequest(BaseModel):
     # Optional persona for a brand-new conversation. It is applied before the
     # first turn runs, so the selected agent shapes the opening response too.
     agent_id: str | None = None
+    # A brand-new group chat: two or more agents, in order. First-message-only
+    # like `agent_id`; a group is changed afterwards with PUT .../members.
+    members: list[str] | None = Field(default=None, max_length=group.MAX_MEMBERS)
+    # In a group chat, who should answer when the message @-mentions nobody.
+    # Unset, it is whoever answered last. Ignored outside a group.
+    reply_as: str | None = Field(default=None, max_length=120)
     # For a brand-new conversation only, like `agent_id`: what it is started
     # as ("chat" or "design"), and a design standard picked on the empty
     # screen before anything was sent. Ignored once the session exists.
@@ -475,6 +481,11 @@ class SessionAgent(BaseModel):
     agent_id: str | None = None
 
 
+class SessionMembers(BaseModel):
+    # The whole group, in order: two or more agents.
+    agent_ids: list[str] = Field(default_factory=list, max_length=group.MAX_MEMBERS)
+
+
 class Accent(BaseModel):
     """The colour a scope is dressed in -- what was chosen, not what it looks
     like.
@@ -646,6 +657,14 @@ def build_router(
         if design != NO_DESIGN and resolve_design(store, design) is None:
             raise HTTPException(404, "no such design standard")
         return design
+
+    def _valid_members(given: list[str] | None) -> list[str]:
+        """A group worth storing -- every member a real agent -- or a 404."""
+        members = list(dict.fromkeys(a for a in (given or []) if a))
+        for agent_id in members:
+            if not store.get_agent(agent_id):
+                raise HTTPException(404, "no such agent")
+        return members
 
     def _workspace(given: str | None) -> str | None:
         """A project folder worth storing, or a 400 saying why not."""
@@ -837,12 +856,19 @@ def build_router(
         # Names and sizes only. The bytes are fetched per file, by id, so
         # opening a conversation full of screenshots stays one small response.
         attached = store.attachments_for_session(session_id)
+        authors = store.message_authors(session_id)
         return {
-            "session": _read_accent(session),
+            "session": {
+                **_read_accent(session),
+                "members": store.session_members(session_id),
+            },
             "messages": [
                 {
                     **m.to_dict(),
                     "attachments": [a.to_dict() for a in attached.get(m.id, ())],
+                    # Which agent wrote an answer -- what a group chat names
+                    # above each reply. None for the default assistant.
+                    "agent_id": authors.get(m.id),
                 }
                 for m in store.list_messages(session_id)
             ],
@@ -1257,12 +1283,50 @@ def build_router(
 
     @router.put("/sessions/{session_id}/agent")
     def set_session_agent(session_id: str, body: SessionAgent) -> dict:
-        if not store.get_session(session_id):
+        session = store.get_session(session_id)
+        if not session:
             raise HTTPException(404, "no such session")
         if body.agent_id and not store.get_agent(body.agent_id):
             raise HTTPException(404, "no such agent")
+        # A chat handed to an agent that already has a conversation joins
+        # that one -- an agent has one -- and the answer names where it went.
+        # A group's speaker, and a design or code session run as an agent,
+        # are not the agent's conversation and are set as they always were.
+        own = (
+            store.agent_conversation(body.agent_id)
+            if body.agent_id
+            and (session.get("mode") or "chat") == "chat"
+            and not store.session_members(session_id)
+            else None
+        )
+        if own and own != session_id:
+            if session_id in orchestrator.live or own in orchestrator.live:
+                raise HTTPException(409, "That conversation is answering something right now. Try again in a moment.")
+            store.merge_sessions(own, [session_id])
+            return {"ok": True, "agent_id": body.agent_id, "session_id": own}
         store.set_session_agent(session_id, body.agent_id)
-        return {"ok": True, "agent_id": body.agent_id}
+        return {"ok": True, "agent_id": body.agent_id, "session_id": session_id}
+
+    @router.put("/sessions/{session_id}/members")
+    def set_session_members(session_id: str, body: SessionMembers) -> dict:
+        """Change who is in a group chat.
+
+        A group stays a group: two or more agents. Taking it down to one would
+        give that agent a second conversation, and an agent has one -- so to
+        talk to one of them alone, write to them, which opens theirs.
+        """
+        session = store.get_session(session_id)
+        if not session:
+            raise HTTPException(404, "no such session")
+        if len(store.session_members(session_id)) < 2:
+            raise HTTPException(400, "only a group chat has members to change")
+        members = _valid_members(body.agent_ids)
+        if len(members) < 2:
+            raise HTTPException(400, "a group chat needs two or more agents")
+        store.set_session_members(session_id, members)
+        if session.get("agent_id") not in members:
+            store.set_session_agent(session_id, members[0])
+        return {"ok": True, "members": members}
 
     # -- designs ----------------------------------------------------------
     #
@@ -1408,6 +1472,7 @@ def build_router(
         else:
             if body.agent_id and not store.get_agent(body.agent_id):
                 raise HTTPException(404, "no such agent")
+            members = _valid_members(body.members)
             # Checked before the session exists, so a bad pick is refused
             # rather than leaving an unfiled conversation behind -- by the
             # same rules as filing one afterwards (PUT .../project).
@@ -1422,30 +1487,92 @@ def build_router(
                     raise HTTPException(400, "a code project holds code conversations")
                 if kind == "design" and mode != "design":
                     raise HTTPException(400, "a design project holds design conversations")
-            session_id = store.create_session(
-                situation=situation,
-                mode=mode,
-                design=_valid_design(body.design),
-                workspace=_workspace(body.workspace),
-            )["id"]
-            if body.agent_id:
-                store.set_session_agent(session_id, body.agent_id)
-            if project is not None:
-                store.set_session_project(session_id, project["id"])
+            # An agent has one conversation. A chat started with one agent and
+            # nobody else is that conversation, carried on, if it exists --
+            # however the client got here, and whether or not it knew.
+            solo = body.agent_id or (members[0] if len(members) == 1 else None)
+            own = (
+                store.agent_conversation(solo)
+                if solo and len(members) < 2 and mode == "chat"
+                else None
+            )
+            if own:
+                session_id = own
+                store.set_session_situation(session_id, situation)
+            else:
+                session_id = store.create_session(
+                    situation=situation,
+                    mode=mode,
+                    design=_valid_design(body.design),
+                    workspace=_workspace(body.workspace),
+                )["id"]
+                if len(members) > 1:
+                    store.set_session_members(session_id, members)
+                if solo or members:
+                    store.set_session_agent(session_id, solo or members[0])
+                if project is not None:
+                    store.set_session_project(session_id, project["id"])
+
+        # One turn at a time in a conversation. A scheduled task runs in its
+        # agent's conversation, unattended, and a message sent into the middle
+        # of that would be answered by a model that is still writing the last
+        # answer.
+        if session_id in orchestrator.live:
+            raise HTTPException(409, "This conversation is answering something right now. Try again in a moment.")
+
+        # Who answers. Outside a group, the conversation's own agent (or the
+        # default assistant) -- one turn, exactly as before. In a group, the
+        # members the message calls on, each in turn; the session's agent is
+        # moved to whoever is speaking, so the persona, the skill subset and
+        # "who answered last" all come from the one column that already said
+        # which agent a conversation runs as.
+        members = store.session_members(session_id)
+        answering: list[str | None] = [None]
+        if len(members) > 1:
+            current = store.get_session(session_id) or {}
+            answering = group.speakers(
+                body.message,
+                members,
+                {a.id: a.name for a in store.list_agents()},
+                last=current.get("agent_id"),
+                reply_as=body.reply_as,
+            )
 
         async def frames():
+            orchestrator.live.add(session_id)
+            try:
+                async for frame in answer():
+                    yield frame
+            finally:
+                orchestrator.live.discard(session_id)
+
+        async def answer():
             yield f'event: session\ndata: {{"session_id": "{session_id}"}}\n\n'
-            async for frame in orchestrator.run_turn(
-                session_id,
-                body.message,
-                attached=attached,
-                prefer=body.provider,
-                think=body.think,
-                make=body.make,
-            ):
-                if await request.is_disconnected():
+            for index, speaker in enumerate(answering):
+                if speaker:
+                    store.set_session_agent(session_id, speaker)
+                failed = False
+                async for frame in orchestrator.run_turn(
+                    session_id,
+                    body.message,
+                    attached=attached,
+                    prefer=body.provider,
+                    think=body.think,
+                    # The Make menu pins the reply to the message, not every
+                    # reply in the room.
+                    make=body.make if index == 0 else None,
+                    reply_only=index > 0,
+                ):
+                    if await request.is_disconnected():
+                        failed = True
+                        break
+                    failed = failed or frame.startswith("event: error")
+                    yield frame
+                # A member that failed -- or a reader who left -- stops the
+                # round: the next one would be answering a conversation with a
+                # hole in it.
+                if failed:
                     break
-                yield frame
             # Both off the response path, and both deliberately after the
             # stream has finished rather than inside it: the answer is already
             # on its way to the phone, and neither of these should delay it.

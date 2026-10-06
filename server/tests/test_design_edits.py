@@ -157,7 +157,7 @@ def test_css_variables_prefer_root_over_a_dark_redeclaration():
 
 @pytest.mark.asyncio
 async def test_edit_canvas_changes_only_what_it_names(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteCanvas(store).use(session=sid, title="Site", content=PAGE, kind="html")
     said = await EditCanvas(store).use(
         session=sid,
@@ -177,7 +177,7 @@ async def test_edit_canvas_changes_only_what_it_names(store: Store):
 
 @pytest.mark.asyncio
 async def test_edit_canvas_says_when_an_edit_broke_the_markup(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteCanvas(store).use(session=sid, title="Site", content=PAGE, kind="html")
     said = await EditCanvas(store).use(
         session=sid, title="Site", edits=[{"delete": "  </main>\n"}],
@@ -188,7 +188,7 @@ async def test_edit_canvas_says_when_an_edit_broke_the_markup(store: Store):
 
 @pytest.mark.asyncio
 async def test_edit_canvas_sends_structured_kinds_to_their_own_tool(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteSlides(store).use(session=sid, title="Pitch", slides=[{"title": "Hi"}])
     said = await EditCanvas(store).use(session=sid, title="Pitch", edits=[{"find": "Hi", "replace": "Yo"}])
     assert "edit_slides" in said
@@ -196,7 +196,7 @@ async def test_edit_canvas_sends_structured_kinds_to_their_own_tool(store: Store
 
 @pytest.mark.asyncio
 async def test_nothing_changed_is_said_plainly(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteCanvas(store).use(session=sid, title="Notes", content="# Notes\n\nOne.")
     before = store.find_canvas_by_title(sid, "Notes").updated_at
     said = await EditCanvas(store).use(session=sid, title="Notes", edits=[{"find": "Two", "replace": "3"}])
@@ -206,7 +206,7 @@ async def test_nothing_changed_is_said_plainly(store: Store):
 
 @pytest.mark.asyncio
 async def test_read_canvas_returns_a_whole_page_and_pages_a_long_one(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteCanvas(store).use(session=sid, title="Site", content=PAGE, kind="html")
     whole = await ReadCanvas(store).use(session=sid, title="Site")
     assert PAGE.strip() in whole, "exactly as stored, so a find copied from it matches"
@@ -264,7 +264,7 @@ def test_dark_mode_blocks_do_not_confuse_the_light_check():
 def test_check_design_reviews_any_canvas_kind(store: Store):
     import asyncio
 
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     asyncio.run(WriteCanvas(store).use(session=sid, title="Site", content=PAGE, kind="html"))
     said = asyncio.run(CheckDesign(store).use(session=sid, title="Site"))
     assert said.startswith("Design check of 'Site' (html)")
@@ -409,7 +409,7 @@ def test_the_wireframe_check_finds_what_a_reviewer_would():
 
 @pytest.mark.asyncio
 async def test_edit_wireframe_saves_and_reports(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteWireframe(store).use(session=sid, title="App", frames=[LOGIN, HOME])
     said = await EditWireframe(store).use(session=sid, title="App", ops=[
         {"op": "update", "layer": "f1_l5", "set": {"text": "Log in"}},
@@ -458,7 +458,7 @@ def test_a_slide_field_is_removed_with_null_and_the_theme_merged():
 
 @pytest.mark.asyncio
 async def test_edit_slides_saves_and_reports(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteSlides(store).use(session=sid, title="Pitch", slides=[
         {"layout": "title", "title": "Bom"}, {"layout": "bullets", "title": "Why", "bullets": ["a"]},
     ])
@@ -614,7 +614,7 @@ async def test_a_turn_can_write_then_patch_a_page(store: Store):
         "ollama_think": "medium", "memory_max_facts": 20, "memory_fact_chars": 200,
     })()
     orch = Orchestrator(settings, store, router, registry)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     frames = [f async for f in orch.run_turn(sid, "Make me a coffee shop page, then rename it")]
     assert "event: done" in "".join(frames)
     body = store.find_canvas_by_title(sid, "Site").content
@@ -671,7 +671,7 @@ def test_a_wireframe_is_drawn_with_its_theme_and_names():
 async def test_view_canvas_hands_back_a_picture(store: Store):
     engine = _FakeEngine()
     view = ViewCanvas(store, Renderer(engine))
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteCanvas(store).use(session=sid, title="Site", content=PAGE, kind="html")
     await WriteWireframe(store).use(session=sid, title="App", frames=[LOGIN, HOME])
 
@@ -777,7 +777,7 @@ def _looking_orchestrator(store: Store, provider) -> Orchestrator:
 async def test_a_model_that_can_see_is_shown_the_render(store: Store):
     provider = _Looker(sees=True)
     orch = _looking_orchestrator(store, provider)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     frames = [f async for f in orch.run_turn(sid, "Make a page and check it")]
     assert "event: done" in "".join(frames)
     last = provider.windows[2]
@@ -792,7 +792,7 @@ async def test_a_model_that_can_see_is_shown_the_render(store: Store):
 async def test_a_model_that_cannot_see_is_not_offered_the_render(store: Store):
     provider = _Looker(sees=False)
     orch = _looking_orchestrator(store, provider)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     frames = "".join([f async for f in orch.run_turn(sid, "Make a page and check it")])
     assert "view_canvas" not in provider.tools[0]
     # Called anyway, from habit: it runs, but the model is told it saw nothing.
@@ -843,7 +843,7 @@ async def test_an_edit_honours_a_pinned_format(store: Store):
         "ollama_think": "medium", "memory_max_facts": 20, "memory_fact_chars": 200,
     })()
     orch = Orchestrator(settings, store, router, registry)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteWireframe(store).use(session=sid, title="App", frames=[LOGIN, HOME])
     joined = "".join([f async for f in orch.run_turn(sid, "Rename the button", make="wireframe")])
     makes = [json.loads(b.split("data: ", 1)[1]) for b in joined.split("\n\n")
@@ -875,7 +875,7 @@ def _attach(store: Store, sid: str, name: str, colour=(30, 90, 200)) -> None:
 
 @pytest.mark.asyncio
 async def test_a_wireframe_can_use_a_chat_picture_by_its_name(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     _attach(store, sid, "harbour-front.jpg")
     # Straight to the wireframe, never having called list_images, naming the
     # picture the way it was shown: its file name.
@@ -889,7 +889,7 @@ async def test_a_wireframe_can_use_a_chat_picture_by_its_name(store: Store):
 
 @pytest.mark.asyncio
 async def test_the_attached_photo_resolves_in_every_canvas_tool(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     _attach(store, sid, "cup.jpg")
     await WriteWireframe(store).use(session=sid, title="App", frames=[LOGIN])
     said = await EditWireframe(store).use(session=sid, title="App", ops=[
@@ -959,7 +959,7 @@ async def test_an_attached_picture_is_in_the_library_and_its_id_beside_it(store:
         "ollama_think": "medium", "memory_max_facts": 20, "memory_fact_chars": 200,
     })()
     orch = Orchestrator(settings, store, router, Registry())
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     upload = IncomingFile(kind="image", name="storefront.jpg", mime="image/jpeg", data=_jpeg())
     [f async for f in orch.run_turn(sid, "Put this in the wireframe", attached=[upload])]
 

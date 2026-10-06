@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { AgentAvatar } from "./AgentAvatar";
 import { StagedAttachments } from "./Attachments";
 import { Icon } from "./Icon";
 import { STICK_PX } from "./MessageList";
@@ -166,8 +167,11 @@ function KindControl({ value, onChange, disabled, kinds = KINDS.map((k) => k.id)
 /* The Make menu: which tool the model must use for the next message. Said
    out loud rather than hidden -- the chip shows the pinned format, and it
    stays until changed. */
-function MakeControl({ value, onChange, disabled }) {
-  const current = MAKES.find((m) => m.id === value) || MAKES[0];
+function MakeControl({ value, onChange, disabled, makes = null }) {
+  // Only the ways of making something this conversation can actually do --
+  // a chat has no decks or wireframes to pin.
+  const offered = makes ? MAKES.filter((m) => makes.includes(m.id)) : MAKES;
+  const current = offered.find((m) => m.id === value) || offered[0];
   return (
     <label
       className="composer-make"
@@ -183,7 +187,7 @@ function MakeControl({ value, onChange, disabled }) {
           disabled={disabled}
           onChange={(event) => onChange?.(event.target.value)}
         >
-          {MAKES.map((m) => (
+          {offered.map((m) => (
             <option key={m.id} value={m.id}>{m.label}</option>
           ))}
         </select>
@@ -237,9 +241,24 @@ export function Composer({
   projects = [],
   projectId = null,
   onProject = null,
+  // The Make menu's choices, when not all of them apply.
+  makes = null,
+  // Who can be @-mentioned: a group chat's members, `{ id, name, look }`.
+  mentions = [],
   placeholder = "Ask me. Task me.",
 }) {
   const [value, setValue] = useState("");
+  // An @-mention being typed: where its "@" is, what follows it so far, and
+  // which suggestion is highlighted. Null when the caret is not in one.
+  const [mention, setMention] = useState(null);
+  const suggestions = useMemo(() => {
+    if (!mention || mentions.length === 0) return [];
+    const typed = mention.query.toLowerCase();
+    const everyone = mentions.length > 1 ? [{ id: "@everyone", name: "everyone", everyone: true }] : [];
+    return [...mentions, ...everyone]
+      .filter((m) => m.name.toLowerCase().startsWith(typed))
+      .slice(0, 6);
+  }, [mention, mentions]);
   // Whatever the current control's value is. Reset when the control changes
   // shape, because "medium" means nothing to a switch and `true` means nothing
   // to a budget -- carrying it across would send the model a value it cannot
@@ -601,6 +620,37 @@ export function Composer({
     [],
   );
 
+  // Read where the caret is and whether it sits just after "@something".
+  const trackMention = (node) => {
+    if (!mentions.length || !node) return setMention(null);
+    const before = node.value.slice(0, node.selectionStart ?? node.value.length);
+    const found = before.match(/(?:^|\s)@([^\s@]{0,40})$/);
+    if (!found) return setMention(null);
+    const start = before.length - found[1].length - 1;
+    setMention((was) => ({
+      start,
+      query: found[1],
+      index: was && was.start === start ? was.index : 0,
+    }));
+  };
+
+  // A suggestion picked: the name goes in whole, with a space after it, and
+  // the caret goes after that.
+  const pickMention = (choice) => {
+    const node = input.current;
+    if (!node || !mention) return;
+    const end = node.selectionStart ?? value.length;
+    const inserted = `@${choice.name} `;
+    const next = value.slice(0, mention.start) + inserted + value.slice(end);
+    setValue(next);
+    setMention(null);
+    const caret = mention.start + inserted.length;
+    requestAnimationFrame(() => {
+      node.focus();
+      node.selectionStart = node.selectionEnd = caret;
+    });
+  };
+
   const submit = (event) => {
     event.preventDefault();
     // The button is disabled while a turn streams, but Enter still submits --
@@ -613,6 +663,7 @@ export function Composer({
     staged.forEach((item) => item.preview && URL.revokeObjectURL(item.preview));
     setValue("");
     setStaged([]);
+    setMention(null);
     onSend(text, files, effort);
   };
 
@@ -662,6 +713,33 @@ export function Composer({
         <div className="composer-box">
           <StagedAttachments items={staged} onRemove={unstage} />
 
+          {suggestions.length > 0 ? (
+            <ul className="composer-mentions" role="listbox" aria-label="Mention someone">
+              {suggestions.map((m, index) => (
+                <li key={m.id} role="option" aria-selected={index === mention.index}>
+                  <button
+                    type="button"
+                    // Pressed, not clicked: the textarea keeps its focus, so
+                    // the caret is still where the name goes.
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      pickMention(m);
+                    }}
+                  >
+                    {m.everyone ? (
+                      <span className="composer-mention-all" aria-hidden="true">
+                        <Icon name="agents" />
+                      </span>
+                    ) : (
+                      <AgentAvatar look={m.look} size={22} />
+                    )}
+                    <span>{m.everyone ? "Everyone" : m.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           <textarea
             ref={input}
             rows="1"
@@ -669,8 +747,36 @@ export function Composer({
             autoComplete="off"
             autoCapitalize="sentences"
             value={value}
-            onChange={(event) => setValue(event.target.value)}
+            aria-autocomplete={mentions.length ? "list" : undefined}
+            onChange={(event) => {
+              setValue(event.target.value);
+              trackMention(event.target);
+            }}
+            onSelect={(event) => trackMention(event.target)}
+            onBlur={() => setMention(null)}
             onKeyDown={(event) => {
+              // The suggestions own the arrows, Enter and Tab while they are up.
+              if (suggestions.length > 0) {
+                const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+                if (step) {
+                  event.preventDefault();
+                  setMention((was) => ({
+                    ...was,
+                    index: (was.index + step + suggestions.length) % suggestions.length,
+                  }));
+                  return;
+                }
+                if (event.key === "Enter" || event.key === "Tab") {
+                  event.preventDefault();
+                  pickMention(suggestions[Math.min(mention.index, suggestions.length - 1)]);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setMention(null);
+                  return;
+                }
+              }
               // Enter sends on a real keyboard; on a phone it should insert a
               // newline -- there is nowhere else to put one.
               const isTouch = window.matchMedia("(pointer: coarse)").matches;
@@ -743,7 +849,7 @@ export function Composer({
           <div className="composer-tray">
             {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} kinds={kinds} /> : null}
 
-            {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
+            {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} makes={makes} /> : null}
 
             {agents.length > 0 ? (
               <label className="composer-agent-picker">

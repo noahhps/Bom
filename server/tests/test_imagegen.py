@@ -100,7 +100,7 @@ def test_the_prompt_guard(prompt, refused):
 @pytest.mark.asyncio
 async def test_a_refused_prompt_never_reaches_the_generator(store: Store):
     generator, recorder = _generator()
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     with pytest.raises(GenerationError):
         await create(store, generator, sid, "nsfw poster")
     assert recorder.requests == []
@@ -113,7 +113,7 @@ async def test_a_refused_prompt_never_reaches_the_generator(store: Store):
 @pytest.mark.asyncio
 async def test_a1111_request_and_a_cleaned_labelled_result(store: Store):
     generator, recorder = _generator(model="sdxl.safetensors")
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     image = await create(store, generator, sid, "Plane trees over a quiet lane", shape="portrait")
     sent = recorder.last
     assert recorder.requests[-1].url.path == "/sdapi/v1/txt2img"
@@ -132,7 +132,7 @@ async def test_a1111_request_and_a_cleaned_labelled_result(store: Store):
 async def test_openai_shaped_request(store: Store):
     generator, recorder = _generator("http://127.0.0.1:8080/v1", backend="openai",
                                      model="flux", key="k")
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await create(store, generator, sid, "A lighthouse", shape="landscape")
     request = recorder.requests[-1]
     assert request.url.path == "/v1/images/generations"
@@ -147,7 +147,7 @@ async def test_openai_shaped_request(store: Store):
 async def test_a_link_instead_of_bytes_is_not_followed(store: Store):
     recorder = Recorder(answer={"data": [{"url": "http://169.254.169.254/latest"}]})
     generator, _ = _generator(backend="openai", recorder=recorder)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     with pytest.raises(GenerationError, match="link"):
         await create(store, generator, sid, "A lighthouse")
     assert len(recorder.requests) == 1
@@ -156,7 +156,7 @@ async def test_a_link_instead_of_bytes_is_not_followed(store: Store):
 @pytest.mark.asyncio
 async def test_generator_errors_are_sentences(store: Store):
     generator, _ = _generator(recorder=Recorder(answer={"detail": "out of memory"}, status=500))
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     with pytest.raises(GenerationError, match="refused \\(500\\)"):
         await create(store, generator, sid, "A lighthouse")
     garbage = Recorder(answer={"images": [base64.b64encode(b"not an image").decode()]})
@@ -169,11 +169,11 @@ async def test_generator_errors_are_sentences(store: Store):
 
 
 def test_the_standard_is_folded_into_the_prompt(store: Store):
-    sid = store.create_session(design="zine")["id"]
+    sid = store.create_session(mode="design", design="zine")["id"]
     shaped = styled_prompt(store, sid, "A market street")
     assert shaped.startswith("A market street. In a Zine visual style")
     assert "#FF48B0" in shaped
-    plain = store.create_session()["id"]
+    plain = store.create_session(mode="design")["id"]
     assert styled_prompt(store, plain, "A market street") == "A market street"
 
 
@@ -183,7 +183,7 @@ def test_the_standard_is_folded_into_the_prompt(store: Store):
 @pytest.mark.asyncio
 async def test_the_tool_labels_its_pictures_everywhere(store: Store):
     generator, _ = _generator()
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     said = await GenerateImage(store, generator).use(session=sid, prompt={"text": "A harbour"})
     image_id = said.split()[1]
     assert image_id.startswith("img_")
@@ -243,7 +243,7 @@ def _orchestrator(store, generator):
 async def test_a_remote_generator_is_always_asked_about(store: Store):
     generator, recorder = _generator("https://images.example.com")
     orch = _orchestrator(store, generator)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     frames = []
     async for frame in orch.run_turn(sid, "Make a picture"):
         frames.append(frame)
@@ -259,7 +259,7 @@ async def test_a_remote_generator_is_always_asked_about(store: Store):
 async def test_a_local_generator_just_runs(store: Store):
     generator, recorder = _generator("http://127.0.0.1:7860")
     orch = _orchestrator(store, generator)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined = "".join([f async for f in orch.run_turn(sid, "Make a picture")])
     assert "event: skill_approval" not in joined
     assert len(recorder.requests) == 1 and len(store.session_images(sid)) == 1

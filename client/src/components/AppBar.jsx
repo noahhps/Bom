@@ -12,7 +12,11 @@ import { Icon } from "./Icon";
  * puts its Home and Code: Home is conversation -- chats, quick asks and the
  * agents you keep talking to -- and Studio the longer work, designs and code,
  * with its own conversations and projects. Which kind of design-or-code a
- * new Studio conversation is, is chosen in its composer. */
+ * new Studio conversation is, is chosen in its composer.
+ *
+ * Studio is opt-in (Settings > General). Bom is for getting work done with a
+ * small local model, and decks and codebases are the work it is worst at; with
+ * Studio off there is only Home, and so no switch to draw. */
 export const SPACES = [
   { id: "home", label: "Home", icon: "home" },
   { id: "studio", label: "Studio", icon: "code" },
@@ -25,6 +29,7 @@ export function AppBar({
   onSettings,
   space = "home",
   onSpace,
+  studio = false,
 }) {
   return (
     <header className="appbar" data-tauri-drag-region>
@@ -38,6 +43,7 @@ export function AppBar({
       >
         <Icon name="sidebar" filled={sidebarOpen} />
       </button>
+      {studio ? (
       <div className="segmented appbar-spaces" role="tablist" aria-label="Space">
         {SPACES.map((item) => (
           <button
@@ -53,6 +59,7 @@ export function AppBar({
           </button>
         ))}
       </div>
+      ) : null}
       <div className="appbar-fill" data-tauri-drag-region />
       <button
         type="button"

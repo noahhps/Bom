@@ -12,8 +12,9 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
 |---------|-------------|
 | **Local inference** | Uses Ollama to run models such as Mistral, Llama‑2, or any GGUF/ggml weights directly on your CPU/GPU.
 | **Tauri + React UI** | A responsive desktop app that looks and feels like a native application.
-| **Agent templates** | Built‑in agents for coding, research, analysis, etc.
-| **Design & work tools** | A Design tab that opens design conversations, plus slide decks and live spreadsheets in the canvas panel, styled to a design.md standard you pick.
+| **Messages** | Conversations laid out like a messenger: write to Bom or one of your agents, or start a group chat with several of them.
+| **Office agents** | Ready-made agents for everyday work (Secretary, Analyst, Researcher, Writer, Clerk, Planner), each with the short toolbox its job needs.
+| **Studio (opt-in)** | Design and code workspaces: decks, wireframes, pages and code projects. Off by default; turn it on in **Settings → General**.
 | **Safety sandbox** | Built‑in execution sandboxing.
 
 ## 📥 Installation
@@ -38,6 +39,17 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
    ```
    The Tauri window will launch and you can start chatting.
 
+
+### Messages and group chats
+Bom is built for everyday work on a small local model: the calendar, reminders, drafting, spreadsheets, paperwork and research. So the home screen is **Messages**.
+
+Each agent has **one conversation**, like a contact in a messenger. Writing to an agent (the pencil, or **Message** on the Agents page) always opens that conversation and carries it on. The server enforces this too, and an agent's scheduled tasks post into it, so the Secretary's reminder arrives where you talk to the Secretary. If older builds left an agent with several conversations, the server folds them into the newest on its first start, keeping every message. It saves a copy of the database to `data/backups/` first.
+
+**Conversations with more than one agent** are created as often as you like, each named by its topic. Press **New group** (or put two or more agents on the To: line; the ⊕ adds another) and the first message makes the group. If a group with exactly those agents already exists, it's offered under the To: line so you can carry it on instead. Chats with Bom itself work the same way.
+
+In a group, one member answers each message: whoever you @-mention (`@Analyst`), everyone for `@everyone`, and otherwise whoever answered last. Each answer is a full turn run as that agent, with its instructions and its tools. The others' replies reach it as messages from them, not as its own words. Add or remove members from the conversation's details (click the names at the top).
+
+Each ready-made agent gets a short list of tools rather than all of them, because a small model choosing from a dozen tools picks the wrong one far less often than one choosing from forty. `@connectors` in an agent's skill list means every connected MCP server's tools, so the Secretary can reach the mail or calendar server you connect later. The design tools (decks, wireframes, design checks, image generation) and the shell are offered only in Studio's design conversations, never in a chat.
 
 ### More model providers
 Besides Ollama, Anthropic and OpenRouter, **Settings → Models → Add a provider** connects OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Cerebras, Together, Fireworks and Azure OpenAI. It also connects servers you run yourself (LM Studio, vLLM, llama.cpp, Jan) and any other OpenAI-compatible endpoint. Keys are checked before they're saved, and you set the order Auto falls back in. See [docs/providers.md](docs/providers.md).

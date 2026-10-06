@@ -48,6 +48,24 @@ def _design_detail(kind: str, content: str) -> str:
 # Everything about an attachment except the bytes.
 _META_COLUMNS = "id, message_id, kind, name, mime, size, created_at"
 
+# How much of the latest message the conversation list is sent: two lines of
+# a sidebar row, with room to spare for the ellipsis.
+PREVIEW_CHARS = 140
+
+_LINKS = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}[-:|\s]*$", re.M)
+_LINE_MARKS = re.compile(r"^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)", re.M)
+_INLINE_MARKS = re.compile(r"\*\*|__|`+|~~")
+
+
+def _plain_preview(text: str) -> str:
+    """Markdown as the words it marks up, on one line."""
+    text = _LINKS.sub(r"\1", text)
+    text = _TABLE_RULE.sub(" ", text)
+    text = _LINE_MARKS.sub("", text)
+    text = _INLINE_MARKS.sub("", text).replace("|", " ")
+    return " ".join(text.split())
+
 
 @dataclass
 class StoredAttachment:
@@ -620,14 +638,29 @@ class Store:
             """
             SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id,
                    s.agent_id, s.theme, s.mode, s.design, s.workspace,
-                   (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+                   (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count,
+                   (SELECT substr(m.content, 1, 600) FROM messages m
+                     WHERE m.session_id = s.id AND m.role IN ('user', 'assistant')
+                       AND m.content != ''
+                     ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS preview
             FROM sessions s
             ORDER BY s.updated_at DESC
             LIMIT ?
             """,
             (limit,),
         )
-        return [dict(row) for row in rows]
+        groups = self.members_by_session()
+        listed = []
+        for row in rows:
+            session = dict(row)
+            # A line of the latest message, as a messenger's list shows it --
+            # the markdown taken off and the whitespace folded, so a reply that
+            # opens on a heading or a table still reads as a sentence.
+            preview = _plain_preview(session.get("preview") or "")
+            session["preview"] = preview[:PREVIEW_CHARS] or None
+            session["members"] = groups.get(session["id"], [])
+            listed.append(session)
+        return listed
 
     def get_session(self, session_id: str) -> dict | None:
         row = self.db.query_one("SELECT * FROM sessions WHERE id = ?", (session_id,))
@@ -2063,6 +2096,148 @@ class Store:
         existed = self.get_design(design_id) is not None
         self.db.execute("DELETE FROM designs WHERE id = ?", (design_id,))
         return existed
+
+    # -- group chats ------------------------------------------------------
+    #
+    # A group is its members in the order they were added. A conversation
+    # with fewer than two is not a group, whatever rows it has: the client
+    # and the orchestrator both read "two or more" as the test.
+
+    def session_members(self, session_id: str) -> list[str]:
+        rows = self.db.query(
+            "SELECT agent_id FROM session_members WHERE session_id = ? ORDER BY position",
+            (session_id,),
+        )
+        return [row["agent_id"] for row in rows]
+
+    def members_by_session(self) -> dict[str, list[str]]:
+        groups: dict[str, list[str]] = {}
+        for row in self.db.query(
+            "SELECT session_id, agent_id FROM session_members ORDER BY session_id, position"
+        ):
+            groups.setdefault(row["session_id"], []).append(row["agent_id"])
+        return groups
+
+    def set_session_members(self, session_id: str, agent_ids: list[str]) -> list[str]:
+        """Replace a conversation's group. Duplicates are dropped, order kept."""
+        unique = list(dict.fromkeys(agent_ids))
+        with self.db.transaction() as conn:
+            conn.execute("DELETE FROM session_members WHERE session_id = ?", (session_id,))
+            conn.executemany(
+                "INSERT INTO session_members (session_id, agent_id, position) VALUES (?, ?, ?)",
+                [(session_id, agent_id, index) for index, agent_id in enumerate(unique)],
+            )
+        return unique
+
+    def agent_conversation(self, agent_id: str) -> str | None:
+        """An agent's one conversation with the user: its chat outside any group.
+
+        Each agent has a single conversation, the way a contact has a single
+        thread in a messenger. Builds before this one could start several, so
+        where more than one exists the newest is the one that carries on; the
+        client shows the older ones above it as earlier parts of the same
+        thread.
+        """
+        row = self.db.query_one(
+            """
+            SELECT s.id FROM sessions s
+            WHERE s.agent_id = ? AND COALESCE(s.mode, 'chat') = 'chat'
+              AND NOT EXISTS (SELECT 1 FROM session_members g WHERE g.session_id = s.id)
+            ORDER BY s.updated_at DESC, s.rowid DESC
+            LIMIT 1
+            """,
+            (agent_id,),
+        )
+        return row["id"] if row else None
+
+    def _agent_chats(self) -> dict[str, list[str]]:
+        """Every agent's chats outside a group, newest first."""
+        rows = self.db.query(
+            """
+            SELECT s.id, s.agent_id FROM sessions s
+            WHERE s.agent_id IS NOT NULL AND COALESCE(s.mode, 'chat') = 'chat'
+              AND NOT EXISTS (SELECT 1 FROM session_members g WHERE g.session_id = s.id)
+            ORDER BY s.updated_at DESC, s.rowid DESC
+            """
+        )
+        chats: dict[str, list[str]] = {}
+        for row in rows:
+            chats.setdefault(row["agent_id"], []).append(row["id"])
+        return chats
+
+    def agents_with_several_conversations(self) -> dict[str, list[str]]:
+        return {agent: ids for agent, ids in self._agent_chats().items() if len(ids) > 1}
+
+    def merge_sessions(self, keep: str, others: list[str]) -> None:
+        """Fold `others` into `keep`: their messages, canvases, pictures and
+        events become `keep`'s, and they are gone.
+
+        The messages keep their ids, rowids, words and times -- only which
+        conversation they belong to changes -- so the search index over them
+        is still right and is left alone: its update trigger is suspended for
+        the move and put back exactly as it was. `keep`'s compaction is
+        dropped, being a summary of a history that is no longer the whole of
+        it; the next turn compacts again if it needs to.
+        """
+        others = [other for other in others if other != keep]
+        if not others:
+            return
+        trigger = self.db.query_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"
+        )
+        with self.db.transaction() as conn:
+            if trigger:
+                conn.execute("DROP TRIGGER messages_au")
+            for other in others:
+                for table in ("messages", "canvases", "images", "calendar_events"):
+                    conn.execute(
+                        f"UPDATE {table} SET session_id = ? WHERE session_id = ?", (keep, other)
+                    )
+                for column in ("last_session_id", "origin_session_id"):
+                    conn.execute(
+                        f"UPDATE scheduled_tasks SET {column} = ? WHERE {column} = ?", (keep, other)
+                    )
+                conn.execute("DELETE FROM sessions WHERE id = ?", (other,))
+            conn.execute("DELETE FROM compactions WHERE session_id = ?", (keep,))
+            # The kept conversation moved last when the latest of them did.
+            conn.execute(
+                "UPDATE sessions SET updated_at = MAX(updated_at, "
+                "COALESCE((SELECT MAX(created_at) FROM messages WHERE session_id = ?), 0)) "
+                "WHERE id = ?",
+                (keep, keep),
+            )
+            if trigger:
+                conn.execute(trigger["sql"])
+
+    def consolidate_agent_conversations(self) -> int:
+        """Give every agent one conversation, folding any others into its newest.
+
+        Builds before this one started a new conversation with an agent each
+        time; an agent has one now. Returns how many were folded in.
+        """
+        folded = 0
+        for ids in self.agents_with_several_conversations().values():
+            self.merge_sessions(ids[0], ids[1:])
+            folded += len(ids) - 1
+        return folded
+
+    def set_message_author(self, message_id: str, agent_id: str) -> None:
+        self.db.execute(
+            "INSERT OR REPLACE INTO message_authors (message_id, agent_id) VALUES (?, ?)",
+            (message_id, agent_id),
+        )
+
+    def message_authors(self, session_id: str) -> dict[str, str]:
+        """Which agent wrote each assistant row of a conversation, by message id."""
+        rows = self.db.query(
+            """
+            SELECT a.message_id, a.agent_id FROM message_authors a
+            JOIN messages m ON m.id = a.message_id
+            WHERE m.session_id = ?
+            """,
+            (session_id,),
+        )
+        return {row["message_id"]: row["agent_id"] for row in rows}
 
     def session_agent(self, session_id: str) -> StoredAgent | None:
         """The agent a conversation is assigned to, if any."""

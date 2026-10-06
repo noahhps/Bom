@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "node test/reveal.test.mjs && node test/motion.test.mjs && node test/sheet.test.mjs && node test/plaintext.test.mjs && node test/wireframe.test.mjs && node test/filepreview.test.mjs && node test/timeline.test.mjs && node test/relay.test.mjs"
+    "test": "node test/reveal.test.mjs && node test/motion.test.mjs && node test/sheet.test.mjs && node test/plaintext.test.mjs && node test/wireframe.test.mjs && node test/filepreview.test.mjs && node test/timeline.test.mjs && node test/relay.test.mjs && node test/threads.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

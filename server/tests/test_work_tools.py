@@ -118,7 +118,7 @@ def test_advice_flags_what_a_designer_would():
 
 @pytest.mark.asyncio
 async def test_write_slides_makes_and_replaces_a_slides_canvas(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     skill = WriteSlides(store)
     said = await skill.use(session=sid, title="Pitch", slides=[{"title": "Hello"}])
     assert "Created the deck 'Pitch' (1 slide)" in said
@@ -148,7 +148,7 @@ def test_column_letters_round_trip():
 
 @pytest.mark.asyncio
 async def test_write_sheet_coerces_numbers_and_keeps_formulas(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     said = await WriteSheet(store).use(
         session=sid,
         title="Budget",
@@ -170,14 +170,14 @@ async def test_write_sheet_coerces_numbers_and_keeps_formulas(store: Store):
 
 @pytest.mark.asyncio
 async def test_a_sheet_without_formats_is_nudged(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     said = await WriteSheet(store).use(session=sid, title="T", columns=["a"], rows=[["x"]])
     assert "pass `formats`" in said
 
 
 @pytest.mark.asyncio
 async def test_edit_sheet_sets_appends_and_deletes(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     await WriteSheet(store).use(
         session=sid, title="T", columns=["Name", "Qty"], rows=[["a", 1], ["b", 2]],
         formats=["text", "integer"],
@@ -200,7 +200,7 @@ async def test_edit_sheet_sets_appends_and_deletes(store: Store):
 
 @pytest.mark.asyncio
 async def test_edit_sheet_refuses_what_is_not_a_sheet(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     store.create_canvas(sid, "Notes", content="hi")
     assert "not a sheet" in await EditSheet(store).use(session=sid, title="Notes", cells={"A2": 1})
     assert "no sheet called" in await EditSheet(store).use(session=sid, title="Nope")
@@ -211,7 +211,7 @@ async def test_edit_sheet_refuses_what_is_not_a_sheet(store: Store):
 
 @pytest.mark.asyncio
 async def test_write_canvas_points_decks_and_sheets_at_their_tools(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     canvas = WriteCanvas(store)
     assert "write_slides" in await canvas.use(session=sid, title="x", content="", kind="slides")
     assert "write_sheet" in await canvas.use(session=sid, title="x", content="", kind="sheet")
@@ -302,7 +302,7 @@ DECK = ("write_slides", {"title": "Pitch", "slides": [{"title": "Hello"}]})
 @pytest.mark.asyncio
 async def test_building_a_deck_without_asking_asks_first(store: Store):
     orch = _orchestrator(store, [DECK])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined, asked = await _run(orch, sid, "Make me a pitch deck", answer="swiss")
 
     assert len(asked) == 1 and asked[0]["before"] == "write_slides"
@@ -319,7 +319,7 @@ async def test_building_a_deck_without_asking_asks_first(store: Store):
 async def test_a_custom_standard_picked_late_asks_for_a_rewrite(store: Store):
     mine = store.create_design("House", "# House\n\nNavy and cream, serif body.")
     orch = _orchestrator(store, [DECK])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     joined, _ = await _run(orch, sid, "Make me a pitch deck", answer=mine.id)
     assert "Navy and cream" in joined
     assert "Call write_slides again now with the same title" in joined
@@ -327,7 +327,7 @@ async def test_a_custom_standard_picked_late_asks_for_a_rewrite(store: Store):
 
 @pytest.mark.asyncio
 async def test_a_conversation_is_asked_once(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     orch = _orchestrator(store, [DECK])
     _, asked = await _run(orch, sid, "Deck please", answer="memo")
     assert len(asked) == 1
@@ -344,7 +344,7 @@ async def test_a_conversation_is_asked_once(store: Store):
 
 @pytest.mark.asyncio
 async def test_change_puts_the_list_back(store: Store):
-    sid = store.create_session(design="memo")["id"]
+    sid = store.create_session(mode="design", design="memo")["id"]
     orch = _orchestrator(store, [("ask_for_design", {"change": True})])
     _, asked = await _run(orch, sid, "Try a different look", answer="zine")
     assert len(asked) == 1
@@ -353,7 +353,7 @@ async def test_change_puts_the_list_back(store: Store):
 
 @pytest.mark.asyncio
 async def test_declining_is_remembered_too(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     orch = _orchestrator(store, [DECK])
     orch.choices = Choices(timeout=0.05)
     _, asked = await _run(orch, sid, "Deck")
@@ -367,7 +367,7 @@ async def test_declining_is_remembered_too(store: Store):
 
 @pytest.mark.asyncio
 async def test_code_and_prose_never_ask(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     orch = _orchestrator(
         store,
         [("write_canvas", {"title": "s", "content": "print(1)", "kind": "code"})],
@@ -380,7 +380,7 @@ async def test_code_and_prose_never_ask(store: Store):
 
 @pytest.mark.asyncio
 async def test_the_gate_respects_the_chooser_being_switched_off(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     orch = _orchestrator(store, [DECK])
     orch.registry.set_enabled("ask_for_design", False)
     _, asked = await _run(orch, sid, "Deck")
@@ -493,7 +493,7 @@ def test_a_deck_with_wrapped_fields_stores_the_words():
 
 @pytest.mark.asyncio
 async def test_tools_survive_a_missing_or_wrapped_title(store: Store):
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     said = await WriteSlides(store).use(session=sid, slides=[{"title": "Opening"}])
     assert "'Opening'" in said
     said = await WriteSheet(store).use(
@@ -526,7 +526,7 @@ async def test_tools_survive_a_missing_or_wrapped_title(store: Store):
 @pytest.mark.asyncio
 async def test_a_wrapped_standard_name_still_matches(store: Store):
     orch = _orchestrator(store, [("ask_for_design", {"name": {"name": "Zine"}})])
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     _, asked = await _run(orch, sid, "Use the zine one")
     assert asked == []
     assert store.session_design(sid) == "zine"

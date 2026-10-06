@@ -104,6 +104,8 @@ export const Message = memo(function Message({
   usage = null,
   sentAt,
   look = null,
+  // Who wrote this answer, in a group chat -- said first, above it.
+  sender = null,
 }) {
   // The answer in the order it happened: thinking, skills and words as they
   // came, rather than all the thinking, then all the skills, then the words.
@@ -143,6 +145,7 @@ export const Message = memo(function Message({
   return (
     <div className="turn-answer">
       <div className="margin">
+        {sender ? <span className="turn-sender">{sender}</span> : null}
         <SentAt at={sentAt} />
         {model ? (
           <>

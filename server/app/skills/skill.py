@@ -144,6 +144,11 @@ class Pictured(str):
 #: design and device-file tools, which a codebase has its own versions of.
 NOT_CODE = frozenset({"chat", "design"})
 CODE_ONLY = frozenset({"code"})
+#: Offered only in a design conversation, in Studio: decks, wireframes, the
+#: design checks and image generation. An ordinary chat is for getting work
+#: done with a small local model, and every tool on its shelf is one more it
+#: can reach for wrongly -- so the studio's tools stay in the studio.
+STUDIO = frozenset({"design"})
 
 
 class Touched(str):

@@ -8,51 +8,60 @@ import { Icon } from "./Icon";
  * in the composer, so a recommendation never becomes a dead-end label.
  *
  * The recommendations are deliberately grounded in capabilities this build
- * exposes: web research, analysis, code, files, canvas work, and memory.
+ * exposes, and in the office work it is for: the calendar, drafting, data,
+ * paperwork, research and files.
  * A card that promises something the server cannot do is worse than no card.
  */
 
 const RECOMMENDED = [
   {
     kind: "Skill",
-    icon: "search",
-    label: "Research",
-    title: "Research a question",
-    description: "Search the web for current facts, sources, and context.",
-    prompt: "Research this question and include the most useful sources: ",
+    icon: "calendar",
+    label: "Plan my week",
+    title: "Plan my week",
+    description: "Read the calendar, find the gaps, and put what matters in them.",
+    prompt: "Look at my calendar for this week and help me fit these in: ",
+  },
+  {
+    kind: "Skill",
+    icon: "mail",
+    label: "Draft a reply",
+    title: "Draft an email or message",
+    description: "Write it in your voice, in a canvas you can edit before it goes.",
+    prompt: "Draft a reply to this, friendly and short:\n\n",
   },
   {
     kind: "Skill",
     icon: "chart",
     label: "Analyze data",
-    title: "Analyze a dataset",
-    description: "Find patterns, compare segments, and explain what changed.",
-    prompt: "Analyze this dataset and call out the most important patterns and anomalies:\n\n",
+    title: "Analyze a spreadsheet",
+    description: "Compute from the numbers, then explain what changed and why.",
+    prompt: "Analyze the attached spreadsheet and call out the most important patterns and anomalies.",
+  },
+  {
+    kind: "Tool",
+    icon: "sheet",
+    label: "Make a table",
+    title: "Turn paperwork into a table",
+    description: "Receipts, invoices and forms become rows you can total and sort.",
+    prompt: "Turn the attached documents into one table with a row each, and total the amounts.",
   },
   {
     kind: "Skill",
-    icon: "code",
-    label: "Write code",
-    title: "Review or write code",
-    description: "Debug an issue, explain a function, or shape a clean implementation.",
-    prompt: "Help me with this code. Explain the issue and suggest a clear fix:\n\n",
+    icon: "search",
+    label: "Research",
+    title: "Research a question",
+    description: "Search the web for current facts, and say where each came from.",
+    prompt: "Research this question and include the most useful sources: ",
   },
   {
     kind: "Tool",
     icon: "attachment",
     label: "Use a file",
-    title: "Work with a file",
-    description: "Attach a document, image, or spreadsheet and work from its contents.",
-    prompt: "Help me understand and work with the attached file. Start with a concise summary.",
+    title: "Summarize a document",
+    description: "Attach a PDF, a contract or notes and get the short version.",
+    prompt: "Summarize the attached document: the main points, any dates or amounts, and what needs doing.",
   },
-  {
-    kind: "Tool",
-    icon: "canvas",
-    label: "Draft on canvas",
-    title: "Draft on a canvas",
-    description: "Turn an idea into a plan, document, or reusable working draft.",
-    prompt: "Create a working draft for this idea, with a clear structure and next steps:\n\n",
-  }
 ];
 
 /* Above the composer. The greeting belongs on the side of the box the eye

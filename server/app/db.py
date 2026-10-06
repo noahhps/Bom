@@ -727,6 +727,33 @@ MIGRATIONS: list[str] = [
       updated_at  INTEGER NOT NULL
     );
     """,
+    # 28 -- group chats.
+    #
+    # A conversation with two or more agents in it, and which agent wrote each
+    # answer. Both are tables of their own rather than columns on `sessions`
+    # and `messages`: older builds read those rows with `SELECT *` into fixed
+    # dataclasses, and a database opened by this one must still open there.
+    #
+    # `session_members` is the group, in the order it was made. A one-to-one
+    # conversation has no rows here; its agent is `sessions.agent_id`, which
+    # in a group is whoever answered last. `message_authors` says who spoke
+    # for an assistant row; a row without one was the default assistant, or
+    # was written before this table existed.
+    """
+    CREATE TABLE session_members (
+      session_id  TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      position    INTEGER NOT NULL,
+      PRIMARY KEY (session_id, agent_id)
+    );
+
+    CREATE INDEX idx_session_members_agent ON session_members(agent_id);
+
+    CREATE TABLE message_authors (
+      message_id  TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE
+    );
+    """,
 ]
 
 

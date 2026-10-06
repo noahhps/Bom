@@ -156,7 +156,7 @@ async def _route(provider):
 @pytest.mark.asyncio
 async def test_the_turn_stops_asks_and_uses_the_answer(store: Store):
     orch = _orchestrator(store)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
 
     frames: list[str] = []
     async for frame in orch.run_turn(sid, "Write me a report"):
@@ -182,7 +182,7 @@ async def test_an_unanswered_question_lets_the_turn_carry_on(store: Store):
     # Nobody is going to answer, so the question should take its default
     # rather than hold the turn open or kill it.
     orch.choices = Choices(timeout=0.05)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
 
     joined = "".join([f async for f in orch.run_turn(sid, "Write me a report")])
     assert "did not choose" in joined
@@ -271,7 +271,7 @@ def test_the_readers_own_standard_wins_over_a_preset_of_the_same_name(store: Sto
 async def test_naming_a_standard_skips_the_question_entirely(store: Store):
     """The whole point: they already answered, so nothing is asked."""
     orch = _orchestrator(store, {"name": "brutalist web design.md"})
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
 
     frames = [f async for f in orch.run_turn(sid, "Rewrite it brutalist")]
     joined = "".join(frames)
@@ -286,7 +286,7 @@ async def test_naming_a_standard_skips_the_question_entirely(store: Store):
 async def test_a_name_that_matches_nothing_falls_back_to_the_list(store: Store):
     """Better than an apology: show what there actually is, and say why."""
     orch = _orchestrator(store, {"name": "the one my old designer made"})
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
 
     frames: list[str] = []
     async for frame in orch.run_turn(sid, "Use that one"):
@@ -308,7 +308,7 @@ async def test_the_model_is_told_these_are_not_files(store: Store):
     """The description is the only thing standing between a named standard and
     a read_file call, so it is worth a test of its own."""
     orch = _orchestrator(store)
-    sid = store.create_session()["id"]
+    sid = store.create_session(mode="design")["id"]
     orch.choices = Choices(timeout=0.05)
     async for _ in orch.run_turn(sid, "Write me a report"):
         pass

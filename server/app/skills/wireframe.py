@@ -28,7 +28,7 @@ import re
 from ..design_presets import clean_theme
 from ..store import Store
 from .args import as_dict, plain_text
-from .skill import NOT_CODE, Skill
+from .skill import STUDIO, Skill
 from .slides import save_canvas
 
 KIND = "wireframe"
@@ -402,7 +402,7 @@ LAYER_SCHEMA = {
 
 class WriteWireframe(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     surfaces = "canvas"
     wants_session = True
     themed = True
@@ -508,7 +508,7 @@ class WriteWireframe(Skill):
 
 class WireframeToSlides(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     surfaces = "canvas"
     wants_session = True
 
@@ -1153,7 +1153,7 @@ def _apply_one(wf: _Doc, name: str, item: dict):
 
 class EditWireframe(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     surfaces = "canvas"
     wants_session = True
 

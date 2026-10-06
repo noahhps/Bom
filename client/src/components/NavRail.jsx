@@ -36,10 +36,13 @@ const LIST_KEY = "unified-llm-rail-list-open";
    see AppBar.jsx). Skills is in both, being what the model can do wherever
    it is asked. */
 const DESTINATIONS = {
+  // Home's conversations are Messages, whose own list sits beside the thread
+  // the way a messenger's does -- so here it is a page, not a fold.
   home: [
+    { id: "chat", label: "Messages", icon: "chat_bubble" },
+    { id: "agents", label: "Agents", icon: "agents" },
     { id: "projects", label: "Projects", icon: "folder" },
     { id: "skills", label: "Skills", icon: "skills" },
-    { id: "agents", label: "Agents", icon: "agents" },
   ],
   studio: [
     { id: "projects", label: "Projects", icon: "folder" },
@@ -383,10 +386,10 @@ export function NavRail({
             type="button"
             className="navrail-start"
             onClick={onNewSession}
-            title={space === "studio" ? "New design or code session" : "New chat"}
+            title={space === "studio" ? "New design or code session" : "New message"}
           >
-            <Icon name="plus" />
-            <Label label={space === "studio" ? "New session" : "New chat"} />
+            <Icon name={space === "studio" ? "plus" : "pen"} />
+            <Label label={space === "studio" ? "New session" : "New message"} />
           </button>
 
           {DESTINATIONS[space].map((destination) => (
@@ -403,13 +406,15 @@ export function NavRail({
           ))}
 
           {/* The line between the app's pages and the conversations: the
-              pages are places you go, the list below is things you made. */}
-          <hr className="navrail-rule" aria-hidden="true" />
+              pages are places you go, the list below is things you made.
+              Studio's only: Home's list is on the Messages screen. */}
+          {space === "studio" ? <hr className="navrail-rule" aria-hidden="true" /> : null}
 
           {/* Every conversation -- chats, designs and code sessions -- in one
               list, newest first. A design or a code session wears its glyph at
               the left, so the three can be told apart at a glance; which kind
               a new one is gets chosen in its composer. */}
+          {space === "studio" ? (
           <RailGroup
             id="chat"
             label={space === "studio" ? "Designs & code" : "Conversations"}
@@ -463,6 +468,7 @@ export function NavRail({
               />
             </ul>
           </RailGroup>
+          ) : null}
 
         </div>
 

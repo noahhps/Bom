@@ -30,7 +30,7 @@ import re
 from ..design_presets import clean_theme
 from .args import _parse_wrapped, as_dict, plain_text
 from ..store import Store
-from .skill import NOT_CODE, Skill
+from .skill import STUDIO, Skill
 
 KIND = "slides"
 
@@ -440,7 +440,7 @@ def save_canvas(store: Store, session: str, title: str, content: str, kind: str)
 
 class WriteSlides(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     surfaces = "canvas"
     wants_session = True
     #: Styled from the conversation's design standard. The turn loop passes the
@@ -762,7 +762,7 @@ def apply_slide_ops(deck: dict, ops) -> tuple[list[str], list[str]]:
 
 class EditSlides(Skill):
     # A canvas, design or device tool: not offered in a code conversation.
-    modes = NOT_CODE
+    modes = STUDIO
     surfaces = "canvas"
     wants_session = True
 

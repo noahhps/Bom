@@ -359,6 +359,13 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
         method: "PUT",
         body: JSON.stringify({ agent_id: agentId }),
       }),
+    // The whole group, in order. Two or more is a group chat; one leaves a
+    // conversation with that agent alone.
+    setSessionMembers: (sessionId, agentIds) =>
+      json("/sessions/" + encodeURIComponent(sessionId) + "/members", {
+        method: "PUT",
+        body: JSON.stringify({ agent_ids: agentIds }),
+      }),
 
     // -- accents ---------------------------------------------------------
     // Three scopes, one body. `theme: null` clears a scope rather than
@@ -461,7 +468,17 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
       // folder, and the project a chat or design is filed in. The server
       // ignores all four once the session exists.
       // `make` is per message: the composer's Make menu, or null for auto.
-      { mode = null, design = null, workspace = null, projectId = null, make = null } = {},
+      // `members` starts a group chat (first message only); `replyAs` is who
+      // in a group answers a message that @-mentions nobody.
+      {
+        mode = null,
+        design = null,
+        workspace = null,
+        projectId = null,
+        make = null,
+        members = null,
+        replyAs = null,
+      } = {},
     ) =>
       request("/chat", {
         method: "POST",
@@ -480,6 +497,8 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
           workspace,
           project_id: projectId,
           make,
+          members,
+          reply_as: replyAs,
           // Sent every time, kept only the first time. This is the path that
           // matters most: the composer posts here with a null session_id to
           // start a conversation, so without it a new chat begun by typing --

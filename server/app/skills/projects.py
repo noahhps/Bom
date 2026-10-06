@@ -24,7 +24,10 @@ from .. import workspace as ws
 from ..store import Store
 from .args import plain_text
 from .canvas import paged
-from .skill import CODE_ONLY, Skill, Touched
+from .skill import CODE_ONLY, STUDIO, Skill, Touched
+
+# Offered where designs and code are worked on, and nowhere else.
+STUDIO_AND_CODE = STUDIO | CODE_ONLY
 
 
 def _flag(value, default: bool = True) -> bool:
@@ -143,6 +146,8 @@ class CreateCodeProject(Skill):
 
     wants_session = True
     surfaces = "projects"
+    # Studio's: a chat has no folder to start and no designs to start it from.
+    modes = STUDIO_AND_CODE
 
     def __init__(self, store: Store, settings) -> None:
         super().__init__(
@@ -229,6 +234,7 @@ class ListDesigns(Skill):
     """What the design projects hold."""
 
     wants_session = True
+    modes = STUDIO_AND_CODE
 
     def __init__(self, store: Store) -> None:
         super().__init__(

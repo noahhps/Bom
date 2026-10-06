@@ -462,7 +462,7 @@ button {
 @media (prefers-reduced-motion: no-preference) {
   :is(.btn, .btnp, .chip, .starter, .send, .effort button,
       .navrail-mark, .navrail-circle, .gate-submit, .accent, .agent-wear,
-      .agent-room-new):not(:disabled):active {
+      .msgs-compose, .msgs-who):not(:disabled):active {
     transform: var(--press);
     transition-duration: var(--dur-press);
   }
@@ -2323,7 +2323,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    being cut off at an edge. Never in the way of a click. On an empty,
    glassy screen the ground is transparent and the fade vanishes with it --
    there is nothing scrolling there to soften. */
-:is(.topbar, .agent-chat-head)::after {
+:is(.topbar, .msgs-head)::after {
   content: "";
   position: absolute;
   left: 0;
@@ -8767,36 +8767,41 @@ html:not([data-shell]) .screen[data-glass] {
 .agent-sheet-actions .spacer { flex: 1; }
 .agent-sheet .agents-error { margin: 0 28px 4px; }
 
-/* The Agents screen, as a messenger: your agents down the left as contacts,
-   the one you picked on the right as its single ongoing chat. The chat
-   column is `position: relative` because the composer floats over the foot
-   of the thread by anchoring to its nearest positioned ancestor -- without
-   this it would span the contacts too. */
-.screen[data-view="agent"] { background-image: none; }
-.agent-room {
+/* -- Messages (Messages.jsx) ------------------------------------------------
+ *
+ * The home screen, as a messenger: every conversation down the left, the open
+ * one on the right. The list is a heavier material than the sheet -- a
+ * structural region, set apart -- and the thread scrolls under a header that
+ * fades into it rather than being cut off by a line. The thread column is
+ * `position: relative` because the composer floats over its foot by
+ * anchoring to its nearest positioned ancestor; without it, the composer
+ * would span the list too. */
+.screen[data-view="messages"] { background-image: none; }
+.msgs {
   flex: 1;
   min-height: 0;
   display: flex;
 }
-.agent-room-side {
-  width: 280px;
+
+.msgs-side {
+  width: 300px;
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  padding: 16px 10px;
+  padding: 14px 8px 10px;
   border-right: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
-.agent-room-list-head {
+.msgs-side-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 4px 6px 12px;
+  padding: 2px 6px 0 12px;
 }
-.agent-room-heading { font: 700 var(--t-lg)/1.2 var(--font); color: var(--ink); }
-.agent-room-new {
+.msgs-heading { margin: 0; font: 700 var(--t-lg)/1.2 var(--font); color: var(--ink); }
+.msgs-compose {
   width: 32px;
   height: 32px;
   display: grid;
@@ -8804,68 +8809,162 @@ html:not([data-shell]) .screen[data-glass] {
   border-radius: 50%;
   color: var(--text-dim);
   background: rgba(var(--ink-rgb), 0.06);
-  transition: background var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
-.agent-room-new:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--ink); }
-@media (hover: hover) and (pointer: fine) {
-  .agent-room-new:hover { transform: scale(1.08); }
-}
-.agent-room-new[aria-pressed="true"] { background: var(--accent-field); color: var(--accent); }
-.agent-room-new svg { width: 16px; height: 16px; }
-.agent-room-empty { margin: 4px 12px; font-size: var(--t-sm); color: var(--text-faint); }
+.msgs-compose:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--ink); }
+.msgs-compose[aria-pressed="true"] { background: var(--accent-field); color: var(--accent); }
+.msgs-compose svg { width: 16px; height: 16px; }
 
-.agent-contacts {
+.msgs-search {
+  margin: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--text-faint);
+}
+.msgs-search:focus-within { box-shadow: 0 0 0 2px var(--accent-field); color: var(--text-dim); }
+.msgs-search svg { width: 14px; height: 14px; flex: none; }
+.msgs-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  outline: none;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+}
+.msgs-empty { margin: 10px 14px; font-size: var(--t-sm); line-height: 1.5; color: var(--text-faint); }
+
+.msgs-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 2px 0;
   overflow-y: auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-/* A contact: the agent, dressed, with its name and the last thing its chat
-   was about -- or, before the first message, what it is for. Room above the
-   avatar for a tall hat. */
-.agent-contact {
+.msgs-row-wrap { position: relative; }
+/* A conversation: who it is with, when it last moved, and a line of the last
+   thing said -- two lines of it, as a messenger gives. Room above the avatar
+   for a tall hat. */
+.msgs-row {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px 8px;
+  gap: 11px;
+  padding: 9px 10px 9px 8px;
   border-radius: var(--r-float);
   text-align: left;
   transition: background var(--dur-quick) ease;
 }
-.agent-contact:hover { background: rgba(var(--ink-rgb), 0.05); }
-/* The one you are talking to: the only coloured row, in its own accent. */
-.agent-contact[aria-current] { background: var(--accent-field); }
-.agent-contact-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.agent-contact-top { display: flex; align-items: baseline; gap: 8px; }
-.agent-contact-name {
+.msgs-row:hover { background: rgba(var(--ink-rgb), 0.05); }
+/* Pressed: it darkens at once, on the press rather than the release. A
+   full-width row that shrank would shove its text about. */
+.msgs-row:active { background: rgba(var(--ink-rgb), 0.09); transition-duration: 0s; }
+/* The one that is open: the only filled row, in the accent, as a
+   messenger marks it -- and its words go light to stay readable on it. */
+.msgs-row[aria-current] { background: var(--accent-fill); }
+.msgs-row[aria-current] :is(.msgs-row-name, .msgs-row-when, .msgs-row-line) { color: var(--on-accent); }
+.msgs-row[aria-current] .msgs-row-line { opacity: 0.86; }
+.msgs-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msgs-row-top { display: flex; align-items: baseline; gap: 8px; }
+.msgs-row-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 600 var(--t-md)/1.2 var(--font);
+  font: 600 var(--t-md)/1.25 var(--font);
   color: var(--ink);
 }
-.agent-contact-when {
+.msgs-row-when {
   flex: none;
-  font: 500 var(--t-xs)/1 var(--font);
+  font: 400 var(--t-xs)/1 var(--font);
   font-variant-numeric: tabular-nums;
   color: var(--text-faint);
 }
-.agent-contact-line {
+.msgs-row-line {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 2.6em;
   font: 400 var(--t-sm)/1.3 var(--font);
   color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+/* Delete, where the time was, once the row is reached for. */
+.msgs-row-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-faint);
+  background: var(--surface);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-quick) ease, color var(--dur-quick) ease;
+}
+.msgs-row-delete svg { width: 13px; height: 13px; }
+.msgs-row-delete:hover { color: var(--danger); }
+.msgs-row-wrap:is(:hover, :focus-within) .msgs-row-delete { opacity: 1; pointer-events: auto; }
+.msgs-row-wrap:is(:hover, :focus-within) .msgs-row-when { visibility: hidden; }
+/* On a touch screen there is no hover to reveal it: delete is in the
+   conversation's details instead, and the row keeps its time. */
+@media (hover: none) {
+  .msgs-row-delete { display: none; }
+  .msgs-row-wrap:is(:hover, :focus-within) .msgs-row-when { visibility: visible; }
 }
 
-.agent-room-main {
+/* A group's face: two of its members, the second tucked behind and above
+   the first. */
+.msgs-avatar-group {
+  position: relative;
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+}
+.msgs-avatar-group > .agent-avatar { position: absolute; }
+.msgs-avatar-back { top: 0; left: 0; opacity: 0.85; }
+.msgs-avatar-front { right: 0; bottom: 0; }
+
+/* Someone is writing a reply: three dots that rise in turn. Short, small
+   and only while it is true -- the reduced-motion rule stills them. */
+.msgs-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1.3em;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb), 0.08);
+}
+.msgs-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+  animation: msgs-typing 1.2s var(--ease-in-out) infinite;
+}
+.msgs-typing i:nth-child(2) { animation-delay: 0.15s; }
+.msgs-typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes msgs-typing {
+  0%, 60%, 100% { transform: none; opacity: 0.45; }
+  30% { transform: translateY(-2px); opacity: 1; }
+}
+
+.msgs-main {
   position: relative;
   flex: 1;
   min-width: 0;
@@ -8873,30 +8972,277 @@ html:not([data-shell]) .screen[data-glass] {
   display: flex;
   flex-direction: column;
 }
-/* Who you are talking to, heading the chat. */
-.agent-chat-head {
+
+/* Who the conversation is with -- or, for a new message, the "To:" line --
+   over the thread, which fades into it as it scrolls up. */
+.msgs-head {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px 10px 24px;
-  background: var(--ground);
   position: relative;
   z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 16px 8px;
+  background: var(--ground);
 }
-.agent-chat-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.agent-chat-name { font: 700 var(--t-md)/1.2 var(--font); color: var(--ink); }
-.agent-chat-tagline {
+.msgs[data-composing] .msgs-head { justify-content: flex-start; }
+.msgs-back { display: none; }
+.msgs-back svg { rotate: 90deg; }
+
+.msgs-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(520px, 100% - 120px);
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  transition: background var(--dur-quick) ease;
+}
+.msgs-who:hover,
+.msgs-who[aria-expanded="true"] { background: rgba(var(--ink-rgb), 0.06); }
+.msgs-who-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 var(--t-md)/1.2 var(--font);
+  color: var(--ink);
+}
+.msgs-who-count { flex: none; font: 400 var(--t-xs)/1 var(--font); color: var(--text-faint); }
+.msgs-who > svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--text-faint);
+  transition: rotate var(--dur-base) var(--ease-out);
+}
+.msgs-who[aria-expanded="true"] > svg { rotate: 180deg; }
+.msgs-head-tools {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  gap: 4px;
+}
+
+/* The details: grows down out of the name that opened it, and goes back the
+   same way. Critically damped -- it was asked for, not thrown -- so it
+   settles without a bounce. */
+.msgs-details {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 50%;
+  width: min(360px, calc(100% - 32px));
+  translate: -50% 0;
+  transform-origin: 50% 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--r-float);
+  background: var(--menu);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--elevation-float);
+  animation: msgs-pop var(--dur-settle) var(--ease-out);
+}
+@keyframes msgs-pop {
+  from { opacity: 0; transform: scale(0.96); }
+}
+.msgs-details-people,
+.msgs-details-add { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.msgs-details-people li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 6px;
+}
+.msgs-details-add button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--r-control);
+  font: 500 var(--t-sm)/1.2 var(--font);
+  color: var(--ink);
+  text-align: left;
+}
+.msgs-details-add button > span:not(.agent-avatar) { flex: 1; }
+.msgs-details-add button > svg { width: 14px; height: 14px; color: var(--accent); }
+.msgs-details-add button:hover { background: var(--accent-field); }
+.msgs-details-more { align-self: flex-start; }
+.msgs-details-delete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 8px 3px;
+  border-top: 1px solid var(--line-soft);
+  font: 500 var(--t-sm)/1.2 var(--font);
+  color: var(--danger);
+  text-align: left;
+}
+.msgs-details-delete svg { width: 14px; height: 14px; }
+.msgs-details-more svg { width: 14px; height: 14px; }
+
+/* Someone to pick: an avatar, the name, and what they are for. Shared by the
+   "To:" suggestions and the details. */
+.msgs-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.msgs-option-name { font: 600 var(--t-sm)/1.2 var(--font); color: var(--ink); }
+.msgs-option-line {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font: 400 var(--t-xs)/1.3 var(--font);
   color: var(--text-dim);
 }
-.agent-chat-head .btn { padding: 8px 13px; }
-.agent-chat-head .btn svg { width: 15px; height: 15px; }
 
-/* Adding agents, on the right when none is picked. */
+/* -- the "To:" line --------------------------------------------------------- */
+.msgs-to {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 8px;
+  cursor: text;
+}
+.msgs-to-label { font: 500 var(--t-sm)/1 var(--font); color: var(--text-faint); }
+.msgs-to-chips { display: contents; list-style: none; }
+.msgs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 4px;
+  border-radius: 999px;
+  background: var(--accent-field);
+  color: var(--accent);
+  font: 600 var(--t-sm)/1 var(--font);
+  animation: msgs-chip var(--dur-base) var(--ease-out);
+}
+@keyframes msgs-chip {
+  from { opacity: 0; transform: scale(0.85); }
+}
+.msgs-chip button {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: inherit;
+  opacity: 0.7;
+}
+.msgs-chip button:hover { opacity: 1; background: rgba(var(--ink-rgb), 0.08); }
+.msgs-chip button svg { width: 11px; height: 11px; }
+.msgs-to-field { position: relative; flex: 1; min-width: 140px; }
+.msgs-to-field input {
+  width: 100%;
+  height: 30px;
+  border: 0;
+  outline: none;
+  background: none;
+  font: 400 var(--t-md)/1 var(--font);
+  color: var(--ink);
+}
+.msgs-to-options {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  width: min(340px, 80vw);
+  max-height: 340px;
+  overflow-y: auto;
+  z-index: 9;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  border-radius: var(--r-float);
+  background: var(--menu);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--elevation-float);
+  transform-origin: 0 0;
+  animation: msgs-pop var(--dur-base) var(--ease-out);
+}
+.msgs-to-options button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--r-control);
+  text-align: left;
+}
+.msgs-to-options [aria-selected="true"] button { background: var(--accent-field); }
+
+/* An empty conversation's greeting: who it is with, in place of the app's. */
+.msgs-greeting .agent-avatar,
+.msgs-greeting .msgs-avatar-group { margin-right: 4px; }
+
+/* Who wrote an answer, in a group: first on the line above it. */
+.turn-sender {
+  font: 600 var(--t-sm)/1.6 var(--font);
+  color: var(--ink);
+}
+
+/* -- @-mentions in the composer --------------------------------------------- */
+.composer-mentions {
+  position: absolute;
+  left: 10px;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  min-width: 200px;
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  border-radius: var(--r-float);
+  background: var(--menu);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--elevation-float);
+  transform-origin: 0 100%;
+  animation: msgs-pop var(--dur-base) var(--ease-out);
+}
+.composer-mentions button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px 6px 6px;
+  border-radius: var(--r-control);
+  font: 500 var(--t-sm)/1.2 var(--font);
+  color: var(--ink);
+  text-align: left;
+}
+.composer-mentions [aria-selected="true"] button { background: var(--accent-field); }
+.composer-mention-all {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-field);
+  color: var(--accent);
+}
+.composer-mention-all svg { width: 13px; height: 13px; }
+
+/* Translucency asked to be solid. */
+@media (prefers-reduced-transparency: reduce) {
+  :is(.msgs-details, .msgs-to-options, .composer-mentions) {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* The Agents page: your agents and the ready-made ones. */
 .agent-gallery {
   flex: 1;
   min-height: 0;
@@ -8918,15 +9264,17 @@ html:not([data-shell]) .screen[data-glass] {
 .agent-gallery-head .btnp svg { width: 15px; height: 15px; }
 .agent-gallery-section { display: flex; flex-direction: column; gap: 12px; max-width: 1000px; }
 
-/* On a phone the contacts would leave the chat no room: with an agent open
-   they go, and the rail's Agents is the way back to them. With none open,
-   the contacts sit above the gallery rather than beside it. */
+/* On a phone the list and the thread take turns: the thread while one is
+   open, the list otherwise -- and back (the chevron) goes to the list. */
 @media (max-width: 900px) {
-  .agent-room { flex-direction: column; overflow-y: auto; }
-  .agent-room-side { width: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--line-soft); }
-  .agent-room:has(.agent-chat-head) .agent-room-side { display: none; }
-  .agent-room:not(:has(.agent-chat-head)) .agent-room-main { flex: none; }
-  .agent-gallery { overflow: visible; padding: 24px 16px 40px; }
+  .msgs-side { width: 100%; border-right: 0; }
+  .msgs-main { display: none; }
+  .msgs[data-open] .msgs-side { display: none; }
+  .msgs[data-open] .msgs-main { display: flex; }
+  .msgs-back { display: grid; }
+  .msgs:not([data-composing]) .msgs-head { justify-content: flex-start; }
+  .msgs-head-tools { right: 8px; }
+  .agent-gallery { padding: 24px 16px 40px; }
 }
 
 /* -- headings --------------------------------------------------------------
@@ -8947,8 +9295,8 @@ html:not([data-shell]) .screen[data-glass] {
   .page-head h1,
   .settings-head h2,
   .agent-sheet-name,
-  .agent-room-heading,
-  .agent-chat-name,
+  .msgs-heading,
+  .msgs-who-name,
   .body :is(h1, h2, h3)
 ) {
   font-family: var(--font-display);
@@ -8966,8 +9314,7 @@ html:not([data-shell]) .screen[data-glass] {
   .mcp-tag,
   .canvas-mode,
   .agents-preset,
-  .agents-section-head,
-  .agent-contact-when
+  .agents-section-head
 ) {
   font-family: var(--font-serif);
   font-style: italic;

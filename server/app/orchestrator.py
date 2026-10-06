@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from . import attachments as files
 from . import compaction
+from . import group
 from .approvals import (
     ALLOW_ALWAYS,
     ALLOW_ONCE,
@@ -260,6 +261,18 @@ class Orchestrator:
             )
             if agent.instructions and agent.instructions.strip():
                 prompt = f"{prompt}\n\n{agent.instructions.strip()}"
+            # And who else is in the room, when it is a group. Beside the
+            # persona for the same reason: it changes only when the speaker
+            # does, and the persona has changed then too.
+            members = self.store.session_members(session_id)
+            if len(members) > 1:
+                others = [
+                    found.name
+                    for found in (self.store.get_agent(a) for a in members if a != agent.id)
+                    if found
+                ]
+                if others:
+                    prompt = f"{prompt}\n\n{group.preamble(agent.name, others)}"
 
         # A design conversation's working method. In the stable prefix beside
         # the agent, and for the same reason: a conversation's mode is fixed
@@ -519,18 +532,22 @@ class Orchestrator:
             f"{markdown.strip()}{theme}"
         )
 
-    def _design_offered(self, allowed_skills: set[str] | None) -> bool:
+    def _design_offered(self, allowed_skills: set[str] | None, mode: str | None = None) -> bool:
         """Whether the design question can be put in this conversation at all.
 
-        Only when ask_for_design is switched on, and within an agent's subset
-        where there is one: a reader who switched the chooser off has said they
-        do not want to be asked, and a gate that asked anyway would be the
-        chooser by another name.
+        Only when ask_for_design is switched on, offered in this kind of
+        conversation (a design one -- a sheet made in a chat is not asked what
+        it should look like), and within an agent's subset where there is one:
+        a reader who switched the chooser off has said they do not want to be
+        asked, and a gate that asked anyway would be the chooser by another
+        name.
         """
         if self.registry is None:
             return False
         skill = self.registry.get("ask_for_design")
         if skill is None or not skill.enabled or not skill.available:
+            return False
+        if not _offered_in(skill, mode):
             return False
         return allowed_skills is None or "ask_for_design" in allowed_skills
 
@@ -817,13 +834,20 @@ class Orchestrator:
         think: ThinkingLevel | None = None,
         prefer: str | None = None,
         make: str | None = None,
+        reply_only: bool = False,
     ) -> AsyncIterator[str]:
         """Yield SSE frames for one turn.
 
         Frames: `meta` (ids, provider, model), `delta` (token), `done`, `error`.
+
+        `reply_only` answers the conversation as it stands without adding a
+        message from the user: the second and later members of a group chat
+        replying to the one message the user sent.
         """
-        user_message = self.store.add_message(session_id, "user", user_text)
-        for incoming in attached or ():
+        user_message = None
+        if not reply_only:
+            user_message = self.store.add_message(session_id, "user", user_text)
+        for incoming in (attached or ()) if user_message else ():
             self.store.add_attachment(
                 user_message.id,
                 kind=incoming.kind,
@@ -861,8 +885,14 @@ class Orchestrator:
         requested = pinned(make)
         choice: dict | None = None
         blocked: set[str] = set()
+        mode = self.store.session_mode(session_id)
         if requested and self.registry is not None:
-            offered = {name for name, _ in self.registry.enabled()}
+            # Offered here, not just switched on: a deck pinned in a chat, where
+            # the studio's tools are not on the shelf, is a pin the model
+            # cannot honour -- so it is said to be off rather than enforced.
+            offered = {
+                name for name, skill in self.registry.enabled() if _offered_in(skill, mode)
+            }
             if requested["tool"] in offered:
                 choice = requested
                 blocked = blocked_by(choice)
@@ -878,7 +908,23 @@ class Orchestrator:
             if agent and agent.parsed_skills() is not None
             else None
         )
-        mode = self.store.session_mode(session_id)
+        # "Every connector" in an agent's list stands for the MCP tools,
+        # whatever they are called today: a secretary should reach the mail
+        # and calendar servers the reader connects later, by name or not.
+        if allowed_skills is not None and group.CONNECTORS in allowed_skills and self.registry:
+            allowed_skills |= {
+                name for name, skill in self.registry.all() if getattr(skill, "server_name", None)
+            }
+        # In a group chat the other members' answers are not this agent's own
+        # words, so it hears them the way it hears the user: as messages to it,
+        # each opening with who said it.
+        if agent and len(self.store.session_members(session_id)) > 1:
+            history = group.as_heard_by(
+                history,
+                self.store.message_authors(session_id),
+                agent.id,
+                {a.id: a.name for a in self.store.list_agents()},
+            )
         tools = self._skill_schemas(allowed_skills, blocked, mode)
         # Whether this backend's model can look at a picture. A skill that
         # answers with one is offered only when it can; a picture sent to a
@@ -899,12 +945,17 @@ class Orchestrator:
             model=provider.model,
             provider=provider.name,
         )
+        if agent:
+            self.store.set_message_author(assistant.id, agent.id)
 
         yield _sse(
             "meta",
             {
-                "user_message_id": user_message.id,
+                "user_message_id": user_message.id if user_message else None,
                 "message_id": assistant.id,
+                # Who is answering. In a group chat a stream carries one answer
+                # per member who replies, each opening with its own `meta`.
+                "agent_id": agent.id if agent else None,
                 "provider": provider.name,
                 # What the reader calls it, for a connection they named
                 # ("Work gateway") rather than the service it speaks to.
@@ -1288,7 +1339,7 @@ class Orchestrator:
                             and skill_asked is not None
                             and skill_asked.wants_design(call.arguments)
                             and self.store.session_design(session_id) is None
-                            and self._design_offered(allowed_skills)
+                            and self._design_offered(allowed_skills, mode)
                         ):
                             request_id, waiter = self.choices.open()
                             yield _sse(

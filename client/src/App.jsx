@@ -4,9 +4,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentEditor } from "./components/AgentEditor";
-import { AgentGreeting, AgentsScreen } from "./components/AgentRoom";
 import { lookOf } from "./lib/accessories";
-import { AgentGallery } from "./components/Agents";
+import { AgentsPage } from "./components/Agents";
+import { MessagesScreen, ThreadGreeting } from "./components/Messages";
+import { BOM, findThread, isThread, membersOf, personOf } from "./lib/threads";
 import { AppBar } from "./components/AppBar";
 import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
@@ -64,6 +65,17 @@ const TOKEN_KEY = "unified-llm-token";
 const PIN_KEY = "unified-llm-rail-pinned";
 // Home or Studio, remembered on this device like the pinned rail.
 const SPACE_KEY = "bom.space";
+// Whether Studio -- designs and code -- is switched on, on this device. Off
+// unless someone turns it on: Bom is for everyday work with a small local
+// model, and Home is all of that.
+const STUDIO_KEY = "bom.studio";
+const studioSaved = () => {
+  try {
+    return localStorage.getItem(STUDIO_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
 // Which space a conversation belongs to: designs and code are Studio's.
 const spaceOf = (session) =>
   session && (session.mode === "design" || session.mode === "code") ? "studio" : "home";
@@ -114,20 +126,31 @@ export default function App() {
   // The space the rail is in -- Home (chats, agents) or Studio (designs and
   // code). It follows what is on screen (see the effect below); the switch at
   // the head of the rail moves it, and it is remembered for the next launch.
-  const [space, setSpace] = useState(() => {
+  const [studio, setStudioOn] = useState(studioSaved);
+  const setStudio = useCallback((on) => {
+    setStudioOn(on);
+    try {
+      localStorage.setItem(STUDIO_KEY, on ? "1" : "0");
+    } catch {
+      /* private window: Studio is simply not remembered */
+    }
+  }, []);
+  const [spacePick, setSpace] = useState(() => {
     try {
       return localStorage.getItem(SPACE_KEY) === "studio" ? "studio" : "home";
     } catch {
       return "home";
     }
   });
+  // With Studio off there is only Home, whatever was picked before.
+  const space = studio ? spacePick : "home";
   useEffect(() => {
     try {
-      localStorage.setItem(SPACE_KEY, space);
+      localStorage.setItem(SPACE_KEY, spacePick);
     } catch {
       /* private window: the space is simply not remembered */
     }
-  }, [space]);
+  }, [spacePick]);
   // What Studio starts as when there is nothing of its own to go back to:
   // whichever of design and code was picked last.
   const studioKind = useRef("design");
@@ -193,9 +216,13 @@ export default function App() {
   // sent. It rides on the first message; after that the conversation's own
   // row says where it is filed.
   const [newProjectId, setNewProjectId] = useState(null);
-  // On the Agents page: whose room is open, or null for the roster. The room
-  // runs the app's one conversation as that agent.
-  const [roomAgentId, setRoomAgentId] = useState(null);
+  // A new message being addressed: the people on its "To:" line, or null
+  // when no new message is being written (see addressTo).
+  const [composeTo, setComposeTo] = useState(null);
+  // The agents a new group chat is started with, sent with its first message.
+  const [newMembers, setNewMembers] = useState(null);
+  // A new message has been sent and its conversation is on its way.
+  const [composeSent, setComposeSent] = useState(false);
   // The customise sheet: null when shut, else `{ agent, initial }` -- the
   // stored agent being changed, or for a new one the preset it starts from.
   const [agentSheet, setAgentSheet] = useState(null);
@@ -323,47 +350,22 @@ export default function App() {
     design: newKind === "design" ? newDesign : null,
     workspace: newWorkspace,
     projectId: newProjectId,
+    members: newMembers,
   });
   const { setBadge, openSession, startNew } = chat;
 
-  // The agent whose room is on screen, if any. Looked up rather than stored,
-  // so deleting the agent drops back to the roster by itself.
-  const roomAgent =
-    view === "agents" && roomAgentId ? agents.agents.find((a) => a.id === roomAgentId) || null : null;
-  // A conversation is on screen: the chat screen, or an agent's chat -- which
-  // is the same conversation with the agent above it, canvas and all.
-  const conversing = talking || Boolean(roomAgent);
-
-  // Each agent's one chat: the latest conversation run as it (a code session
-  // aside, which lives in its editor). An agent is someone you keep talking
-  // to, so the Agents screen opens where you left off rather than listing
-  // conversations. Older ones from before an agent had a single chat stay in
-  // the main list as ordinary conversations.
-  const agentChats = useMemo(() => {
-    const chats = new Map();
-    for (const s of sessions.sessions) {
-      if (!s.agent_id || s.mode === "code") continue;
-      const was = chats.get(s.agent_id);
-      if (!was || (s.updated_at || 0) > (was.updated_at || 0)) chats.set(s.agent_id, s);
-    }
-    return chats;
-  }, [sessions.sessions]);
-  const agentChatIds = useMemo(
-    () => new Set([...agentChats.values()].map((s) => s.id)),
-    [agentChats],
-  );
-  // The main list, without the agents' chats -- those are on the Agents
-  // screen, the way a messenger's threads are not also in your inbox.
-  const plainSessions = useMemo(
-    () => sessions.sessions.filter((s) => !agentChatIds.has(s.id)),
-    [sessions.sessions, agentChatIds],
-  );
-  // The rail's list is the space's own: chats in Home, designs and code in
-  // Studio.
+  // Home's conversations: every chat, as Messages lists them. Designs and
+  // code sessions are Studio's.
+  const threadSessions = useMemo(() => sessions.sessions.filter(isThread), [sessions.sessions]);
+  // The rail's list is Studio's own: designs and code. Home's is on the
+  // Messages screen, beside the thread.
   const spaceSessions = useMemo(
-    () => plainSessions.filter((s) => spaceOf(s) === space),
-    [plainSessions, space],
+    () => sessions.sessions.filter((s) => spaceOf(s) === "studio"),
+    [sessions.sessions],
   );
+  // Messages is Home's conversation screen; Studio keeps the plain one.
+  const messaging = talking && space === "home";
+  const conversing = talking;
 
   // The open conversation's row, for its mode, its standard and its filing.
   const current = sessions.sessions.find((s) => s.id === chat.sessionId) || null;
@@ -471,7 +473,7 @@ export default function App() {
   // On the Agents screen with no agent open, the conversation still loaded
   // behind the gallery is not what is on screen, so its agent's colour should
   // not dress the page: the theme resolves as for nothing open.
-  const themeIdle = view === "agents" && !roomAgent;
+  const themeIdle = view === "agents";
   const theme = useTheme({
     api,
     sessionId: themeIdle ? null : chat.sessionId,
@@ -526,21 +528,23 @@ export default function App() {
         // Studio day reopens on its design or code rather than on a chat.
         let remembered = "home";
         try {
-          remembered = localStorage.getItem(SPACE_KEY) === "studio" ? "studio" : "home";
+          remembered =
+            studioSaved() && localStorage.getItem(SPACE_KEY) === "studio" ? "studio" : "home";
         } catch {
           /* no storage: Home */
         }
-        const first = list.find((s) => spaceOf(s) === remembered) || list[0];
+        // Home opens on its newest conversation, and on a new message when
+        // there is none -- never on a design or code session, which with
+        // Studio off would be a screen there is no way back from.
+        const first =
+          list.find((s) => spaceOf(s) === remembered) || (remembered === "studio" ? list[0] : null);
         if (first) {
           if (first.mode === "code") setView("code");
-          // The newest conversation is, if it is an agent's, that agent's one
-          // chat -- so it reopens where it lives, on the Agents screen.
-          else if (first.agent_id) {
-            setView("agents");
-            setRoomAgentId(first.agent_id);
-          }
           await openSession(first.id);
-        } else startNew();
+        } else {
+          startNew();
+          setComposeTo([]);
+        }
         setPhase(READY);
       } catch (error) {
         // A 401 has already been turned into a sign-out by the api client.
@@ -667,8 +671,11 @@ export default function App() {
       setView("chat");
       setSidebarOpen(false);
       setNewAgentId(null);
+      setNewMembers(null);
       setNewProjectId(null);
       setNewKind(kind);
+      // A new chat is a new message: who it is to comes first.
+      setComposeTo(kind === "chat" ? [] : null);
       if (kind === "design") setNewDesign(null);
       if (kind === "code" && workspace !== undefined) setNewWorkspace(workspace);
       startNew();
@@ -679,22 +686,41 @@ export default function App() {
   const handleNewSession = useCallback(() => startNewOf("chat"), [startNewOf]);
   const handleNewDesign = useCallback(() => startNewOf("design"), [startNewOf]);
 
-  // To an agent's chat: its one conversation, opened where it was left, or --
-  // before the first message -- a fresh one that will become it, run as the
-  // agent from its first turn.
-  const startWithAgent = useCallback(
-    (agentId) => {
-      setView("agents");
-      setRoomAgentId(agentId);
-      setSidebarOpen(false);
+  // Who a new message is to. The moment those people already have a
+  // conversation, that conversation is what is on screen -- writing to
+  // someone you have talked to before carries it on, as a messenger does;
+  // otherwise the screen is a fresh one, which the first message will make.
+  const addressTo = useCallback(
+    (ids) => {
+      setComposeTo(ids);
+      const agentIds = ids.filter((id) => id !== BOM);
       setNewKind("chat");
-      setNewAgentId(agentId);
       setNewProjectId(null);
-      startNew();
-      setFocusToken((n) => n + 1);
+      setNewAgentId(agentIds.length === 1 ? agentIds[0] : null);
+      setNewMembers(agentIds.length > 1 ? agentIds : null);
+      const found = ids.length ? findThread(threadSessions, ids) : null;
+      if (found) {
+        if (found.id !== chat.sessionId) openSession(found.id).catch(() => {});
+      } else if (chat.sessionId) {
+        startNew();
+      }
     },
-    [startNew],
+    [threadSessions, chat.sessionId, openSession, startNew],
   );
+
+  // A new message, on the Messages screen, to `ids` (or to nobody yet, with
+  // the caret on the "To:" line).
+  const startCompose = useCallback(
+    (ids = []) => {
+      setView("chat");
+      setSidebarOpen(false);
+      addressTo(ids);
+      // With people already on it, the message is what is left to write.
+      if (ids.length) setFocusToken((n) => n + 1);
+    },
+    [addressTo],
+  );
+
   // The space follows what is on screen: a design or a code conversation
   // (or the empty page set to start one) is Studio's, a chat or an agent is
   // Home's. Projects and Skills are in both, and leave it where it is.
@@ -708,21 +734,6 @@ export default function App() {
   }, [onScreen]);
 
 
-  const enterRoom = useCallback(
-    (agentId) => {
-      const existing = agentChats.get(agentId);
-      setView("agents");
-      setRoomAgentId(agentId);
-      setSidebarOpen(false);
-      if (!existing) {
-        startWithAgent(agentId);
-        return;
-      }
-      if (existing.id !== chat.sessionId) openSession(existing.id).catch(() => {});
-      setFocusToken((n) => n + 1);
-    },
-    [agentChats, chat.sessionId, openSession, startWithAgent],
-  );
   // From a code session, the next one starts in the same project -- changed
   // under the composer if it should be another.
   const handleNewCode = useCallback(
@@ -872,6 +883,7 @@ export default function App() {
       await onSessionsChanged();
       setView("chat");
       setNewKind("chat");
+      setComposeTo(null);
       await openSession(created.id).catch(() => {});
       setFocusToken((n) => n + 1);
     },
@@ -904,14 +916,8 @@ export default function App() {
   const handleOpenSession = useCallback(
     (id) => {
       const known = sessions.sessions.find((s) => s.id === id);
-      // An agent's chat opens on the Agents screen, with the agent.
-      if (known && agentChatIds.has(id)) {
-        setView("agents");
-        setRoomAgentId(known.agent_id);
-        setSidebarOpen(false);
-        openSession(id).catch(() => {});
-        return;
-      }
+      // Opening a conversation ends any new message being addressed.
+      setComposeTo(null);
       const viewFor = (mode) => (mode === "code" ? "code" : "chat");
       // A code conversation's folder, before the conversation itself has
       // loaded: the editor stays on it rather than blinking to nothing.
@@ -924,16 +930,38 @@ export default function App() {
         })
         .catch(() => {});
     },
-    [openSession, sessions.sessions, agentChatIds],
+    [openSession, sessions.sessions],
   );
+
+  // To these people: their conversation if they have one, otherwise a new
+  // message already addressed to them -- what "Message" on an agent does.
+  const messageTo = useCallback(
+    (ids) => {
+      const found = findThread(threadSessions, ids);
+      if (found) handleOpenSession(found.id);
+      else startCompose(ids);
+    },
+    [threadSessions, handleOpenSession, startCompose],
+  );
+
+  // Back out of a new message: to the conversation that was open, or the
+  // newest one. With none at all there is nothing to go back to.
+  const cancelCompose = useCallback(() => {
+    if (chat.sessionId) {
+      setComposeTo(null);
+      return;
+    }
+    const latest = threadSessions[0];
+    if (latest) handleOpenSession(latest.id);
+  }, [chat.sessionId, threadSessions, handleOpenSession]);
 
   // Each space's last conversation, so switching back is going back to where
   // you were rather than to a blank page. Only ever one conversation is open
   // in the app, so this is what lets each space keep its own.
   const lastInSpace = useRef({ home: null, studio: null });
   useEffect(() => {
-    if (current && !agentChatIds.has(current.id)) lastInSpace.current[spaceOf(current)] = current.id;
-  }, [current, agentChatIds]);
+    if (current) lastInSpace.current[spaceOf(current)] = current.id;
+  }, [current]);
 
   // The switch in the app bar. Going to a space goes back to what it had on
   // screen -- still open, or the last conversation it had -- and otherwise
@@ -943,7 +971,7 @@ export default function App() {
     (next) => {
       setSpace(next);
       setSidebarOpen(false);
-      const open = current && !agentChatIds.has(current.id) ? current : null;
+      const open = current;
       if (open && spaceOf(open) === next) {
         setView(open.mode === "code" ? "code" : "chat");
         return;
@@ -955,7 +983,7 @@ export default function App() {
       }
       startNewOf(next === "home" ? "chat" : studioKind.current);
     },
-    [current, agentChatIds, sessions.sessions, handleOpenSession, startNewOf],
+    [current, sessions.sessions, handleOpenSession, startNewOf],
   );
 
   // The settings window: shut (null), or open on one of its screens. Opened
@@ -991,7 +1019,8 @@ export default function App() {
   // The desktop app's File menu and tray start new conversations too (New
   // Chat ⌘1, New Code Session ⌘2, New Design ⌘3).
   const startNewRef = useRef(startNewOf);
-  startNewRef.current = startNewOf;
+  // With Studio off, New Design and New Code Session are a new message too.
+  startNewRef.current = (kind) => startNewOf(studio || kind === "chat" ? kind : "chat");
   useEffect(() => {
     let off = null;
     let live = true;
@@ -1003,6 +1032,16 @@ export default function App() {
       off?.();
     };
   }, []);
+
+  // A new message, once sent, is the conversation it made: the "To:" line
+  // gives way to the thread's own header as soon as that conversation is on
+  // the list (which the session frame refreshes -- see useChat).
+  useEffect(() => {
+    if (composeSent && chat.sessionId && current) {
+      setComposeSent(false);
+      setComposeTo(null);
+    }
+  }, [composeSent, chat.sessionId, current]);
 
   // -- render ---------------------------------------------------------------
 
@@ -1054,6 +1093,31 @@ export default function App() {
     return designing ? true : kind === "chat";
   });
 
+  // Messages: who the open conversation -- or the new message -- is with.
+  const composing = messaging && (composeTo !== null || !chat.sessionId);
+  const recipients = composeTo || [];
+  const threadPeople = (composing ? recipients : membersOf(current))
+    .map((id) => personOf(id, agents.agents))
+    .filter(Boolean);
+  const inGroup = threadPeople.length > 1;
+  const thread = messaging ? { people: threadPeople } : null;
+  // In a group, each answer is its writer's: named, and dressed as them.
+  const senderOf = inGroup
+    ? (agentId) => {
+        const agent = agents.agents.find((a) => a.id === agentId);
+        return agent ? { name: agent.name, look: lookOf(agent, agents.presets) } : { name: "Bom", look: null };
+      }
+    : null;
+  const sendMessage = (text, files, effort) => {
+    chat.send(text, files, effort, make);
+    // Into a conversation that already exists, the new message is over the
+    // moment it is sent; a new one waits for its conversation to be made.
+    if (composeTo !== null) {
+      if (chat.sessionId) setComposeTo(null);
+      else setComposeSent(true);
+    }
+  };
+
   const renderConversation = (room) => (
     <>
       {room ? null : ["left", "right"].map((side) => (
@@ -1072,8 +1136,8 @@ export default function App() {
           <i />
         </div>
       ))}
-{/* An agent's chat is headed by the agent (AgentsScreen), not by a
-          conversation title and its pickers. */}
+{/* A conversation in Messages is headed by who it is with (Messages.jsx),
+          not by a title and its pickers. */}
       {room ? null : (
               <TopBar
           // Until the server names it after the first exchange.
@@ -1103,9 +1167,7 @@ export default function App() {
           projectId={current?.project_id || null}
           onProject={(projectId) => handleFileSession(chat.sessionId, projectId)}
           onNewSession={
-            room
-              ? () => startWithAgent(room.id)
-              : designing
+            designing
                 ? handleNewDesign
                 : startingCode
                   ? handleNewCode
@@ -1117,8 +1179,7 @@ export default function App() {
           browserShown={browser.has}
           browserOpen={browser.open}
           onToggleBrowser={toggleBrowser}
-          // In a room the agent is the room; there is nothing to pick.
-          agents={room ? [] : agents.agents}
+          agents={agents.agents}
           agentId={current?.agent_id || null}
           onAgent={async (agentId) => {
             await api.setSessionAgent(chat.sessionId, agentId);
@@ -1129,7 +1190,8 @@ export default function App() {
 
       <MessageList
         messages={chat.messages}
-        look={room ? lookOf(room, agents.presets) : null}
+        look={room && room.people.length === 1 ? lookOf(room.people[0], agents.presets) : null}
+        senderOf={room ? senderOf : null}
         model={chat.badge?.text}
         scrollToken={chat.scrollToken}
         onDecide={chat.decide}
@@ -1137,7 +1199,7 @@ export default function App() {
         onContinue={chat.continueTurn}
         head={
           room ? (
-            <AgentGreeting agent={room} presets={agents.presets} />
+            <ThreadGreeting people={room.people} presets={agents.presets} />
           ) : designing ? (
             <DesignStartersHead />
           ) : startingCode ? (
@@ -1156,9 +1218,19 @@ export default function App() {
         // Whichever side is actually answering describes its own
         // reasoning control; the composer draws what it is handed.
         thinking={thinking}
-        onSend={startingCode ? sendCode : (text, files, effort) => chat.send(text, files, effort, make)}
+        onSend={
+          room ? sendMessage : startingCode ? sendCode : (text, files, effort) => chat.send(text, files, effort, make)
+        }
         make={make}
         onMake={startingCode ? null : setMake}
+        // A chat makes documents and sheets; decks and the rest are Studio's.
+        makes={designing ? null : ["auto", "sheet", "document"]}
+        // In a group, @ picks who answers.
+        mentions={
+          room && inGroup
+            ? room.people.map((p) => ({ id: p.id, name: p.name, look: lookOf(p, agents.presets) }))
+            : []
+        }
         // Only before the first message: a conversation is what
         // it was started as.
         kind={newKind}
@@ -1187,7 +1259,11 @@ export default function App() {
         agentId={newAgentId}
         onAgent={setNewAgentId}
         placeholder={
-          designing
+          room
+            ? inGroup
+              ? `Message the group — type @ to choose who answers`
+              : `Message ${room.people[0]?.name || "Bom"}`
+            : designing
             ? "Describe what you want to make."
             : startingCode
               ? newWorkspace
@@ -1285,7 +1361,7 @@ export default function App() {
                   await agents.update(agentSheet.agent.id, body);
                 } else {
                   const created = await agents.create(body);
-                  if (created?.id) startWithAgent(created.id);
+                  if (created?.id) messageTo([created.id]);
                 }
                 // An agent's accent is worn by its conversations, so the list
                 // and the theme pick the change up from the sessions.
@@ -1293,7 +1369,8 @@ export default function App() {
               }}
               onDelete={async (id) => {
                 await agents.remove(id);
-                if (roomAgentId === id) setRoomAgentId(null);
+                // Off the "To:" line of a message still being written.
+                setComposeTo((was) => (was ? was.filter((other) => other !== id) : was));
                 // Its conversations are kept, unassigned: refetch their rows.
                 await onSessionsChanged();
               }}
@@ -1311,6 +1388,7 @@ export default function App() {
             onSettings={() => setSettingsAt((was) => (was ? null : "general"))}
             space={space}
             onSpace={goToSpace}
+            studio={studio}
           />
 
           {settingsAt ? (
@@ -1332,6 +1410,16 @@ export default function App() {
                 signOut("");
               }}
               remoteName={remote?.name || null}
+              studio={studio}
+              onStudio={(on) => {
+                setStudio(on);
+                // Leaving Studio leaves its screens: back to Messages.
+                if (!on && (view === "code" || (current && spaceOf(current) === "studio"))) {
+                  const latest = threadSessions[0];
+                  if (latest) handleOpenSession(latest.id);
+                  else startNewOf("chat");
+                }
+              }}
               theme={theme}
               appearance={appearance}
               // The design standards live in Settings now. "Use" starts a
@@ -1361,14 +1449,10 @@ export default function App() {
                 // The space's conversations, from a page: back to what the
                 // space had open, or a fresh one if what is loaded belongs to
                 // the other space.
-                if (next === "chat" && (!current || spaceOf(current) !== space || agentChatIds.has(current.id))) {
+                if (next === "chat" && (!current || spaceOf(current) !== space)) {
                   if (space === "studio") startNewOf(studioKind.current);
+                  else if (threadSessions[0]) handleOpenSession(threadSessions[0].id);
                   else handleNewSession();
-                  return;
-                }
-                // Back to Agents: the agent you were talking to, still open.
-                if (next === "agents" && roomAgentId && agents.agents.some((a) => a.id === roomAgentId)) {
-                  enterRoom(roomAgentId);
                   return;
                 }
                 goTo(next);
@@ -1409,7 +1493,7 @@ export default function App() {
               className="screen"
               ref={screenRef}
               style={talking && readSize.width ? { "--read-w": `${readSize.width}px` } : undefined}
-              data-view={talking ? (designing ? "design" : "chat") : roomAgent ? "agent" : view}
+              data-view={talking ? (designing ? "design" : messaging ? "messages" : "chat") : view}
               data-empty={(conversing || view === "code") && chat.messages.length === 0 ? "" : undefined}
               // No conversation on screen -- an empty chat or design, or the
               // Code view's project page -- and the sheet turns to glass, the
@@ -1488,6 +1572,42 @@ export default function App() {
                     </>
                   }
                 />
+              ) : messaging ? (
+                <MessagesScreen
+                  sessions={threadSessions}
+                  agents={agents.agents}
+                  presets={agents.presets}
+                  activeId={chat.sessionId}
+                  liveId={chat.streaming ? chat.sessionId : null}
+                  composing={composing}
+                  recipients={recipients}
+                  onRecipients={addressTo}
+                  onRecipientsDone={() => setFocusToken((n) => n + 1)}
+                  onComposeCancel={cancelCompose}
+                  onOpen={handleOpenSession}
+                  onCompose={() => startCompose([])}
+                  onDelete={handleDelete}
+                  onCustomize={(agent) => setAgentSheet({ agent, initial: null })}
+                  onMembers={async (session, ids) => {
+                    // A group changes in place. A one-to-one conversation does
+                    // not become a group: adding someone opens (or starts) the
+                    // conversation with all of them, as a messenger does.
+                    if (membersOf(session).length > 1) {
+                      await api.setSessionMembers(session.id, ids).catch(() => {});
+                      await refresh().catch(() => {});
+                    } else {
+                      messageTo(ids);
+                    }
+                  }}
+                  canvasCount={canvas.count}
+                  canvasOpen={canvas.open}
+                  onToggleCanvas={toggleCanvas}
+                  browserShown={browser.has}
+                  browserOpen={browser.open}
+                  onToggleBrowser={toggleBrowser}
+                >
+                  {renderConversation(thread)}
+                </MessagesScreen>
               ) : talking ? (
                 renderConversation(null)
               ) : view === "projects" ? (
@@ -1522,42 +1642,25 @@ export default function App() {
               ) : view === "skills" ? (
                 <Skills api={api} />
               ) : view === "agents" ? (
-                <AgentsScreen
+                <AgentsPage
                   agents={agents.agents}
                   presets={agents.presets}
-                  chatOf={(id) => agentChats.get(id) || null}
-                  selected={roomAgent}
-                  busy={chat.streaming}
-                  onSelect={enterRoom}
-                  onGallery={() => setRoomAgentId(null)}
+                  onMessage={(id) => messageTo([id])}
                   onCustomize={(agent) => setAgentSheet({ agent, initial: null })}
-                  canvasCount={canvas.count}
-                  canvasOpen={canvas.open}
-                  onToggleCanvas={toggleCanvas}
-                  browserShown={browser.has}
-                  browserOpen={browser.open}
-                  onToggleBrowser={toggleBrowser}
-                  gallery={
-                    <AgentGallery
-                      presets={agents.presets}
-                      onNew={() => setAgentSheet({ agent: null, initial: null })}
-                      onCustomizePreset={(preset) => setAgentSheet({ agent: null, initial: preset })}
-                      // Added as it comes -- look, specialty and all -- and
-                      // opened, the way adding a contact opens the chat.
-                      onAddPreset={async (preset) => {
-                        const created = await agents.create({
-                          name: preset.name,
-                          instructions: preset.instructions || null,
-                          skills: preset.skills ?? null,
-                          look: preset.look || null,
-                        });
-                        if (created?.id) startWithAgent(created.id);
-                      }}
-                    />
-                  }
-                >
-                  {roomAgent ? renderConversation(roomAgent) : null}
-                </AgentsScreen>
+                  onNew={() => setAgentSheet({ agent: null, initial: null })}
+                  onCustomizePreset={(preset) => setAgentSheet({ agent: null, initial: preset })}
+                  // Added as it comes -- look, specialty, toolbox and all --
+                  // and written to, the way adding a contact opens the chat.
+                  onAddPreset={async (preset) => {
+                    const created = await agents.create({
+                      name: preset.name,
+                      instructions: preset.instructions || null,
+                      skills: preset.skills ?? null,
+                      look: preset.look || null,
+                    });
+                    if (created?.id) messageTo([created.id]);
+                  }}
+                />
               ) : null}
             </div>
 

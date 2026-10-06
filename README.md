@@ -12,8 +12,9 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
 |---------|-------------|
 | **Local inference** | Uses Ollama to run models such as Mistral, Llama‑2, or any GGUF/ggml weights directly on your CPU/GPU.
 | **Tauri + React UI** | A responsive desktop app that looks and feels like a native application.
-| **Agent templates** | Built‑in agents for coding, research, analysis, etc.
-| **Design & work tools** | A Design tab that opens design conversations, plus slide decks and live spreadsheets in the canvas panel, styled to a design.md standard you pick.
+| **Messages** | Conversations laid out like a messenger: write to Bom or one of your agents, or start a group chat with several of them.
+| **Office agents** | Ready-made agents for everyday work (Secretary, Analyst, Researcher, Writer, Clerk, Planner), each with the short toolbox its job needs.
+| **Studio (opt-in)** | Design and code workspaces: decks, wireframes, pages and code projects. Off by default; turn it on in **Settings → General**.
 | **Safety sandbox** | Built‑in execution sandboxing.
 
 ## 📥 Installation
@@ -38,6 +39,13 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
    ```
    The Tauri window will launch and you can start chatting.
 
+
+### Messages and group chats
+Bom is built for everyday work on a small local model: the calendar, reminders, drafting, spreadsheets, paperwork and research. So the home screen is **Messages**. Press the pencil, put Bom or one or more agents on the **To:** line, and write. If those people already have a conversation, it opens under the To: line and your message carries it on, the same as in a messenger. If you add two or more agents, it's a group chat.
+
+In a group, one member answers each message: whoever you @-mention (`@Analyst`), everyone for `@everyone`, and otherwise whoever answered last. Each answer is a full turn run as that agent, with its instructions and its tools. The others' replies reach it as messages from them, not as its own words. Add or remove members from the conversation's details (click the names at the top).
+
+Each ready-made agent gets a short list of tools rather than all of them, because a small model choosing from a dozen tools picks the wrong one far less often than one choosing from forty. `@connectors` in an agent's skill list means every connected MCP server's tools, so the Secretary can reach the mail or calendar server you connect later. The design tools (decks, wireframes, design checks, image generation) and the shell are offered only in Studio's design conversations, never in a chat.
 
 ### More model providers
 Besides Ollama, Anthropic and OpenRouter, **Settings → Models → Add a provider** connects OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Cerebras, Together, Fireworks and Azure OpenAI. It also connects servers you run yourself (LM Studio, vLLM, llama.cpp, Jan) and any other OpenAI-compatible endpoint. Keys are checked before they're saved, and you set the order Auto falls back in. See [docs/providers.md](docs/providers.md).

@@ -23,6 +23,9 @@ export function MessageList({
   head = null,
   // What the answering flower wears -- the agent's look, in its room.
   look = null,
+  // Who wrote an answer, in a group chat: `(agentId) => { name, look }`.
+  // Each answer is named, and its flower dressed, as the one who wrote it.
+  senderOf = null,
 }) {
   const ref = useRef(null);
 
@@ -49,7 +52,13 @@ export function MessageList({
       {messages.length === 0 ? (
         head || <StartersHead />
       ) : (
-        messages.map((m) => (
+        messages.map((m, index) => {
+          const sender = m.role === "assistant" && senderOf ? senderOf(m.agentId) : null;
+          // Named at the start of a run, as a messenger does: once over a
+          // string of answers from the same member, not over every one.
+          const before = messages[index - 1];
+          const named = sender && !(before?.role === "assistant" && before.agentId === m.agentId);
+          return (
           <Message
             key={m.key}
             onDecide={onDecide}
@@ -68,12 +77,14 @@ export function MessageList({
             compaction={m.compaction}
             usage={m.usage}
             sentAt={m.sentAt}
-            look={m.role === "assistant" ? look : null}
+            look={m.role === "assistant" ? (sender ? sender.look : look) : null}
+            sender={named ? sender.name : null}
             // Only the turn that is actually from the assistant carries the
             // provenance line; a user bubble and an error have no model.
             model={m.role === "assistant" ? model : null}
           />
-        ))
+          );
+        })
       )}
     </main>
   );

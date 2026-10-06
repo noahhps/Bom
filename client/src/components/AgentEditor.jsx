@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { HATS, ITEMS, lookOf } from "../lib/accessories";
+import { CONNECTORS } from "../lib/threads";
 import { seedFromContext } from "../lib/autotheme";
 import { AgentAvatar } from "./AgentAvatar";
 import { useDialog } from "./Dialog";
@@ -121,9 +122,10 @@ export function AgentEditor({ api, agent, initial, presets = [], onSave, onDelet
     onClose();
   }, [agent, confirm, onDelete, onClose]);
 
+  const counted = draft.chosen.size - (draft.chosen.has(CONNECTORS) ? 1 : 0);
   const abilities = draft.all
     ? "everything Bom can do"
-    : `${draft.chosen.size} skill${draft.chosen.size === 1 ? "" : "s"}`;
+    : `${counted} skill${counted === 1 ? "" : "s"}${draft.chosen.has(CONNECTORS) ? " and every connector" : ""}`;
 
   return (
     <div className="agent-sheet-scrim" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -216,6 +218,19 @@ export function AgentEditor({ api, agent, initial, presets = [], onSave, onDelet
             </label>
             {!draft.all ? (
               <div className="agents-skills">
+                {/* Not a skill but every connector's: whatever the MCP
+                    servers offer, today's and the next one added. */}
+                <label className="agents-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.chosen.has(CONNECTORS)}
+                    onChange={() => toggleSkill(CONNECTORS)}
+                  />
+                  <span>
+                    Every connector&apos;s tools
+                    <span className="mi"> · mail, calendars and anything else you connect</span>
+                  </span>
+                </label>
                 {catalog.length === 0 ? (
                   <p className="mi">No skills registered.</p>
                 ) : (

@@ -161,7 +161,7 @@ def test_presets_are_listed_and_instantiable(client: TestClient):
     presets = client.get("/api/agents/presets").json()["presets"]
     assert presets, "expected built-in presets"
     names = {p["name"] for p in presets}
-    assert {"Researcher", "Coder", "Companion"} <= names
+    assert {"Secretary", "Researcher", "Analyst", "Companion"} <= names
 
     # A preset drops straight into create_agent unchanged.
     researcher = next(p for p in presets if p["id"] == "researcher")
@@ -183,8 +183,11 @@ def test_preset_skills_are_all_real_skill_names(client: TestClient):
     registered = {s["name"] for s in client.get("/api/skills").json()["skills"]}
     presets = client.get("/api/agents/presets").json()["presets"]
     for preset in presets:
-        # None is "every enabled skill" -- nothing to check by name.
+        # None is "every enabled skill" -- nothing to check by name. And
+        # "@connectors" is not a name but every connected MCP server's tools.
         for name in preset["skills"] or []:
+            if name == "@connectors":
+                continue
             assert name in registered, f"{preset['id']} names unknown skill {name!r}"
 
 

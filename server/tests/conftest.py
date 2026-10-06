@@ -15,6 +15,11 @@ os.environ["AUTH_TOKEN"] = "test-token"
 import tempfile  # noqa: E402
 
 os.environ["BOM_RELAY_PATH"] = os.path.join(tempfile.mkdtemp(prefix="bom-relay-"), "relay.json")
+
+# Never the real database either. `app.main` builds its app at import time
+# with the default settings, so without this every test run opened -- and
+# migrated -- the conversations in data/chat.db.
+os.environ["DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="bom-db-"), "chat.db")
 for _name in ("BOM_RELAY_URL", "BOM_RELAY_KEY", "BOM_RELAY_WEB_URL", "BOM_REMOTE"):
     os.environ.pop(_name, None)
 

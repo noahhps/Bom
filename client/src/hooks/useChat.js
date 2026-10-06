@@ -64,6 +64,8 @@ export function useChat(
     workspace = null,
     // The project a new chat or design is filed in, picked on the composer.
     projectId = null,
+    // The agents a new group chat is started with, in order.
+    members = null,
   },
 ) {
   const [messages, setMessages] = useState([]);
@@ -162,6 +164,8 @@ export function useChat(
                 attachments: m.attachments,
                 reasoning: m.reasoning || undefined,
                 skills: m.skills?.length ? m.skills : undefined,
+                // Who answered: in a group chat each reply is named.
+                agentId: m.agent_id || null,
               }),
             ),
           data.compactions || [],
@@ -184,7 +188,7 @@ export function useChat(
   // -- the turn -------------------------------------------------------------
 
   const send = useCallback(
-    async (text, files = [], thinkingLevel = null, make = null) => {
+    async (text, files = [], thinkingLevel = null, make = null, { replyAs = null } = {}) => {
       if (streaming || (!text.trim() && !files.length)) return;
       setStreaming(true);
 
@@ -194,7 +198,13 @@ export function useChat(
       // Stamped here rather than waiting for the server's rows: the bubble is
       // on screen now, and the server's clock is the same one to the second.
       const now = Date.now();
-      const answer = message("assistant", "", { streaming: true, sentAt: now });
+      // The answer being written. A group chat's stream carries one answer per
+      // member who replies, each opening with its own `meta`, so this moves
+      // on to a fresh bubble when the next one starts -- and every bubble the
+      // turn made is in `answers`, to be settled when it ends.
+      let answer = message("assistant", "", { streaming: true, sentAt: now });
+      const answers = [answer.key];
+      let metas = 0;
       const asked = message("user", text, { sentAt: now });
       setMessages((prev) => [...prev, asked, answer]);
       jumpToEnd();
@@ -209,12 +219,17 @@ export function useChat(
       pending.current = { key: answer.key, text: "", reasoning: "" };
 
       // Whatever arrived before the failure is kept; a bubble that never got a
-      // single token is not worth leaving behind above the error.
-      const fail = (text, continuable = false) =>
+      // single token is not worth leaving behind above the error. Read now,
+      // not when React gets to the update: by then a group's next answer may
+      // have taken over `answer` and `content`.
+      const fail = (text, continuable = false) => {
+        const key = answer.key;
+        const kept = Boolean(content);
         setMessages((prev) => [
-          ...(content ? prev : prev.filter((m) => m.key !== answer.key)),
+          ...(kept ? prev : prev.filter((m) => m.key !== key)),
           message("error", text, continuable ? { continuable: true } : {}),
         ]);
+      };
 
       try {
         // Read before the request so the bubble can show the picture straight
@@ -250,16 +265,49 @@ export function useChat(
                   design,
                   workspace: mode === "code" ? workspace : null,
                   projectId: mode === "code" ? null : projectId,
+                  members: members?.length > 1 ? members : null,
                 }),
             make: make && make !== "auto" ? make : null,
+            replyAs,
           },
         );
 
         for await (const { event, data } of readEvents(response)) {
+          // The next member of a group is answering: the last answer is
+          // finished, and this one gets a bubble of its own.
+          if (event === "meta" && metas++ > 0) {
+            settle();
+            const done = answer.key;
+            answer = message("assistant", "", { streaming: true, sentAt: Date.now() });
+            answers.push(answer.key);
+            content = "";
+            reasoning = "";
+            skills = [];
+            announced = false;
+            pending.current = { key: answer.key, text: "", reasoning: "" };
+            const next = answer;
+            setMessages((prev) => [
+              ...prev.map((m) => (m.key === done ? { ...m, streaming: false } : m)),
+              next,
+            ]);
+            jumpToEnd();
+          }
+          // Each update names its bubble now, while `answer` is still the one
+          // this frame belongs to.
+          const key = answer.key;
           if (event === "session") {
+            // A conversation this message just made is on the list straight
+            // away, not only once the reply is over -- Messages heads it by
+            // who it is with, which only the list knows.
+            if (active !== data.session_id) onSessionsChanged();
             active = data.session_id;
             setSessionId(active);
           } else if (event === "meta") {
+            if (data.agent_id) {
+              setMessages((prev) =>
+                prev.map((m) => (m.key === key ? { ...m, agentId: data.agent_id } : m)),
+              );
+            }
             // Named rather than labelled "cloud": there are two cloud backends
             // now, and which one answered is what the badge is for. The model
             // alone is enough when it was the local one -- that is the case
@@ -276,20 +324,20 @@ export function useChat(
             // since the model was then free to make anything.
             if (data.make?.requested && !data.make.applied) {
               const pin = { status: "off", label: data.make.label };
-              setMessages((prev) => prev.map((m) => (m.key === answer.key ? { ...m, pin } : m)));
+              setMessages((prev) => prev.map((m) => (m.key === key ? { ...m, pin } : m)));
             }
           } else if (event === "replace") {
             // The server withdrew text from a round it is redoing; this is the
             // whole reply as it now stands.
             content = data.text || "";
-            pending.current = { key: answer.key, text: content, reasoning };
+            pending.current = { key: key, text: content, reasoning };
             schedule();
           } else if (event === "make") {
             // How a pinned message is going: sent back to the model, made,
             // or not made after all.
             const pin = { status: data.status, label: data.label, attempt: data.attempt };
             setMessages((prev) =>
-              prev.map((m) => (m.key === answer.key ? { ...m, pin: { ...m.pin, ...pin, label: pin.label || m.pin?.label } } : m)),
+              prev.map((m) => (m.key === key ? { ...m, pin: { ...m.pin, ...pin, label: pin.label || m.pin?.label } } : m)),
             );
           } else if (event === "thinking") {
             if (!announced) {
@@ -297,11 +345,11 @@ export function useChat(
               // Once, so there is something on screen in the gap before the
               // first reasoning token lands.
               setMessages((prev) =>
-                prev.map((m) => (m.key === answer.key ? { ...m, thinking: true } : m)),
+                prev.map((m) => (m.key === key ? { ...m, thinking: true } : m)),
               );
             }
             reasoning += data.text || "";
-            pending.current = { key: answer.key, text: content, reasoning };
+            pending.current = { key: key, text: content, reasoning };
             schedule();
           } else if (event === "tool_call") {
             // Appended optimistically: the result arrives as a second frame,
@@ -311,7 +359,7 @@ export function useChat(
             // place among them (see lib/timeline.js).
             skills = [...skills, { name: data.name, arguments: data.arguments, r: data.r, t: data.t }];
             setMessages((prev) =>
-              prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
+              prev.map((m) => (m.key === key ? { ...m, skills } : m)),
             );
             jumpToEnd();
           } else if (event === "skill_approval") {
@@ -329,7 +377,7 @@ export function useChat(
               )
               .reverse();
             setMessages((prev) =>
-              prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
+              prev.map((m) => (m.key === key ? { ...m, skills } : m)),
             );
             jumpToEnd();
           } else if (event === "design_choice") {
@@ -358,7 +406,7 @@ export function useChat(
               )
               .reverse();
             setMessages((prev) =>
-              prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
+              prev.map((m) => (m.key === key ? { ...m, skills } : m)),
             );
             jumpToEnd();
           } else if (event === "tool_result") {
@@ -383,7 +431,7 @@ export function useChat(
               )
               .reverse();
             setMessages((prev) =>
-              prev.map((m) => (m.key === answer.key ? { ...m, skills } : m)),
+              prev.map((m) => (m.key === key ? { ...m, skills } : m)),
             );
           } else if (event === "compaction") {
             // The model's copy of the conversation was compacted before this
@@ -392,7 +440,7 @@ export function useChat(
             // answer, beside which model gave it.
             setMessages((prev) =>
               prev.map((m) => {
-                if (m.key !== answer.key) return m;
+                if (m.key !== key) return m;
                 const was = m.compaction || {};
                 return {
                   ...m,
@@ -430,7 +478,7 @@ export function useChat(
             onCanvas?.(data.canvases, active);
           } else if (event === "delta") {
             content += data.text;
-            pending.current = { key: answer.key, text: content, reasoning };
+            pending.current = { key: key, text: content, reasoning };
             schedule();
           } else if (event === "done") {
             // The model ran out of skill rounds with more it wanted to do.
@@ -441,7 +489,7 @@ export function useChat(
             if (data.truncated || data.usage) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.key === answer.key
+                  m.key === key
                     ? {
                         ...m,
                         truncated: data.truncated || m.truncated,
@@ -476,7 +524,7 @@ export function useChat(
       } finally {
         inFlight.current = null;
         setMessages((prev) =>
-          prev.map((m) => (m.key === answer.key ? { ...m, streaming: false } : m)),
+          prev.map((m) => (answers.includes(m.key) ? { ...m, streaming: false } : m)),
         );
         setStreaming(false);
 
@@ -511,6 +559,7 @@ export function useChat(
       design,
       workspace,
       projectId,
+      members,
       provider,
       schedule,
       sessionId,

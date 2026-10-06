@@ -32,7 +32,7 @@ import asyncio
 import os
 import sys
 
-from .skill import NOT_CODE, Skill
+from .skill import NOT_CODE, STUDIO, Skill
 
 # Environment names the app uses for its own secrets. Dropped from what a
 # command inherits so the assistant's keys are not one `env` away from the
@@ -149,6 +149,10 @@ class _Sandboxed(Skill):
 
 
 class RunShell(_Sandboxed):
+    # A design conversation's, not a chat's: a shell is the widest tool on the
+    # shelf, and run_python already covers the data work a chat is for.
+    modes = STUDIO
+
     def __init__(self, settings) -> None:
         super().__init__(
             name="run_shell",

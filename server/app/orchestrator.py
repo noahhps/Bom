@@ -55,6 +55,7 @@ from .design_mode import (
     pinned,
 )
 from .design_presets import tokens_for
+from .heal import calls_in_text, heal, note_for, usage
 from .skills.design import (
     NO_DESIGN,
     match as design_match,
@@ -1057,6 +1058,22 @@ class Orchestrator:
                         )
                     )
                     continue
+                # A call written into the reply rather than made -- the chat
+                # template the backend could not parse leaves it there as
+                # text. When that is all the reply is, it is read as the
+                # call it was meant to be, and withdrawn from the reply, which
+                # would otherwise show the reader a lump of JSON.
+                if (final is None or not final.tool_calls) and tools and round_text:
+                    written = calls_in_text("".join(round_text), tools)
+                    if written:
+                        del parts[len(parts) - len(round_text):]
+                        yield _sse("replace", {"text": "".join(parts)})
+                        round_text = []
+                        final = (
+                            dataclasses.replace(final, tool_calls=written)
+                            if final is not None
+                            else Chunk(done=True, tool_calls=written)
+                        )
                 if final is None or not final.tool_calls:
                     # Stopped with nothing to show for the whole turn: no words
                     # and no call. Asked once, plainly, rather than handing the
@@ -1090,6 +1107,15 @@ class Orchestrator:
                     window.append(Message(role="user", content=pin_nudge(choice)))
                     continue
 
+                # Each call as it was meant -- a tool's name or an argument's
+                # spelled the way the schema spells it -- before anything is
+                # asked about it. The mended calls are what go back into the
+                # window, so the next round replays what actually ran.
+                mended = [heal(call, tools) for call in final.tool_calls]
+                final = dataclasses.replace(
+                    final, tool_calls=tuple(mend.call for mend in mended)
+                )
+
                 # What the model said on its way to asking, plus the asking
                 # itself. Both have to go back or the next round replays a
                 # conversation where nothing was requested.
@@ -1101,7 +1127,8 @@ class Orchestrator:
                     )
                 )
 
-                for call in final.tool_calls:
+                for mend in mended:
+                    call = mend.call
                     # Where in the turn this call sits: how much reasoning and
                     # how much answer existed when it was made. Offsets into
                     # the two stored strings, so the working can be shown in
@@ -1130,6 +1157,8 @@ class Orchestrator:
                     )
                     if source:
                         record["server"] = source
+                    if mend.notes:
+                        record["healed"] = list(mend.notes)
                     used.append(record)
 
                     # An agent is only offered its own skills, but a model can
@@ -1159,6 +1188,24 @@ class Orchestrator:
                             "tool_result",
                             {"name": call.name, "text": result, "denied": True},
                         )
+                        window.append(
+                            Message(
+                                role="tool",
+                                content=result,
+                                tool_call_id=call.id,
+                                tool_name=call.name,
+                            )
+                        )
+                        continue
+
+                    # A call that cannot run as it stands -- arguments that
+                    # would not decode, or none where some are required -- is
+                    # answered with what the tool takes, before the reader is
+                    # asked to approve something that could only fail.
+                    if mend.problem:
+                        result = mend.problem
+                        record["result"] = result
+                        yield _sse("tool_result", {"name": call.name, "text": result, "denied": False})
                         window.append(
                             Message(
                                 role="tool",
@@ -1322,6 +1369,7 @@ class Orchestrator:
                             touched=touched,
                         )
                         result += _gated_note(self.store, gated, extra, call.name)
+                        result += note_for(mend.notes)
                         record["result"] = result
                         if before is not None and call.name in (choice["tool"], choice.get("edit")):
                             pin_done = self._pin_met(choice, session_id, before, result)
@@ -1641,8 +1689,9 @@ class Orchestrator:
         try:
             result = await skill.use(**arguments)
         except TypeError as exc:
-            # Almost always a hallucinated or missing argument name.
-            return f"{call.name} was called wrongly: {exc}"
+            # Almost always a hallucinated or missing argument name. Said with
+            # what the tool does take, so the next round can get it right.
+            return f"{call.name} was called wrongly: {exc}. " + usage(call.name, skill.parameters)
         except Exception as exc:
             return f"{call.name} failed: {type(exc).__name__}: {exc}"
         # The larger of the skill's own allowance and the setting: a skill that

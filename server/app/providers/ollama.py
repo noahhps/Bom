@@ -19,6 +19,7 @@ from .base import (
     Message,
     ProviderError,
     ToolCall,
+    decode_arguments,
 )
 
 # Generation can idle for a long time behind a cold model load; the read
@@ -330,24 +331,18 @@ def _parse_call(raw: dict, index: int) -> ToolCall:
     single turn.
 
     `arguments` is normally a decoded object, but a model under load will
-    sometimes emit it as a JSON string. Normalising here means nothing above
-    this module ever has to check which it got -- and an unparseable one
-    becomes an empty dict rather than an exception, so the skill raises a clean
-    TypeError about a missing argument and the model gets told what to fix.
+    sometimes emit it as a JSON string, or as nearly-JSON. Normalising here
+    means nothing above this module ever has to check which it got -- and one
+    that no lenient reading can decode becomes an empty dict carrying its raw
+    text as `unreadable`, so the turn loop can tell the model what to fix.
     """
     function = raw.get("function") or {}
-    arguments = function.get("arguments") or {}
-    if isinstance(arguments, str):
-        try:
-            arguments = json.loads(arguments)
-        except json.JSONDecodeError:
-            arguments = {}
-    if not isinstance(arguments, dict):
-        arguments = {}
+    arguments, unreadable = decode_arguments(function.get("arguments"))
     return ToolCall(
         id=str(raw.get("id") or f"call_{index}"),
         name=function.get("name", ""),
         arguments=arguments,
+        unreadable=unreadable,
     )
 
 

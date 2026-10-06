@@ -67,6 +67,9 @@ Lower `CONTEXT_TOKENS` if the local model runs short of memory: the KV cache gro
 
 Long conversations are compacted rather than cut off: once the history fills half the window, the older turns are summarized and the recent ones are still sent word for word (`COMPACT_AT`, `COMPACT_KEEP`, `COMPACT_SUMMARY_TOKENS`; `COMPACT_AT=0` turns it off). Cloud requests ask for prompt caching, so a tool loop doesn't pay full price for the same conversation every round (`CACHE_TTL=5m` or `1h`).
 
+### Tool calls that mend themselves
+Small local models often call the right tool slightly wrong. Bom repairs a call before it asks you to approve it, but only where there is one thing the model could have meant. It fixes a misspelled or prefixed tool name (`functions.webSearch` becomes `web_search`), an argument in the wrong case or with a typo, arguments wrapped in an extra `arguments` object, a value of the wrong type (`"7"` where a number goes), and arguments that are nearly JSON. A call the model wrote into its reply as text, such as `<tool_call>{…}</tool_call>`, runs as a call. The model is told what was fixed so it spells it right next time. A call that can't be repaired, because its arguments won't decode or it has none of the ones it needs, doesn't run. The model gets the tool's parameters back so it can send the call again. See `server/app/heal.py`.
+
 ### Enterprise mode
 For company use, with long conversations, large codebases and big cloud context windows, switch on **Settings → Enterprise mode**. It raises the context window, tool-result sizes, round and timeout limits, compacts later while keeping more of the conversation verbatim, and holds the prompt cache for an hour. Safety settings don't change. See [docs/enterprise.md](docs/enterprise.md) for every limit and the `ENTERPRISE_*` variables that tune them.
 

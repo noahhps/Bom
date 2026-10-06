@@ -53,6 +53,11 @@ _CHROMES = (
 _CHROME_NAMES = ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable",
                  "microsoft-edge", "brave-browser")
 
+# The same lists, for Bom's own browser (browser/chromium.py), which drives a
+# Chromium rather than screenshotting with one.
+CHROMIUM_PATHS = _CHROMES
+CHROMIUM_NAMES = _CHROME_NAMES
+
 
 class _Chrome:
     name = "chromium"

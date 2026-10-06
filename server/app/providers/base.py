@@ -7,7 +7,10 @@ call site, so it exists before the first line of business logic.
 
 from __future__ import annotations
 
+import ast
 import base64
+import json
+import re
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -50,6 +53,70 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    # The argument text as the model wrote it, set only when even a lenient
+    # reading could not make an object of it. `arguments` is then empty, and
+    # the turn loop tells the model its call did not parse rather than running
+    # the skill with nothing.
+    unreadable: str | None = None
+
+
+def decode_arguments(raw: Any) -> tuple[dict[str, Any], str | None]:
+    """A call's arguments as a dict, and the raw text when they would not decode.
+
+    Strict JSON first. Then the mistakes models actually make, each of which
+    has one obvious meaning: raw newlines and tabs inside a string (an HTML
+    document, nearly always), a code fence around the object, prose before or
+    after it, a trailing comma, a stray empty key, and Python's spelling of a
+    dict. A value cut off part way is *not* repaired -- finishing it would run
+    the skill with half a document as though it were the whole one.
+    """
+    if isinstance(raw, dict):
+        return raw, None
+    if raw is None or raw == "":
+        return {}, None
+    if not isinstance(raw, str):
+        return {}, str(raw)
+    for candidate in _readings(raw):
+        for parse in (_json_loose, _python_literal):
+            value = parse(candidate)
+            if isinstance(value, dict):
+                return value, None
+    return {}, raw
+
+
+def _readings(raw: str):
+    text = raw.strip()
+    yield text
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        text = text.rsplit("```", 1)[0].strip()
+        yield text
+    start, end = text.find("{"), text.rfind("}")
+    if start > 0 or (end != -1 and end < len(text) - 1):
+        if start != -1 and end > start:
+            text = text[start : end + 1]
+            yield text
+    # `,}` and `,]`, and the `,""}` an empty trailing key leaves behind.
+    tidied = re.sub(r',\s*""\s*(?=[}\]])', "", text)
+    tidied = re.sub(r",\s*(?=[}\]])", "", tidied)
+    if tidied != text:
+        yield tidied
+
+
+def _json_loose(text: str):
+    try:
+        # strict=False admits control characters inside strings, which is the
+        # whole of the "long value with raw newlines" failure.
+        return json.loads(text, strict=False)
+    except (ValueError, RecursionError):
+        return None
+
+
+def _python_literal(text: str):
+    try:
+        return ast.literal_eval(text)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return None
 
 
 @dataclass(frozen=True)

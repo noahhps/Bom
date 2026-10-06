@@ -270,13 +270,46 @@
    * The content fades are deliberately left shorter and delayed: 0.06s + 0.14s
    * and 0.04s + 0.16s both land exactly on 200ms, so the labels finish
    * appearing at the moment the geometry stops rather than after it. */
-  --rail-motion: 200ms ease-in-out;
+  --rail-motion: 200ms var(--ease-drawer);
 
   /* The flower's spring, for the whole sheet. It was the one curve with any
      give in it and it lived only on the logo, so the logo was the one thing
      on screen that felt alive. A control that answers a press or a hover
      with a small overshoot is the flower's manner, borrowed. */
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Motion, named once -- the same move the radii and the type scale made.
+     The sheet had six hand-written curves and some twenty durations (0.14s
+     beside 0.16s beside 120ms, all fading a hover), which is drift, not a
+     system. Three curves besides the spring, each with one job:
+       --ease-out      anything arriving or answering: starts fast, so the
+                       first frame already moves
+       --ease-in-out   something travelling across the screen
+       --ease-drawer   a panel sliding in from an edge (the rail)
+     The built-in `ease-out` and `ease-in-out` are too soft to read as
+     intended; these are the same shapes with more conviction. Nothing in the
+     interface uses `ease-in` -- a curve that starts slow is a control that
+     seems not to have heard you. A hover or a colour change keeps plain
+     `ease`.
+
+     Four durations:
+       --dur-press   100ms  the dip under a finger
+       --dur-quick   150ms  hovers, colours, a chevron turning
+       --dur-base    200ms  something appearing: a dialog, a glow, a fold
+       --dur-settle  300ms  the spring letting go after a press or hover
+     Above 300ms is reserved for what is seen rarely and is meant to be
+     watched -- the flower's bloom, the sign-in panel, a chat changing
+     colour -- and each of those says so where it is set. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 100ms;
+  --dur-quick: 150ms;
+  --dur-base: 200ms;
+  --dur-settle: 300ms;
+  /* How far a pressed control gives. Enough to feel, not enough to notice
+     the label shrink. */
+  --press: scale(0.96);
 
   /* Two voices and a utility face, after the Todo project's system (see the
      @font-face rules below):
@@ -424,12 +457,14 @@ button {
 
 /* A press gives, the way a petal does. Only the round controls -- a pill or
    a circle can shrink without its label reflowing -- and never while motion
-   is unwanted. */
+   is unwanted. One list and one `--press`: the swatches and agent tiles each
+   used to dip by their own amount, and the sign-in button not at all. */
 @media (prefers-reduced-motion: no-preference) {
   :is(.btn, .btnp, .chip, .starter, .send, .effort button,
-      .navrail-mark, .navrail-circle):not(:disabled):active {
-    transform: scale(0.94);
-    transition-duration: 90ms;
+      .navrail-mark, .navrail-circle, .gate-submit, .accent, .agent-wear,
+      .agent-room-new):not(:disabled):active {
+    transform: var(--press);
+    transition-duration: var(--dur-press);
   }
 }
 
@@ -487,7 +522,7 @@ button {
   background: rgba(var(--ink-rgb), 0.06);
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--ink);
-  transition: background 0.16s ease, transform 0.3s var(--spring);
+  transition: background var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
 }
 .btn:hover { background: rgba(var(--ink-rgb), 0.1); }
 
@@ -496,7 +531,7 @@ button {
   background: var(--accent-fill);
   color: var(--on-accent);
   font: 600 var(--t-sm)/1 var(--font);
-  transition: background 0.16s ease, transform 0.3s var(--spring);
+  transition: background var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
 }
 .btnp:hover { background: var(--accent-hover); }
 
@@ -629,7 +664,7 @@ html[data-shell][data-fullscreen] .appbar { padding-left: 12px; }
   place-items: center;
   border-radius: var(--r-card);
   color: var(--text-dim);
-  transition: color 0.16s ease, background 0.16s ease;
+  transition: color var(--dur-quick) ease, background var(--dur-quick) ease;
 }
 .appbar-rail:hover { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
 .appbar-rail[aria-pressed="true"] { color: var(--ink); }
@@ -855,7 +890,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   width: 3px;
   border-radius: 2px;
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--dur-base) ease;
   pointer-events: none;
 }
 .navrail-resize:hover i,
@@ -905,9 +940,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-radius: 50%;
   flex: none;
   padding: 0;
-  transition: box-shadow 0.16s ease, transform 0.16s ease;
+  transition: box-shadow var(--dur-quick) ease, transform var(--dur-quick) var(--ease-out);
 }
-.navrail-circle:hover { transform: scale(1.12); }
+@media (hover: hover) and (pointer: fine) {
+  .navrail-circle:hover { transform: scale(1.12); }
+}
 .navrail-circle:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--menu), 0 0 0 5px var(--accent);
@@ -930,9 +967,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  transition: box-shadow 0.16s ease, transform 0.16s ease;
+  transition: box-shadow var(--dur-quick) ease, transform var(--dur-quick) var(--ease-out);
 }
-.navrail-mark:hover { transform: scale(1.12); }
+@media (hover: hover) and (pointer: fine) {
+  .navrail-mark:hover { transform: scale(1.12); }
+}
 .navrail-mark[aria-current="page"],
 .navrail-mark:focus-visible {
   outline: none;
@@ -947,7 +986,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--text-faint);
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.14s ease;
+  transition: opacity var(--dur-quick) ease;
   /* Zero width while shut, not just transparent. At opacity 0 it still
      occupied 53px, and the foot centres an overflowing row by pushing it out
      of *both* ends -- which put the status dot at x = -6, half of it clipped
@@ -1033,7 +1072,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
   transition: min-height var(--rail-motion), width var(--rail-motion),
     border-radius var(--rail-motion), justify-content var(--rail-motion),
-    padding var(--rail-motion), background 0.16s ease, color 0.16s ease;
+    padding var(--rail-motion), background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 
 /* Where you are. Shut, the rail is a column of icons and the only way to say
@@ -1124,7 +1163,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   letter-spacing: var(--track-label);
   text-transform: lowercase;
   white-space: nowrap;
-  transition: opacity 0.14s ease;
+  transition: opacity var(--dur-quick) ease;
 }
 .navrail[data-open] .lbl-h { opacity: 1; transition-delay: 0.06s; }
 
@@ -1147,7 +1186,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    * the row below become a real constraint, and the scroll below a real
    * escape. */
   min-height: 0;
-  transition: grid-template-rows var(--rail-motion), opacity 0.16s ease;
+  transition: grid-template-rows var(--rail-motion), opacity var(--dur-quick) ease;
 }
 .navrail[data-open] .navrail-sessions {
   grid-template-rows: 1fr;
@@ -1368,7 +1407,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--ink);
   font: 500 var(--t-xs)/1 var(--font);
   letter-spacing: var(--track-body);
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .prj-action svg { width: 14px; height: 14px; flex: none; }
 .prj-action:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.1); }
@@ -1396,7 +1435,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border: 1px solid var(--line-soft);
   border-radius: var(--r-pill);
   background: var(--surface);
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition: border-color var(--dur-quick) ease, background var(--dur-quick) ease;
 }
 .topbar-project:hover { border-color: var(--line-firm); }
 .topbar-project:focus-within { border-color: var(--accent); }
@@ -1425,7 +1464,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .topbar .icon-btn {
   border: 1px solid transparent;
   border-radius: var(--r-pill);
-  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transition: border-color var(--dur-quick) ease, background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .topbar .icon-btn:hover { background: var(--surface); border-color: var(--line-soft); }
 .topbar .icon-btn[data-on] {
@@ -1754,7 +1793,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   width: 3px;
   border-radius: 2px;
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--dur-base) ease;
   pointer-events: none;
 }
 .canvas-resize:hover i,
@@ -1894,8 +1933,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   transform: scale(0.3);
   transform-origin: 50% 100%;
   transition:
-    opacity 200ms ease-out,
-    transform 200ms ease-out;
+    opacity var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 /* Light enough to read as a glow rather than a fill. The glyph above it is
    drawn in --ink at full strength and has to stay legible across the boundary,
@@ -1908,14 +1947,14 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    above it stays put, so the icon does not jump under the finger. */
 .canvas-btn:active::after {
   transform: scale(0.88);
-  transition-duration: 90ms;
+  transition-duration: var(--dur-press);
 }
 
 @media (prefers-reduced-motion: reduce) {
   /* The rise is the part that moves, so that is the part that goes. The state
      still changes -- it just arrives rather than travels. */
   .canvas-btn::after {
-    transition: opacity 200ms ease-out;
+    transition: opacity var(--dur-base) var(--ease-out);
     transform: scale(1);
   }
   .canvas-btn:active::after { transform: scale(1); }
@@ -2520,7 +2559,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--text-dim);
   white-space: nowrap;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.36s var(--spring);
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
 }
 .starter:hover {
   background: color-mix(in srgb, var(--ink) 9%, var(--surface));
@@ -2768,7 +2807,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   gap: 0.096em;
   gap: max(1px, round(0.096em, 1px));
   transform: scaleY(0);
-  transition: transform 120ms ease-in;
+  transition: transform 120ms var(--ease-out);
 }
 .flower[data-open] .flower-eyes {
   transform: scaleY(1);
@@ -3228,7 +3267,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    * them would read as the composer arriving in pieces. Four declarations had
    * already been kept at the same 450ms by hand; this is so the next change to
    * the feel only has to happen in one place. */
-  --composer-motion: 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --composer-motion: 200ms var(--spring);
 }
 
 /* The box and the tray under it, as one thing that moves. The proximity
@@ -3326,7 +3365,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
  * One property, one owner: `--near` decides where the box sits, and the pop is
  * allowed to borrow it for exactly the length of the animation. */
 .composer[data-popping] .composer-stack {
-  animation: composer-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards 1;
+  animation: composer-pop 600ms var(--spring) forwards 1;
   transition: none;
 }
 
@@ -3351,10 +3390,10 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 
 .composer-box:focus-within {
   border-color: var(--line-strong);
-  transition: border-color 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: border-color var(--dur-base) var(--ease-out);
 }
 .composer-stack:focus-within {
-  transition: transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 /* The two cases where approaching-with-a-cursor is not a thing that can
@@ -3363,9 +3402,9 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
  * The phone is the one that matters: there is no pointer to come closer, and
  * therefore nothing that could ever reveal a box sitting 80% below the edge --
  * the feature would read as a broken composer. Reduced motion opts out because
- * this is motion, and the global `transition: none` further down would
- * otherwise stop the animation while leaving the transform, freezing it
- * tucked. */
+ * this is motion, and the global rule further down drops `transform` from
+ * every transition -- which would stop the slide while leaving the transform,
+ * freezing it tucked. */
 @media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
   .composer-stack {
     transform: none;
@@ -3435,7 +3474,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background: var(--kind-grad);
   background-size: 300% 100%;
   background-position: calc(var(--i, 0) * 50%) 0;
-  transition: transform 0.28s var(--spring, cubic-bezier(0.34, 1.3, 0.64, 1)), background-position 0.28s ease;
+  transition: transform var(--dur-settle) var(--spring), background-position var(--dur-settle) ease;
 }
 .composer-kind button {
   display: inline-flex;
@@ -3446,7 +3485,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-radius: calc(var(--r-pill) - 2px);
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--text-dim);
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .composer-kind button:hover:not(:disabled) { color: var(--ink); }
 .composer-kind button { justify-content: center; }
@@ -3517,9 +3556,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   display: grid;
   place-items: center;
   flex: none;
-  transition: transform 0.36s var(--spring), background 0.16s ease;
+  transition: transform var(--dur-settle) var(--spring), background var(--dur-quick) ease;
 }
-.send:not(:disabled):hover { transform: scale(1.08); }
+@media (hover: hover) and (pointer: fine) {
+  .send:not(:disabled):hover { transform: scale(1.08); }
+}
 .send svg { width: 15px; height: 15px; }
 /* Tabler's filled glyphs (the stop sign) are drawn by fill, not stroke; the
    sheet's `svg` rule would otherwise outline them. */
@@ -3627,7 +3668,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   border-radius: calc(var(--r-control) - 3px);
   font: 400 var(--t-sm)/1 var(--font);
   color: var(--text-dim);
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .appearance button:hover { color: var(--ink); }
 .appearance button[aria-checked="true"] {
@@ -4223,7 +4264,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   display: flex;
   flex-direction: column;
   gap: 26px;
-  animation: gate-in 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: gate-in 560ms var(--ease-out) both;
 }
 @keyframes gate-in {
   from { opacity: 0; transform: translateY(10px); }
@@ -4256,7 +4297,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   transform: scale(0.9);
   transition:
     opacity 420ms ease,
-    transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 700ms var(--spring);
 }
 .gate-mark[data-hover]::before,
 .gate-panel:has(.gate-card[aria-busy]) .gate-mark::before {
@@ -4319,8 +4360,8 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--ink);
   outline: none;
   transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
+    border-color var(--dur-quick) ease,
+    box-shadow var(--dur-quick) ease;
 }
 .gate-input::placeholder { color: var(--text-faint); }
 .gate-input:focus {
@@ -4358,8 +4399,9 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--on-ink);
   font: 500 var(--t-md)/1 var(--font);
   transition:
-    background-color 120ms ease,
-    opacity 120ms ease;
+    background-color var(--dur-quick) ease,
+    opacity var(--dur-quick) ease,
+    transform var(--dur-settle) var(--spring);
 }
 .gate-submit:hover:not(:disabled) { background: var(--ink-hover); }
 .gate-submit:disabled { opacity: 0.4; cursor: default; }
@@ -4394,7 +4436,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   width: 12px;
   text-align: center;
   color: var(--text-faint);
-  transition: transform 160ms ease;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 .gate-help[open] summary::before { transform: rotate(45deg); }
 .gate-help summary:hover { color: var(--ink); }
@@ -4727,8 +4769,20 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   .unbacked { margin: 14px 16px 0; }
 }
 
+/* Reduced motion is less motion, not none. Nothing travels, grows or loops --
+   every keyframe stops, and a transition may only carry the properties that
+   change in place -- but a hover still fades and a state still crossfades,
+   because a colour that snaps reads as a glitch rather than as calm. Narrowing
+   `transition-property` keeps each rule's own durations (they cycle over the
+   new list), and a rule that said `transition: none` still has a 0s duration,
+   so nothing that was still starts moving. This used to be
+   `transition: none !important`, which also overruled the fades the
+   components below ask for under this same query (`.canvas-btn::after`). */
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow, filter !important;
+  }
 }
 
 
@@ -4939,7 +4993,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   font: 500 var(--t-xs)/1 var(--font);
   letter-spacing: var(--track-body);
   color: var(--text-dim);
-  transition: border-color 0.14s ease, color 0.14s ease;
+  transition: border-color var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .skill-always:hover { border-color: var(--accent); color: var(--accent); }
 .skill-always[aria-pressed="true"] {
@@ -5044,7 +5098,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   background: var(--surface);
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--ink);
-  transition: border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+  transition: border-color var(--dur-quick) ease, background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .approval-btn:hover {
   border-color: var(--accent);
@@ -5121,7 +5175,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   background: var(--surface);
   color: var(--ink);
   text-align: left;
-  transition: border-color 0.14s ease, background 0.14s ease;
+  transition: border-color var(--dur-quick) ease, background var(--dur-quick) ease;
 }
 .design-opt:hover { border-color: var(--accent); background: rgba(var(--ink-rgb), 0.03); }
 .design-opt:focus-visible {
@@ -5192,7 +5246,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--text-faint);
   text-align: left;
   border-radius: var(--r-card);
-  transition: color 0.14s ease;
+  transition: color var(--dur-quick) ease;
 }
 .skill-trace[data-live] .skill-trace-label { color: var(--accent); }
 .skill-trace-label:not(:disabled):hover { color: var(--ink); }
@@ -5210,7 +5264,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   width: 13px;
   height: 13px;
   flex: none;
-  transition: transform 0.16s ease;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 /* Down when the cards are showing, right when they are folded away -- the
    same direction the rail's own disclosures point. */
@@ -5687,9 +5741,11 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   /* The ring that says "chosen", drawn at rest as the same size in the
      background colour so selecting one changes a colour rather than a size. */
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
-  transition: box-shadow 200ms ease, transform 200ms ease;
+  transition: box-shadow var(--dur-base) ease, transform var(--dur-base) var(--ease-out);
 }
-.accent:hover { transform: scale(1.12); }
+@media (hover: hover) and (pointer: fine) {
+  .accent:hover { transform: scale(1.12); }
+}
 .accent:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -5855,7 +5911,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   place-items: center;
   border-radius: var(--r-pill);
   color: var(--text-faint);
-  transition: background 0.14s ease, color 0.14s ease;
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .navrail[data-open] .navrail-fold { display: grid; }
 .navrail-fold:hover { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
@@ -5863,7 +5919,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .navrail-fold svg {
   width: 15px;
   height: 15px;
-  transition: transform 0.18s ease;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 /* Pointing down when the list is out, right when it is folded away. */
 .navrail-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
@@ -6048,7 +6104,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   font: 400 var(--t-sm)/1 var(--font);
   color: var(--text-dim);
   white-space: nowrap;
-  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease;
+  transition: border-color var(--dur-quick) ease, color var(--dur-quick) ease, background var(--dur-quick) ease;
 }
 .design-look:hover { border-color: var(--line-strong); color: var(--ink); }
 .design-look[data-on] {
@@ -6545,7 +6601,7 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   overflow: hidden;
   cursor: pointer;
   box-shadow: 0 0 0 1px var(--line);
-  transition: box-shadow 0.14s ease, transform 0.14s ease;
+  transition: box-shadow var(--dur-quick) ease, transform 0.14s ease;
 }
 .deck-thumb:hover { box-shadow: 0 0 0 1px var(--line-strong); }
 .deck-thumb[data-on] { box-shadow: 0 0 0 2px var(--accent); }
@@ -6877,7 +6933,7 @@ tr[data-total] .sheet-cell {
   position: relative;
   cursor: col-resize;
   background: var(--line);
-  transition: background-color 120ms ease;
+  transition: background-color var(--dur-quick) ease;
 }
 .code-split::after { content: ""; position: absolute; inset: 0 -4px; }
 .code-split:hover,
@@ -6983,7 +7039,7 @@ tr[data-total] .sheet-cell {
   place-items: center;
   color: var(--text-faint);
   transform: rotate(-90deg);
-  transition: transform 120ms ease;
+  transition: transform var(--dur-quick) var(--ease-out);
 }
 .code-tree-chevron[data-open] { transform: none; }
 .code-tree-chevron svg { width: 12px; height: 12px; }
@@ -7772,7 +7828,7 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--text-dim);
   white-space: nowrap;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
 }
 .segmented > button:hover { color: var(--ink); }
 .segmented > button[data-active],
@@ -7902,7 +7958,7 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
   background: var(--surface);
   font: 500 var(--t-sm)/1 var(--font);
   color: var(--ink);
-  transition: border-color 0.16s ease;
+  transition: border-color var(--dur-quick) ease;
 }
 .topbar-build:hover { border-color: var(--accent); color: var(--accent); }
 .topbar-build svg { width: 15px; height: 15px; }
@@ -8112,7 +8168,7 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
   --line: var(--glass-edge);
   background: transparent;
   background-image: none;
-  transition: background-color 0.3s ease;
+  transition: background-color var(--dur-settle) ease;
 }
 /* The new-conversation screen, light theme: white, fading from nearly solid at
    the top to a little more see-through at the foot, so the window's material
@@ -8248,7 +8304,7 @@ html:not([data-shell]) .screen[data-glass] {
   background: rgba(0, 0, 0, 0.32);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  animation: settings-in 0.16s ease;
+  animation: settings-in var(--dur-base) ease;
 }
 .settings-window {
   position: relative;
@@ -8261,7 +8317,7 @@ html:not([data-shell]) .screen[data-glass] {
   border-radius: var(--r-float);
   background: var(--ground);
   box-shadow: var(--elevation-float);
-  animation: settings-rise 0.18s ease;
+  animation: settings-rise var(--dur-base) var(--ease-out);
 }
 @keyframes settings-in { from { opacity: 0; } }
 @keyframes settings-rise { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
@@ -8508,7 +8564,7 @@ html:not([data-shell]) .screen[data-glass] {
   width: 3px;
   border-radius: 2px;
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--dur-base) ease;
   pointer-events: none;
 }
 .read-resize:hover i,
@@ -8598,7 +8654,7 @@ html:not([data-shell]) .screen[data-glass] {
   background: rgba(0, 0, 0, 0.32);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  animation: settings-in 0.16s ease;
+  animation: settings-in var(--dur-base) ease;
 }
 .agent-sheet {
   position: relative;
@@ -8684,14 +8740,13 @@ html:not([data-shell]) .screen[data-glass] {
   padding-top: 6px;
   border-radius: var(--r-float);
   background: color-mix(in srgb, var(--ink) 4%, var(--surface));
-  transition: background 0.16s ease, box-shadow 0.16s ease, transform 0.3s var(--spring);
+  transition: background var(--dur-quick) ease, box-shadow var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
 }
 .agent-wear:hover { background: var(--accent-wash); }
 .agent-wear[data-on] {
   background: var(--accent-field);
   box-shadow: inset 0 0 0 2px var(--accent-soft);
 }
-.agent-wear:active { transform: scale(0.94); }
 .agent-sheet-actions {
   display: flex;
   align-items: center;
@@ -8739,9 +8794,12 @@ html:not([data-shell]) .screen[data-glass] {
   border-radius: 50%;
   color: var(--text-dim);
   background: rgba(var(--ink-rgb), 0.06);
-  transition: background 0.16s ease, transform 0.3s var(--spring);
+  transition: background var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
 }
-.agent-room-new:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--ink); transform: scale(1.08); }
+.agent-room-new:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-room-new:hover { transform: scale(1.08); }
+}
 .agent-room-new[aria-pressed="true"] { background: var(--accent-field); color: var(--accent); }
 .agent-room-new svg { width: 16px; height: 16px; }
 .agent-room-empty { margin: 4px 12px; font-size: var(--t-sm); color: var(--text-faint); }
@@ -8767,7 +8825,7 @@ html:not([data-shell]) .screen[data-glass] {
   padding: 10px 12px 8px;
   border-radius: var(--r-float);
   text-align: left;
-  transition: background 0.16s ease;
+  transition: background var(--dur-quick) ease;
 }
 .agent-contact:hover { background: rgba(var(--ink-rgb), 0.05); }
 /* The one you are talking to: the only coloured row, in its own accent. */
@@ -9030,5 +9088,52 @@ html:not([data-shell]) .screen[data-glass] {
 .navrail-top { min-height: 28px; margin-top: -12px; margin-bottom: -22px; }
 .navrail[data-open] .navrail-top { padding: 0 8px; gap: 8px; }
 .navrail .navrail-mark { width: 20px; height: 20px; }
-.navrail .navrail-mark:hover { transform: scale(1.15); }
+@media (hover: hover) and (pointer: fine) {
+  .navrail .navrail-mark:hover { transform: scale(1.15); }
+}
 
+/* -- the browser panel ------------------------------------------------------
+ * The page the model has open, on the canvas panel's shell (see
+ * components/BrowserPanel.jsx): an address line under the head, the picture,
+ * and a foot that says the picture is not live. */
+.browser-panel-title { cursor: default; }
+.browser-panel-url {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+}
+.browser-panel-url > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browser-panel-url .icon-btn { flex: none; color: inherit; }
+.browser-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: block;
+  background: var(--rail);
+}
+.browser-panel-body img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.browser-panel-body .canvas-empty { height: 100%; }
+.browser-panel-foot {
+  flex: none;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-faint);
+}

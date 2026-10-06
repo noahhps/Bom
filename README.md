@@ -67,6 +67,9 @@ Lower `CONTEXT_TOKENS` if the local model runs short of memory: the KV cache gro
 
 Long conversations are compacted rather than cut off: once the history fills half the window, the older turns are summarized and the recent ones are still sent word for word (`COMPACT_AT`, `COMPACT_KEEP`, `COMPACT_SUMMARY_TOKENS`; `COMPACT_AT=0` turns it off). Cloud requests ask for prompt caching, so a tool loop doesn't pay full price for the same conversation every round (`CACHE_TTL=5m` or `1h`).
 
+### Tool calls that mend themselves
+Small local models often call the right tool slightly wrong. Bom repairs a call before it asks you to approve it, but only where there is one thing the model could have meant. It fixes a misspelled or prefixed tool name (`functions.webSearch` becomes `web_search`), an argument in the wrong case or with a typo, arguments wrapped in an extra `arguments` object, a value of the wrong type (`"7"` where a number goes), and arguments that are nearly JSON. A call the model wrote into its reply as text, such as `<tool_call>{…}</tool_call>`, runs as a call. The model is told what was fixed so it spells it right next time. A call that can't be repaired, because its arguments won't decode or it has none of the ones it needs, doesn't run. The model gets the tool's parameters back so it can send the call again. See `server/app/heal.py`.
+
 ### Enterprise mode
 For company use, with long conversations, large codebases and big cloud context windows, switch on **Settings → Enterprise mode**. It raises the context window, tool-result sizes, round and timeout limits, compacts later while keeping more of the conversation verbatim, and holds the prompt cache for an hour. Safety settings don't change. See [docs/enterprise.md](docs/enterprise.md) for every limit and the `ENTERPRISE_*` variables that tune them.
 
@@ -77,6 +80,11 @@ Use your Bom, with its models, conversations and files, from anywhere, with no p
 ./run.sh --remote                         # on the host: prints a code to link it
 ```
 Or use **Settings → Remote access** on the host. See [docs/remote.md](docs/remote.md) for the Vercel deploy and how access is checked.
+
+### Browsing the web
+The model has two browsers, and the choice between them is the whole design. **Bom's browser** is a private Chromium with its own profile under `data/browser/`, signed in to nothing: `open_page`, `read_page`, `act_on_page` and (for a model that can see) `view_page`. It reads a page as numbered controls and text, acts on a control by its number, and you see a picture of the page after every step in the panel beside the conversation. It runs any Chrome, Chromium, Edge or Brave already on the machine (or `BROWSER_PATH`), and **Settings → Browser** can fetch Google's plain *Chrome for Testing* build onto a machine that has none.
+
+**Your browser** is the one you use yourself, with your accounts in it -- for the few things that need them: your mail, a dashboard, an order. Off until you pick a browser in **Settings → Browser**; then `open_in_my_browser`, `read_my_browser` and `act_in_my_browser` work in its front tab through Apple Events (macOS), and every step there is put to you first, whatever the ask-first switch says. The model is told never to type a password, a code or a card number: when a page wants one, it opens the page in your browser and asks you to sign in yourself. See [docs/browser.md](docs/browser.md).
 
 ### Work tools (MCP)
 **Skills → MCP servers & presets → Work tools** connects Atlassian (Jira, Confluence), Linear, Notion, Sentry, Stripe and any other hosted MCP server that signs in with OAuth, including your company's own. Choose *Add & sign in*, approve Bom on the service's page, and its tools are ready. Jira and Confluence Server / Data Center connect with tokens. See [docs/work-tools.md](docs/work-tools.md).

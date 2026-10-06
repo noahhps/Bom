@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import build_router
 from .workbench import Previews, Terminals, build_workbench_router, mount_public
 from .auth import make_auth_dependency
+from .browser import Browsers, build_browser_router
 from .config import Settings, load_settings, read_secret, write_secret
 from .db import Database
 from .enterprise import LiveSettings
@@ -36,6 +37,7 @@ from .providers import (
     model_setting_key,
 )
 from .providers.router import FALLBACK_SETTING
+from .skills.browser import browser_skills
 from .skills.calendar import AddEvent, FindEvents, ListEvents, UpdateEvent
 from .skills.canvas import CheckDesign, EditCanvas, OpenCanvas, ReadCanvas, WriteCanvas
 from .skills.code import code_skills
@@ -268,6 +270,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # reaching for something that was never there.
     web_search = WebSearch(settings.search_api_key, endpoint=settings.search_endpoint)
     registry.register(web_search)
+    # The web, a page at a time. Bom's own browser -- a private Chromium with
+    # its own profile -- for anything that is about a page, offered once an
+    # engine is found or fetched; and the user's own browser, with their
+    # accounts in it, offered once they pick one in Settings → Browser and
+    # asked about on every call. See skills/browser.py and browser/.
+    browsers = Browsers(settings, store)
+    for skill in browser_skills(browsers, settings):
+        registry.register(skill)
     
     # Register skill creator to help with skill management
 
@@ -310,6 +320,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # left running with nothing to show it or stop it is worse than one
         # stopped.
         terminals.close_all()
+        # Bom's browser goes with the server too: a headless Chromium left
+        # running with no one to drive it is only a process to find later.
+        await browsers.aclose()
         orphan_watch.cancel()
         mcp_sync.cancel()
         await mcp_manager.aclose()
@@ -415,6 +428,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.providers = providers
     app.state.openrouter_oauth = oauth
     app.state.remote = remote
+    app.state.browsers = browsers
 
     auth = make_auth_dependency(settings)
     app.include_router(
@@ -432,6 +446,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     mount_public(app, settings, terminals, previews)
     app.include_router(build_remote_router(remote, auth, settings), prefix="/api")
+    app.include_router(build_browser_router(browsers, auth), prefix="/api")
     app.state.terminals = terminals
 
     @app.get("/openrouter/callback/{state}")

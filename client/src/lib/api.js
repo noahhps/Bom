@@ -258,6 +258,17 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
     // optional on the wire, so a page can send one without the other.
     setApprovalSettings: (patch) =>
       json("/skills/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+    // -- the browsers ------------------------------------------------------
+    // Bom's own browser and the user's, as Settings → Browser sees them: the
+    // engine found or fetched, the window switch, and which of the user's
+    // browsers the model may work in.
+    getBrowser: () => json("/browser"),
+    setBrowser: (patch) => json("/browser", { method: "PATCH", body: JSON.stringify(patch) }),
+    // Fetch Chrome for Testing onto the host. Large; only ever on a press.
+    installBrowser: () => json("/browser/install", { method: "POST" }),
+    closeBrowser: () => json("/browser/close", { method: "POST" }),
+    // The latest picture of a conversation's tab, for the panel.
+    browserView: (sessionId) => json("/browser/view/" + encodeURIComponent(sessionId)),
     // Answer one pending prompt. The turn is still streaming on another
     // connection and resumes the moment this lands.
     answerApproval: (id, decision) =>

@@ -283,6 +283,26 @@ class Settings:
         default_factory=lambda: _env_int("SANDBOX_OUTPUT_CHARS", 6_000)
     )
 
+    # --- the browser -----------------------------------------------------
+    # Bom's own browser: a Chromium of its own, with its own profile, that the
+    # model opens pages in (browser/chromium.py). Found on the machine (Chrome,
+    # Chromium, Edge, Brave), fetched by Settings → Browser, or named here.
+    # CHROME_PATH, which the render uses, is honoured too.
+    browser_path: str = field(default_factory=lambda: _env("BROWSER_PATH", ""))
+    # Its profile, and the fetched engine when there is one. Under data/ like
+    # everything else that is this machine's own.
+    browser_dir: Path = field(
+        default_factory=lambda: Path(_env("BROWSER_DIR", str(REPO_ROOT / "data" / "browser")))
+    )
+    # How long a page may take to load before the model is handed what there
+    # is. Seconds.
+    browser_timeout: int = field(default_factory=lambda: _env_int("BROWSER_TIMEOUT", 20))
+    # How much of a page one read puts into the window: its text in characters
+    # (longer pages are read on from an offset), and how many controls are
+    # listed. The read skill raises its own result allowance to fit these.
+    browser_text_chars: int = field(default_factory=lambda: _env_int("BROWSER_TEXT_CHARS", 8_000))
+    browser_elements: int = field(default_factory=lambda: _env_int("BROWSER_ELEMENTS", 120))
+
     # --- code ----------------------------------------------------------
     # Where a project folder may be opened from in the Code view. A folder is
     # opened by the reader, never by the model, and must sit *inside* one of

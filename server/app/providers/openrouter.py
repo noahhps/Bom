@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from .base import Chunk, ContextOverflow, Message, ProviderError, ToolCall
+from .base import Chunk, ContextOverflow, Message, ProviderError, ToolCall, decode_arguments
 
 DEFAULT_URL = "https://openrouter.ai/api/v1"
 # `openrouter/auto` picks a model per prompt. It is the default because it is
@@ -492,27 +492,23 @@ def _finish_calls(pending: dict[int, dict[str, Any]]) -> tuple[ToolCall, ...]:
     """The accumulated calls, as the seam's shape.
 
     Arguments arrive as a JSON string and are decoded here so nothing above
-    this module has to know that. An unparseable one becomes an empty dict for
-    the reason `ollama.py` gives: the skill then raises a clean error about a
-    missing argument, which the model is told and can fix, where an exception
-    here would end the turn with nothing to say.
+    this module has to know that, leniently, for the reason `ollama.py` gives.
+    One that will not decode becomes an empty dict with its raw text kept as
+    `unreadable`: the turn loop tells the model, which can fix it, where an
+    exception here would end the turn with nothing to say.
     """
     calls: list[ToolCall] = []
     for index in sorted(pending):
         slot = pending[index]
         if not slot["name"]:
             continue
-        try:
-            arguments = json.loads(slot["arguments"] or "{}")
-        except json.JSONDecodeError:
-            arguments = {}
-        if not isinstance(arguments, dict):
-            arguments = {}
+        arguments, unreadable = decode_arguments(slot["arguments"])
         calls.append(
             ToolCall(
                 id=slot["id"] or f"call_{index}",
                 name=slot["name"],
                 arguments=arguments,
+                unreadable=unreadable,
             )
         )
     return tuple(calls)

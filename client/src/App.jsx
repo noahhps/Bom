@@ -10,6 +10,7 @@ import { AgentGallery } from "./components/Agents";
 import { AppBar } from "./components/AppBar";
 import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
+import { BrowserPanel } from "./components/BrowserPanel";
 import { CodeStarters, CodeStartersHead } from "./components/code/CodeStarters";
 import { CodeView } from "./components/code/CodeView";
 import { FolderPicker } from "./components/code/FolderPicker";
@@ -28,6 +29,7 @@ import { TopBar } from "./components/TopBar";
 import { useAgents } from "./hooks/useAgents";
 import { useDesigns } from "./hooks/useDesigns";
 import { useDesignLibrary } from "./hooks/useDesignLibrary";
+import { useBrowser } from "./hooks/useBrowser";
 import { useCanvas } from "./hooks/useCanvas";
 import { useCanvasWidth } from "./hooks/useCanvasWidth";
 import { useReadWidth } from "./hooks/useReadWidth";
@@ -283,6 +285,9 @@ export default function App() {
     (list, sid) => canvasApplyRef.current(list, sid),
     [],
   );
+  // And the browser panel: a browser step drew the page again.
+  const browserApplyRef = useRef(() => {});
+  const onBrowser = useCallback((view, sid) => browserApplyRef.current(view, sid), []);
   // The same for the Code view's editor: a code tool changed files.
   const workspaceApplyRef = useRef(() => {});
   const onWorkspace = useCallback((paths, sid) => workspaceApplyRef.current(paths, sid), []);
@@ -307,6 +312,7 @@ export default function App() {
   const chat = useChat(api, {
     onSessionsChanged,
     onCanvas,
+    onBrowser,
     onWorkspace,
     onProjects,
     provider,
@@ -422,6 +428,10 @@ export default function App() {
   );
 
   const canvas = useCanvas(api, chat.sessionId);
+  // The page Bom's browser (or the user's) has open for this conversation.
+  // It shares the side panel with the canvas: whichever the model touched
+  // last is the one on screen, and the two toggles swap between them.
+  const browser = useBrowser(api, chat.sessionId);
   // Every design, by design project: the Projects page, the Code view's
   // Designs panel and the new-project dialog all choose from it.
   const libraryShown = view === "projects" || view === "code" || Boolean(newProject);
@@ -437,7 +447,22 @@ export default function App() {
     projects.refresh();
     onSessionsChanged();
   };
-  canvasApplyRef.current = canvas.applyEvent;
+  canvasApplyRef.current = (list, sid) => {
+    if (!sid || sid === chat.sessionId) browser.closePanel();
+    canvas.applyEvent(list, sid);
+  };
+  browserApplyRef.current = (view, sid) => {
+    if (!sid || sid === chat.sessionId) canvas.closePanel();
+    browser.applyEvent(view, sid);
+  };
+  const toggleCanvas = () => {
+    if (!canvas.open) browser.closePanel();
+    canvas.toggle();
+  };
+  const toggleBrowser = () => {
+    if (!browser.open) canvas.closePanel();
+    browser.toggle();
+  };
 
   // The accent in force, and the three scopes it can be set from. Given the
   // open conversation as well as the lists, because an accent set to `auto`
@@ -1088,7 +1113,10 @@ export default function App() {
           }
           canvasCount={canvas.count}
           canvasOpen={canvas.open}
-          onToggleCanvas={canvas.toggle}
+          onToggleCanvas={toggleCanvas}
+          browserShown={browser.has}
+          browserOpen={browser.open}
+          onToggleBrowser={toggleBrowser}
           // In a room the agent is the room; there is nothing to pick.
           agents={room ? [] : agents.agents}
           agentId={current?.agent_id || null}
@@ -1211,7 +1239,7 @@ export default function App() {
           data-resizing={rail.resizing || canvasSize.resizing || readSize.resizing ? "" : undefined}
           // Splits the sheet when the canvas is open, so the thread and the
           // document sit side by side rather than one over the other.
-          data-canvas={conversing && canvas.open ? "" : undefined}
+          data-canvas={conversing && (canvas.open || browser.open) ? "" : undefined}
           // Both omitted below 900px so the stylesheet's phone sizing survives:
           // there the rail is a full-screen panel and the canvas a full overlay,
           // and an inline custom property would outrank the rules that say so.
@@ -1505,7 +1533,10 @@ export default function App() {
                   onCustomize={(agent) => setAgentSheet({ agent, initial: null })}
                   canvasCount={canvas.count}
                   canvasOpen={canvas.open}
-                  onToggleCanvas={canvas.toggle}
+                  onToggleCanvas={toggleCanvas}
+                  browserShown={browser.has}
+                  browserOpen={browser.open}
+                  onToggleBrowser={toggleBrowser}
                   gallery={
                     <AgentGallery
                       presets={agents.presets}
@@ -1534,7 +1565,16 @@ export default function App() {
                 than a child of it, so it splits the width with the thread instead
                 of scrolling inside it -- and only in chat, where a conversation is
                 what a canvas belongs to. */}
-            {conversing && canvas.open ? (
+            {conversing && browser.open ? (
+              <BrowserPanel
+                view={browser.view}
+                onClose={browser.closePanel}
+                resizable={canvasSize.enabled}
+                width={canvasSize.width}
+                onResizeStart={canvasSize.start}
+                onResizeKey={canvasSize.nudge}
+              />
+            ) : conversing && canvas.open ? (
               <Canvas
                 canvases={canvas.canvases}
                 active={canvas.active}

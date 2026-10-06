@@ -9235,25 +9235,6 @@ html:not([data-shell]) .screen[data-glass] {
 .msgs-greeting .agent-avatar,
 .msgs-greeting .msgs-avatar-group { margin-right: 4px; }
 
-/* Where one of an agent's older conversations gives way to the next: the
-   same thread, picked up again -- a quiet rule with the date on it, the way a
-   messenger marks a new day. */
-.turn-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-faint);
-  font: 500 var(--t-xs)/1.2 var(--font);
-}
-.turn-divider::before,
-.turn-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line-soft);
-}
-.turn-divider span { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 /* Who wrote an answer, in a group: first on the line above it. */
 .turn-sender {
   font: 600 var(--t-sm)/1.6 var(--font);

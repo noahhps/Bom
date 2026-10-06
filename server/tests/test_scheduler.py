@@ -349,18 +349,45 @@ async def test_an_agents_task_runs_in_the_agents_conversation(store: Store):
 
 
 @pytest.mark.asyncio
-async def test_a_busy_agent_conversation_is_not_talked_over(store: Store):
+async def test_a_busy_agent_conversation_is_waited_for_not_talked_over(store: Store, monkeypatch):
+    monkeypatch.setattr("app.scheduler.BUSY_POLL_SECONDS", 0.01)
     scheduler = _scheduler(store, _Answers())
     secretary = store.create_agent("Secretary")
     own = store.create_session()["id"]
     store.set_session_agent(own, secretary.id)
-    scheduler.orchestrator.live.add(own)  # the reader is mid-turn in it
+    live = scheduler.orchestrator.live
+    live.add(own)  # the reader is mid-turn in it
     due = ms(2026, 10, 1, 9)
     task = _task(store, due, agent_id=secretary.id)
 
     await scheduler.tick(due + 5_000)
+    await asyncio.sleep(0.05)
+    assert store.list_messages(own) == []  # still waiting
+    live.discard(own)
     await scheduler.wait_idle()
 
     done = store.get_task(task.id)
-    assert done.last_status == "ok" and done.last_session_id != own
+    assert done.last_status == "ok" and done.last_session_id == own
+    assert [m.role for m in store.list_messages(own)] == ["user", "assistant"]
+    # And no second conversation was made for the agent.
+    assert store.agents_with_several_conversations() == {}
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_waits_too_long_is_skipped(store: Store, monkeypatch):
+    monkeypatch.setattr("app.scheduler.BUSY_POLL_SECONDS", 0.01)
+    scheduler = _scheduler(store, _Answers())
+    scheduler.busy_wait = 0.03
+    secretary = store.create_agent("Secretary")
+    own = store.create_session()["id"]
+    store.set_session_agent(own, secretary.id)
+    scheduler.orchestrator.live.add(own)
+    task = _task(store, ms(2026, 10, 1, 9), agent_id=secretary.id)
+
+    await scheduler.tick(ms(2026, 10, 1, 9) + 5_000)
+    await scheduler.wait_idle()
+
+    done = store.get_task(task.id)
+    assert done.last_status == "error" and "busy" in done.last_summary
     assert store.list_messages(own) == []
+    assert store.agents_with_several_conversations() == {}

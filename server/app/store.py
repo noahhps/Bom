@@ -2150,6 +2150,77 @@ class Store:
         )
         return row["id"] if row else None
 
+    def _agent_chats(self) -> dict[str, list[str]]:
+        """Every agent's chats outside a group, newest first."""
+        rows = self.db.query(
+            """
+            SELECT s.id, s.agent_id FROM sessions s
+            WHERE s.agent_id IS NOT NULL AND COALESCE(s.mode, 'chat') = 'chat'
+              AND NOT EXISTS (SELECT 1 FROM session_members g WHERE g.session_id = s.id)
+            ORDER BY s.updated_at DESC, s.rowid DESC
+            """
+        )
+        chats: dict[str, list[str]] = {}
+        for row in rows:
+            chats.setdefault(row["agent_id"], []).append(row["id"])
+        return chats
+
+    def agents_with_several_conversations(self) -> dict[str, list[str]]:
+        return {agent: ids for agent, ids in self._agent_chats().items() if len(ids) > 1}
+
+    def merge_sessions(self, keep: str, others: list[str]) -> None:
+        """Fold `others` into `keep`: their messages, canvases, pictures and
+        events become `keep`'s, and they are gone.
+
+        The messages keep their ids, rowids, words and times -- only which
+        conversation they belong to changes -- so the search index over them
+        is still right and is left alone: its update trigger is suspended for
+        the move and put back exactly as it was. `keep`'s compaction is
+        dropped, being a summary of a history that is no longer the whole of
+        it; the next turn compacts again if it needs to.
+        """
+        others = [other for other in others if other != keep]
+        if not others:
+            return
+        trigger = self.db.query_one(
+            "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_au'"
+        )
+        with self.db.transaction() as conn:
+            if trigger:
+                conn.execute("DROP TRIGGER messages_au")
+            for other in others:
+                for table in ("messages", "canvases", "images", "calendar_events"):
+                    conn.execute(
+                        f"UPDATE {table} SET session_id = ? WHERE session_id = ?", (keep, other)
+                    )
+                for column in ("last_session_id", "origin_session_id"):
+                    conn.execute(
+                        f"UPDATE scheduled_tasks SET {column} = ? WHERE {column} = ?", (keep, other)
+                    )
+                conn.execute("DELETE FROM sessions WHERE id = ?", (other,))
+            conn.execute("DELETE FROM compactions WHERE session_id = ?", (keep,))
+            # The kept conversation moved last when the latest of them did.
+            conn.execute(
+                "UPDATE sessions SET updated_at = MAX(updated_at, "
+                "COALESCE((SELECT MAX(created_at) FROM messages WHERE session_id = ?), 0)) "
+                "WHERE id = ?",
+                (keep, keep),
+            )
+            if trigger:
+                conn.execute(trigger["sql"])
+
+    def consolidate_agent_conversations(self) -> int:
+        """Give every agent one conversation, folding any others into its newest.
+
+        Builds before this one started a new conversation with an agent each
+        time; an agent has one now. Returns how many were folded in.
+        """
+        folded = 0
+        for ids in self.agents_with_several_conversations().values():
+            self.merge_sessions(ids[0], ids[1:])
+            folded += len(ids) - 1
+        return folded
+
     def set_message_author(self, message_id: str, agent_id: str) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO message_authors (message_id, agent_id) VALUES (?, ?)",

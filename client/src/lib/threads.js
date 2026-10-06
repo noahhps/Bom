@@ -5,12 +5,10 @@
  * `agent_id` -- and the default assistant, with neither, is "Bom". Designs and
  * code sessions are Studio's and are not threads.
  *
- * Each agent has one conversation, so an agent's thread is every chat session
- * it has had alone with the user: one, from now on (the server carries a new
- * message to an agent on in its existing conversation), or several left by
- * builds that started a fresh one each time -- shown as one thread, the
- * newest carrying on and the older ones above it. Group chats and chats with
- * Bom are made as often as they are started, and each is its own thread.
+ * Each agent has one conversation -- the server keeps it that way, folding in
+ * any that older builds left -- so an agent is one thread. Group chats and
+ * chats with Bom are made as often as they are started, and each is its own
+ * thread.
  *
  * `BOM` stands for the default assistant wherever a list of recipients is
  * handled, so "a chat with Bom" and "a chat with the Analyst" go through the

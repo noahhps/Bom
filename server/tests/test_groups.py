@@ -321,3 +321,66 @@ def test_a_one_to_one_chat_is_unchanged(client: TestClient):
     assert client.seen == [{"agent": "Secretary", "reply_only": False}]
     listed = client.get("/api/sessions").json()["sessions"][0]
     assert listed["members"] == [] and listed["agent_id"] == a
+
+
+# -- one conversation per agent, for agents older builds gave several ---------
+
+
+def test_merging_moves_everything_and_keeps_search_right(store: Store):
+    agent = store.create_agent("Secretary")
+    older, newer = store.create_session()["id"], store.create_session()["id"]
+    for sid in (older, newer):
+        store.set_session_agent(sid, agent.id)
+    store.add_message(older, "user", "Book the dentist")
+    store.create_canvas(older, "Dentist notes", content="Tuesday")
+    store.add_message(newer, "user", "Renew the passport")
+
+    store.merge_sessions(newer, [older])
+
+    assert store.get_session(older) is None
+    assert [m.content for m in store.list_messages(newer)] == ["Book the dentist", "Renew the passport"]
+    assert [c.title for c in store.session_canvases(newer)] == ["Dentist notes"]
+    # The search index still finds the moved words, and the trigger that
+    # keeps it in step is back.
+    found = store.db.query("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'dentist'")
+    assert len(found) == 1
+    assert store.db.query_one("SELECT 1 FROM sqlite_master WHERE name = 'messages_au'")
+    store.update_message(store.list_messages(newer)[0].id, "Book the orthodontist")
+    assert store.db.query("SELECT rowid FROM messages_fts WHERE messages_fts MATCH 'orthodontist'")
+
+
+def test_startup_folds_each_agents_conversations_into_one(tmp_path: Path):
+    path = tmp_path / "c.db"
+    seeded = Store(Database(path))
+    agent = seeded.create_agent("Secretary")
+    other = seeded.create_agent("Analyst")
+    ids = []
+    for text in ("first", "second", "third"):
+        sid = seeded.create_session()["id"]
+        seeded.set_session_agent(sid, agent.id)
+        seeded.add_message(sid, "user", text)
+        ids.append(sid)
+    alone = seeded.create_session()["id"]
+    seeded.set_session_agent(alone, other.id)
+    seeded.db.close()
+
+    create_app(Settings(auth_token="t", db_path=path))
+
+    store = Store(Database(path))
+    assert store.agents_with_several_conversations() == {}
+    kept = store.agent_conversation(agent.id)
+    assert kept == ids[-1]
+    assert [m.content for m in store.list_messages(kept)] == ["first", "second", "third"]
+    assert store.agent_conversation(other.id) == alone
+    assert list((tmp_path / "backups").glob("before-one-conversation-*.db"))
+
+
+def test_giving_a_chat_to_an_agent_folds_it_into_the_agents_conversation(client: TestClient):
+    a = _agent(client, "Secretary")
+    own = _events(client.post("/api/chat", json={"message": "hi", "agent_id": a}).text, "session")[0]["session_id"]
+    loose = _events(client.post("/api/chat", json={"message": "a Bom chat"}).text, "session")[0]["session_id"]
+    moved = client.put(f"/api/sessions/{loose}/agent", json={"agent_id": a}).json()
+    assert moved["session_id"] == own
+    assert client.get(f"/api/sessions/{loose}").status_code == 404
+    contents = [m["content"] for m in client.get(f"/api/sessions/{own}").json()["messages"] if m["role"] == "user"]
+    assert contents == ["hi", "a Bom chat"]

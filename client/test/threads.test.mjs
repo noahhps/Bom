@@ -59,7 +59,7 @@ test("names read the way a messenger heads a thread", () => {
   assert.equal(namesOf(people), "Secretary, Analyst & 2 more");
 });
 
-test("an agent is one thread, however many sessions older builds left", () => {
+test("an agent is one thread, and the newest session carries it on", () => {
   const more = [...sessions, { id: "s6", mode: "chat", agent_id: "a1", members: [], updated_at: 5 }];
   const threads = threadsOf(more);
   const secretary = agentThread(threads, "a1");

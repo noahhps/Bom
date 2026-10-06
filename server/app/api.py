@@ -1283,12 +1283,29 @@ def build_router(
 
     @router.put("/sessions/{session_id}/agent")
     def set_session_agent(session_id: str, body: SessionAgent) -> dict:
-        if not store.get_session(session_id):
+        session = store.get_session(session_id)
+        if not session:
             raise HTTPException(404, "no such session")
         if body.agent_id and not store.get_agent(body.agent_id):
             raise HTTPException(404, "no such agent")
+        # A chat handed to an agent that already has a conversation joins
+        # that one -- an agent has one -- and the answer names where it went.
+        # A group's speaker, and a design or code session run as an agent,
+        # are not the agent's conversation and are set as they always were.
+        own = (
+            store.agent_conversation(body.agent_id)
+            if body.agent_id
+            and (session.get("mode") or "chat") == "chat"
+            and not store.session_members(session_id)
+            else None
+        )
+        if own and own != session_id:
+            if session_id in orchestrator.live or own in orchestrator.live:
+                raise HTTPException(409, "That conversation is answering something right now. Try again in a moment.")
+            store.merge_sessions(own, [session_id])
+            return {"ok": True, "agent_id": body.agent_id, "session_id": own}
         store.set_session_agent(session_id, body.agent_id)
-        return {"ok": True, "agent_id": body.agent_id}
+        return {"ok": True, "agent_id": body.agent_id, "session_id": session_id}
 
     @router.put("/sessions/{session_id}/members")
     def set_session_members(session_id: str, body: SessionMembers) -> dict:

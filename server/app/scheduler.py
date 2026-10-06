@@ -52,6 +52,19 @@ SUMMARY_CHARS = 400
 # Said to the model ahead of the task's own prompt. The prompt was written
 # earlier, often in a different conversation, so "this" and "here" in it mean
 # nothing now; and nobody is there to answer a question.
+# A turn the reader is in the middle of -- an approval prompt can hold one
+# open -- is usually over in seconds; ten minutes is past anything but a
+# prompt left unanswered.
+BUSY_WAIT_SECONDS = 600.0
+BUSY_POLL_SECONDS = 2.0
+
+
+class _Busy(Exception):
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.name = name
+
+
 _PREFACE = (
     "[Scheduled task \"{title}\". This is running automatically at the time the "
     "user set, and they are not watching. Do the task now and report the "
@@ -67,6 +80,8 @@ class Scheduler:
     ) -> None:
         self.store = store
         self.orchestrator = orchestrator
+        # How long a run waits for its agent's conversation to be free.
+        self.busy_wait = BUSY_WAIT_SECONDS
         self.poll_seconds = poll_seconds
         self._active: set[str] = set()  # task ids with a run in flight
         self._runs: set[asyncio.Task] = set()  # held so they are not collected mid-run
@@ -153,7 +168,7 @@ class Scheduler:
             status, summary = "error", "The run did not start."
             session_id: str | None = None
             try:
-                session_id = self._open_session(task)
+                session_id = await self._open_session(task)
                 self.store.update_task(
                     task.id, {"last_session_id": session_id, "last_status": "running",
                               "last_run_at": int(time.time() * 1000)},
@@ -165,6 +180,10 @@ class Scheduler:
                     )
                 finally:
                     self.orchestrator.live.discard(session_id)
+            except _Busy as busy:
+                status, summary = "error", (
+                    f"{busy.name}'s conversation was busy the whole time, so this run was skipped."
+                )
             except asyncio.TimeoutError:
                 status, summary = "error", "The run took too long and was stopped."
             except asyncio.CancelledError:
@@ -185,19 +204,28 @@ class Scheduler:
         finally:
             self._active.discard(task_id)
 
-    def _open_session(self, task: StoredTask) -> str:
+    async def _open_session(self, task: StoredTask) -> str:
         """Where a run happens: the agent's one conversation, for an agent's
         task -- so a reminder from the Secretary arrives where you talk to the
         Secretary -- and otherwise a conversation of its own.
 
-        An agent's conversation that is answering something when the task
-        comes due is left alone, and the run gets a conversation of its own
-        rather than talking over it.
+        An agent has one conversation, so when it is answering something as
+        the task comes due, the run waits for it to finish rather than talking
+        over it or starting a second one -- up to `busy_wait` seconds, after
+        which this run is given up and the next one still comes.
         """
         agent = self.store.get_agent(task.agent_id) if task.agent_id else None
         if agent:
-            own = self.store.agent_conversation(agent.id)
-            if own and own not in self.orchestrator.live:
+            waited = 0.0
+            while True:
+                own = self.store.agent_conversation(agent.id)
+                if not own or own not in self.orchestrator.live:
+                    break
+                if waited >= self.busy_wait:
+                    raise _Busy(agent.name)
+                await asyncio.sleep(BUSY_POLL_SECONDS)
+                waited += BUSY_POLL_SECONDS
+            if own:
                 return own
         situation = Situation(timezone=task.tz, utc_offset=task.utc_offset)
         session = self.store.create_session(title=task.title, situation=situation)

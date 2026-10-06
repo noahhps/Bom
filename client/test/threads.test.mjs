@@ -6,7 +6,18 @@
 
 import assert from "node:assert/strict";
 
-import { BOM, findThread, keyOf, membersOf, namesOf } from "../src/lib/threads.js";
+import {
+  BOM,
+  agentThread,
+  findThread,
+  keyOf,
+  membersOf,
+  namesOf,
+  threadOf,
+  threadsOf,
+  threadsWith,
+  titleOf,
+} from "../src/lib/threads.js";
 
 let passed = 0;
 function test(name, fn) {
@@ -46,6 +57,28 @@ test("names read the way a messenger heads a thread", () => {
   assert.equal(namesOf(people.slice(0, 2)), "Secretary & Analyst");
   assert.equal(namesOf(people.slice(0, 3)), "Secretary, Analyst & Writer");
   assert.equal(namesOf(people), "Secretary, Analyst & 2 more");
+});
+
+test("an agent is one thread, however many sessions older builds left", () => {
+  const more = [...sessions, { id: "s6", mode: "chat", agent_id: "a1", members: [], updated_at: 5 }];
+  const threads = threadsOf(more);
+  const secretary = agentThread(threads, "a1");
+  assert.equal(secretary.id, "s2"); // the newest carries it on
+  assert.deepEqual(secretary.sessions.map((s) => s.id), ["s2", "s6"]);
+  assert.equal(threadOf(threads, "s6").id, "s2");
+  // Groups and chats with Bom are each their own; designs are not threads.
+  assert.deepEqual(threads.map((t) => t.id), ["s5", "s3", "s2", "s1"]);
+});
+
+test("a new message to a group is offered the groups already with them", () => {
+  const twice = [...sessions, { id: "s7", mode: "chat", agent_id: "a1", members: ["a2", "a1"], updated_at: 60, title: "Offsite" }];
+  const threads = threadsOf(twice);
+  assert.deepEqual(threadsWith(threads, ["a1", "a2"]).map((t) => t.id), ["s7", "s3"]);
+  assert.deepEqual(threadsWith(threads, [BOM]).map((t) => t.id), ["s5", "s1"]);
+  // Named by what it is about once it has a title, by who is in it until then.
+  const people = [{ name: "Secretary" }, { name: "Analyst" }];
+  assert.equal(titleOf(threads[0], people), "Offsite");
+  assert.equal(titleOf(threadOf(threads, "s3"), people), "Secretary & Analyst");
 });
 
 console.log(`\n${passed} passed`);

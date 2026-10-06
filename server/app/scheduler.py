@@ -158,9 +158,13 @@ class Scheduler:
                     task.id, {"last_session_id": session_id, "last_status": "running",
                               "last_run_at": int(time.time() * 1000)},
                 )
-                status, summary = await asyncio.wait_for(
-                    self._drive(task, session_id), RUN_TIMEOUT_SECONDS
-                )
+                self.orchestrator.live.add(session_id)
+                try:
+                    status, summary = await asyncio.wait_for(
+                        self._drive(task, session_id), RUN_TIMEOUT_SECONDS
+                    )
+                finally:
+                    self.orchestrator.live.discard(session_id)
             except asyncio.TimeoutError:
                 status, summary = "error", "The run took too long and was stopped."
             except asyncio.CancelledError:
@@ -182,10 +186,23 @@ class Scheduler:
             self._active.discard(task_id)
 
     def _open_session(self, task: StoredTask) -> str:
+        """Where a run happens: the agent's one conversation, for an agent's
+        task -- so a reminder from the Secretary arrives where you talk to the
+        Secretary -- and otherwise a conversation of its own.
+
+        An agent's conversation that is answering something when the task
+        comes due is left alone, and the run gets a conversation of its own
+        rather than talking over it.
+        """
+        agent = self.store.get_agent(task.agent_id) if task.agent_id else None
+        if agent:
+            own = self.store.agent_conversation(agent.id)
+            if own and own not in self.orchestrator.live:
+                return own
         situation = Situation(timezone=task.tz, utc_offset=task.utc_offset)
         session = self.store.create_session(title=task.title, situation=situation)
-        if task.agent_id and self.store.get_agent(task.agent_id):
-            self.store.set_session_agent(session["id"], task.agent_id)
+        if agent:
+            self.store.set_session_agent(session["id"], agent.id)
         return session["id"]
 
     async def _drive(self, task: StoredTask, session_id: str) -> tuple[str, str]:

@@ -263,16 +263,55 @@ def test_an_unknown_member_is_refused_before_anything_is_made(client: TestClient
     assert client.get("/api/sessions").json()["sessions"] == []
 
 
-def test_members_can_be_changed_and_the_group_ended(client: TestClient):
+def test_members_can_be_changed_but_a_group_stays_a_group(client: TestClient):
     a, b, c = (_agent(client, n) for n in ("Secretary", "Analyst", "Writer"))
     r = client.post("/api/chat", json={"message": "hi", "members": [a, b]})
     sid = _events(r.text, "session")[0]["session_id"]
     assert client.put(f"/api/sessions/{sid}/members", json={"agent_ids": [a, b, c]}).json()["members"] == [a, b, c]
     assert client.get(f"/api/sessions/{sid}").json()["session"]["members"] == [a, b, c]
-    # Down to one: an ordinary conversation with that agent.
-    client.put(f"/api/sessions/{sid}/members", json={"agent_ids": [c]})
-    session = client.get(f"/api/sessions/{sid}").json()["session"]
-    assert session["members"] == [] and session["agent_id"] == c
+    # Down to one would be a second conversation for that agent.
+    assert client.put(f"/api/sessions/{sid}/members", json={"agent_ids": [c]}).status_code == 400
+    assert client.get(f"/api/sessions/{sid}").json()["session"]["members"] == [a, b, c]
+    # And a one-to-one conversation has no members to change.
+    r = client.post("/api/chat", json={"message": "hi", "agent_id": a})
+    own = _events(r.text, "session")[0]["session_id"]
+    assert client.put(f"/api/sessions/{own}/members", json={"agent_ids": [a, b]}).status_code == 400
+
+
+def test_an_agent_has_one_conversation(client: TestClient):
+    a, b = _agent(client, "Secretary"), _agent(client, "Analyst")
+    first = _events(client.post("/api/chat", json={"message": "hi", "agent_id": a}).text, "session")[0]
+    # A new message to the same agent -- with no session, as a client that did
+    # not know would send it -- carries the same conversation on.
+    again = _events(client.post("/api/chat", json={"message": "and?", "agent_id": a}).text, "session")[0]
+    assert again["session_id"] == first["session_id"]
+    solo = _events(client.post("/api/chat", json={"message": "hm", "members": [a]}).text, "session")[0]
+    assert solo["session_id"] == first["session_id"]
+    # Group chats are made as often as they are started, and a group is not
+    # the agent's own conversation.
+    g1 = _events(client.post("/api/chat", json={"message": "x", "members": [a, b]}).text, "session")[0]
+    g2 = _events(client.post("/api/chat", json={"message": "y", "members": [a, b]}).text, "session")[0]
+    assert len({first["session_id"], g1["session_id"], g2["session_id"]}) == 3
+    again = _events(client.post("/api/chat", json={"message": "back", "agent_id": a}).text, "session")[0]
+    assert again["session_id"] == first["session_id"]
+    # A design conversation with an agent is not its chat.
+    design = _events(
+        client.post("/api/chat", json={"message": "d", "agent_id": a, "mode": "design"}).text, "session"
+    )[0]
+    assert design["session_id"] != first["session_id"]
+
+
+def test_a_busy_conversation_turns_a_second_message_away(client: TestClient):
+    a = _agent(client, "Secretary")
+    sid = _events(client.post("/api/chat", json={"message": "hi", "agent_id": a}).text, "session")[0]["session_id"]
+    live = client.app.state.orchestrator.live
+    live.add(sid)  # a scheduled task is answering in it
+    r = client.post("/api/chat", json={"message": "again", "session_id": sid})
+    assert r.status_code == 409
+    # Nothing was written for the message that was turned away.
+    assert [m["content"] for m in client.get(f"/api/sessions/{sid}").json()["messages"] if m["role"] == "user"] == ["hi"]
+    live.discard(sid)
+    assert client.post("/api/chat", json={"message": "again", "session_id": sid}).status_code == 200
 
 
 def test_a_one_to_one_chat_is_unchanged(client: TestClient):

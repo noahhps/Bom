@@ -172,6 +172,11 @@ class Orchestrator:
         # not re-read every turn. See _project_block and _facts_for.
         self._project_summaries: dict[str, tuple[tuple, str]] = {}
         self._fact_snapshots: dict[str, list[tuple[str, str]]] = {}
+        # Conversations with a turn being answered right now, by whoever
+        # started it -- the reader through /chat, or the scheduler. An agent
+        # has one conversation, and both write to it, so each checks here
+        # before it starts.
+        self.live: set[str] = set()
 
     def _skill_schemas(
         self,

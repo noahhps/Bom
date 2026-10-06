@@ -2129,6 +2129,27 @@ class Store:
             )
         return unique
 
+    def agent_conversation(self, agent_id: str) -> str | None:
+        """An agent's one conversation with the user: its chat outside any group.
+
+        Each agent has a single conversation, the way a contact has a single
+        thread in a messenger. Builds before this one could start several, so
+        where more than one exists the newest is the one that carries on; the
+        client shows the older ones above it as earlier parts of the same
+        thread.
+        """
+        row = self.db.query_one(
+            """
+            SELECT s.id FROM sessions s
+            WHERE s.agent_id = ? AND COALESCE(s.mode, 'chat') = 'chat'
+              AND NOT EXISTS (SELECT 1 FROM session_members g WHERE g.session_id = s.id)
+            ORDER BY s.updated_at DESC, s.rowid DESC
+            LIMIT 1
+            """,
+            (agent_id,),
+        )
+        return row["id"] if row else None
+
     def set_message_author(self, message_id: str, agent_id: str) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO message_authors (message_id, agent_id) VALUES (?, ?)",

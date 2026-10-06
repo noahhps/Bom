@@ -8797,10 +8797,10 @@ html:not([data-shell]) .screen[data-glass] {
 .msgs-side-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   padding: 2px 6px 0 12px;
 }
-.msgs-heading { margin: 0; font: 700 var(--t-lg)/1.2 var(--font); color: var(--ink); }
+.msgs-heading { flex: 1; margin: 0; font: 700 var(--t-lg)/1.2 var(--font); color: var(--ink); }
 .msgs-compose {
   width: 32px;
   height: 32px;
@@ -9180,10 +9180,79 @@ html:not([data-shell]) .screen[data-glass] {
   text-align: left;
 }
 .msgs-to-options [aria-selected="true"] button { background: var(--accent-field); }
+.msgs-to-hint {
+  padding: 4px 8px 6px;
+  font: 500 var(--t-xs)/1.2 var(--font);
+  color: var(--text-faint);
+}
+/* The +: another agent on the line, which is how a conversation with more
+   than one of them is made. */
+.msgs-to-add {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-field);
+  transition: background var(--dur-quick) ease;
+}
+.msgs-to-add:hover { background: color-mix(in srgb, var(--accent) 18%, var(--accent-field)); }
+.msgs-to-add svg { width: 15px; height: 15px; }
+
+/* Under a new message's "To:" line: the conversations already with those
+   people, to carry one on instead of starting another. */
+.msgs-existing {
+  flex: none;
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 20px 8px 60px;
+}
+.msgs-existing-label { font: 500 var(--t-xs)/1 var(--font); color: var(--text-faint); margin-right: 2px; }
+.msgs-existing button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  font: 500 var(--t-sm)/1.2 var(--font);
+  color: var(--ink);
+  transition: background var(--dur-quick) ease, border-color var(--dur-quick) ease;
+}
+.msgs-existing button:hover { border-color: var(--accent); background: var(--accent-field); }
+.msgs-existing-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msgs-existing-when { flex: none; font-size: var(--t-xs); color: var(--text-faint); }
 
 /* An empty conversation's greeting: who it is with, in place of the app's. */
 .msgs-greeting .agent-avatar,
 .msgs-greeting .msgs-avatar-group { margin-right: 4px; }
+
+/* Where one of an agent's older conversations gives way to the next: the
+   same thread, picked up again -- a quiet rule with the date on it, the way a
+   messenger marks a new day. */
+.turn-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-faint);
+  font: 500 var(--t-xs)/1.2 var(--font);
+}
+.turn-divider::before,
+.turn-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+.turn-divider span { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Who wrote an answer, in a group: first on the line above it. */
 .turn-sender {

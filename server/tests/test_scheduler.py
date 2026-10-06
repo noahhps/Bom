@@ -327,3 +327,40 @@ def test_the_skills_are_registered_and_the_scheduler_is_running(client: TestClie
     names = {s["name"] for s in client.get("/api/skills").json()["skills"]} \
         if isinstance(client.get("/api/skills").json(), dict) else set()
     assert {"schedule_task", "list_scheduled_tasks", "cancel_scheduled_task"} <= names
+
+
+@pytest.mark.asyncio
+async def test_an_agents_task_runs_in_the_agents_conversation(store: Store):
+    provider = _Answers("Passport reminder: renew it this week.")
+    scheduler = _scheduler(store, provider)
+    secretary = store.create_agent("Secretary")
+    own = store.create_session()["id"]
+    store.set_session_agent(own, secretary.id)
+    store.add_message(own, "user", "Remind me about the passport.")
+    due = ms(2026, 10, 1, 9)
+    task = _task(store, due, agent_id=secretary.id)
+
+    await scheduler.tick(due + 5_000)
+    await scheduler.wait_idle()
+
+    done = store.get_task(task.id)
+    assert done.last_status == "ok" and done.last_session_id == own
+    assert [m.role for m in store.list_messages(own)] == ["user", "user", "assistant"]
+
+
+@pytest.mark.asyncio
+async def test_a_busy_agent_conversation_is_not_talked_over(store: Store):
+    scheduler = _scheduler(store, _Answers())
+    secretary = store.create_agent("Secretary")
+    own = store.create_session()["id"]
+    store.set_session_agent(own, secretary.id)
+    scheduler.orchestrator.live.add(own)  # the reader is mid-turn in it
+    due = ms(2026, 10, 1, 9)
+    task = _task(store, due, agent_id=secretary.id)
+
+    await scheduler.tick(due + 5_000)
+    await scheduler.wait_idle()
+
+    done = store.get_task(task.id)
+    assert done.last_status == "ok" and done.last_session_id != own
+    assert store.list_messages(own) == []

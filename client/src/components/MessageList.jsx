@@ -11,6 +11,13 @@ import { StartersHead } from "./Starters";
 // the reserve under the thread should carry the view with it.
 export const STICK_PX = 120;
 
+const DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+function dividerText(m) {
+  const when = m.sentAt ? DAY.format(new Date(m.sentAt)) : "";
+  return [m.content, when].filter(Boolean).join(" · ") || "Earlier";
+}
+
 export function MessageList({
   messages,
   model,
@@ -53,6 +60,15 @@ export function MessageList({
         head || <StartersHead />
       ) : (
         messages.map((m, index) => {
+          // Where one of an agent's older conversations gives way to the next
+          // -- the same thread, picked up again.
+          if (m.role === "divider") {
+            return (
+              <div key={m.key} className="turn-divider" role="separator">
+                <span>{dividerText(m)}</span>
+              </div>
+            );
+          }
           const sender = m.role === "assistant" && senderOf ? senderOf(m.agentId) : null;
           // Named at the start of a run, as a messenger does: once over a
           // string of answers from the same member, not over every one.

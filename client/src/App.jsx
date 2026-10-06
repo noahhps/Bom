@@ -7,7 +7,16 @@ import { AgentEditor } from "./components/AgentEditor";
 import { lookOf } from "./lib/accessories";
 import { AgentsPage } from "./components/Agents";
 import { MessagesScreen, ThreadGreeting } from "./components/Messages";
-import { BOM, findThread, isThread, membersOf, personOf } from "./lib/threads";
+import {
+  BOM,
+  agentThread,
+  isThread,
+  membersOf,
+  personOf,
+  soloAgent,
+  threadOf,
+  threadsOf,
+} from "./lib/threads";
 import { AppBar } from "./components/AppBar";
 import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
@@ -354,9 +363,10 @@ export default function App() {
   });
   const { setBadge, openSession, startNew } = chat;
 
-  // Home's conversations: every chat, as Messages lists them. Designs and
-  // code sessions are Studio's.
-  const threadSessions = useMemo(() => sessions.sessions.filter(isThread), [sessions.sessions]);
+  // Home's conversations, as Messages lists them: one thread per agent, and
+  // each group chat and chat with Bom on its own. Designs and code sessions
+  // are Studio's.
+  const threads = useMemo(() => threadsOf(sessions.sessions), [sessions.sessions]);
   // The rail's list is Studio's own: designs and code. Home's is on the
   // Messages screen, beside the thread.
   const spaceSessions = useMemo(
@@ -540,7 +550,11 @@ export default function App() {
           list.find((s) => spaceOf(s) === remembered) || (remembered === "studio" ? list[0] : null);
         if (first) {
           if (first.mode === "code") setView("code");
-          await openSession(first.id);
+          // An agent's thread opens whole: its older sessions above.
+          const thread = isThread(first) ? threadOf(threadsOf(list), first.id) : null;
+          await openSession(thread ? thread.id : first.id, {
+            earlier: thread ? thread.sessions.slice(1).map((s) => s.id) : [],
+          });
         } else {
           startNew();
           setComposeTo([]);
@@ -691,21 +705,29 @@ export default function App() {
   // someone you have talked to before carries it on, as a messenger does;
   // otherwise the screen is a fresh one, which the first message will make.
   const addressTo = useCallback(
-    (ids) => {
+    // `grouping`: a group is being picked ("New group"), so one agent on the
+    // line so far is the start of it, not a message to that agent.
+    (ids, { grouping = false } = {}) => {
       setComposeTo(ids);
       const agentIds = ids.filter((id) => id !== BOM);
       setNewKind("chat");
       setNewProjectId(null);
       setNewAgentId(agentIds.length === 1 ? agentIds[0] : null);
       setNewMembers(agentIds.length > 1 ? agentIds : null);
-      const found = ids.length ? findThread(threadSessions, ids) : null;
+      // One agent: its one conversation, if there has been one. A group, or
+      // Bom: a new conversation (the ones already with them are offered on
+      // the screen, to carry on instead).
+      const agent = grouping ? null : soloAgent(ids);
+      const found = agent ? agentThread(threads, agent) : null;
       if (found) {
-        if (found.id !== chat.sessionId) openSession(found.id).catch(() => {});
+        if (found.id !== chat.sessionId) {
+          openSession(found.id, { earlier: found.sessions.slice(1).map((s) => s.id) }).catch(() => {});
+        }
       } else if (chat.sessionId) {
         startNew();
       }
     },
-    [threadSessions, chat.sessionId, openSession, startNew],
+    [threads, chat.sessionId, openSession, startNew],
   );
 
   // A new message, on the Messages screen, to `ids` (or to nobody yet, with
@@ -911,6 +933,23 @@ export default function App() {
     [sessions, chat.sessionId, startNew],
   );
 
+  // A thread from Messages: all of it -- an agent's conversation can span
+  // several sessions from older builds, and deleting it means all of them.
+  const handleDeleteThread = useCallback(
+    async (id) => {
+      const thread = threadOf(threads, id);
+      const ids = thread ? thread.sessions.map((s) => s.id) : [id];
+      if (ids.length > 1) {
+        await api.deleteSessions(ids).catch(() => {});
+        await refresh().catch(() => {});
+      } else {
+        await sessions.remove(id);
+      }
+      if (ids.includes(chat.sessionId)) startNew();
+    },
+    [threads, api, refresh, sessions, chat.sessionId, startNew],
+  );
+
   // A conversation opens on the screen it was started on: a design one in the
   // design view, whichever list it was picked from.
   const handleOpenSession = useCallback(
@@ -924,24 +963,31 @@ export default function App() {
       if (known?.mode === "code") setNewWorkspace(known.workspace || null);
       setView(viewFor(known?.mode));
       setSidebarOpen(false);
-      openSession(id)
+      // Any part of an agent's conversation opens all of it, carried on at
+      // the newest.
+      const thread = threadOf(threads, id);
+      openSession(thread ? thread.id : id, {
+        earlier: thread ? thread.sessions.slice(1).map((s) => s.id) : [],
+      })
         .then((session) => {
           if (session && !known) setView(viewFor(session.mode));
         })
         .catch(() => {});
     },
-    [openSession, sessions.sessions],
+    [openSession, sessions.sessions, threads],
   );
 
-  // To these people: their conversation if they have one, otherwise a new
-  // message already addressed to them -- what "Message" on an agent does.
+  // To these people: an agent's one conversation if there has been one,
+  // otherwise a new message already addressed to them -- what "Message" on
+  // an agent does, and "Start a group" in a conversation's details.
   const messageTo = useCallback(
     (ids) => {
-      const found = findThread(threadSessions, ids);
+      const agent = soloAgent(ids);
+      const found = agent ? agentThread(threads, agent) : null;
       if (found) handleOpenSession(found.id);
       else startCompose(ids);
     },
-    [threadSessions, handleOpenSession, startCompose],
+    [threads, handleOpenSession, startCompose],
   );
 
   // Back out of a new message: to the conversation that was open, or the
@@ -951,9 +997,9 @@ export default function App() {
       setComposeTo(null);
       return;
     }
-    const latest = threadSessions[0];
+    const latest = threads[0];
     if (latest) handleOpenSession(latest.id);
-  }, [chat.sessionId, threadSessions, handleOpenSession]);
+  }, [chat.sessionId, threads, handleOpenSession]);
 
   // Each space's last conversation, so switching back is going back to where
   // you were rather than to a blank page. Only ever one conversation is open
@@ -1415,7 +1461,7 @@ export default function App() {
                 setStudio(on);
                 // Leaving Studio leaves its screens: back to Messages.
                 if (!on && (view === "code" || (current && spaceOf(current) === "studio"))) {
-                  const latest = threadSessions[0];
+                  const latest = threads[0];
                   if (latest) handleOpenSession(latest.id);
                   else startNewOf("chat");
                 }
@@ -1451,7 +1497,7 @@ export default function App() {
                 // the other space.
                 if (next === "chat" && (!current || spaceOf(current) !== space)) {
                   if (space === "studio") startNewOf(studioKind.current);
-                  else if (threadSessions[0]) handleOpenSession(threadSessions[0].id);
+                  else if (threads[0]) handleOpenSession(threads[0].id);
                   else handleNewSession();
                   return;
                 }
@@ -1574,7 +1620,7 @@ export default function App() {
                 />
               ) : messaging ? (
                 <MessagesScreen
-                  sessions={threadSessions}
+                  threads={threads}
                   agents={agents.agents}
                   presets={agents.presets}
                   activeId={chat.sessionId}
@@ -1586,7 +1632,7 @@ export default function App() {
                   onComposeCancel={cancelCompose}
                   onOpen={handleOpenSession}
                   onCompose={() => startCompose([])}
-                  onDelete={handleDelete}
+                  onDelete={handleDeleteThread}
                   onCustomize={(agent) => setAgentSheet({ agent, initial: null })}
                   onMembers={async (session, ids) => {
                     // A group changes in place. A one-to-one conversation does

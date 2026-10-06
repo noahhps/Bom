@@ -140,24 +140,39 @@ export function useChat(
   // -- navigation -----------------------------------------------------------
 
   const openSession = useCallback(
-    async (id) => {
-      const data = await api.getSession(id);
+    // `earlier`: older sessions shown above this one as the start of the same
+    // thread -- an agent's conversation, where builds before it was one
+    // conversation left it in several. New messages go to `id`.
+    async (id, { earlier = [] } = {}) => {
+      const [data, ...before] = await Promise.all([
+        api.getSession(id),
+        ...earlier.map((other) => api.getSession(other).catch(() => null)),
+      ]);
       // Returned as well as applied, so the caller can tell a design
       // conversation from a chat without waiting for the list to refresh.
       setSessionId(id);
       setTitle(data.session.title || "Untitled");
-      setMessages(
-        markCompactions(
-          data.messages
-            // A turn can be nothing but a dropped image, so a message with no
-            // text but with files still belongs on screen.
-            .filter((m) => m.role !== "system" && (m.content || m.attachments?.length))
+      const thread = [];
+      const parts = [...before.filter(Boolean), data].sort(
+        (a, b) => (a.session.created_at || 0) - (b.session.created_at || 0),
+      );
+      parts.forEach((part, index) => {
+        const shown = part.messages.filter(
+          // A turn can be nothing but a dropped image, so a message with no
+          // text but with files still belongs on screen.
+          (m) => m.role !== "system" && (m.content || m.attachments?.length),
+        );
+        if (index > 0 && shown.length) {
+          thread.push(message("divider", part.session.title || "", { sentAt: shown[0].created_at }));
+        }
+        thread.push(
+          ...markCompactions(
             // The working comes back with the turn now, so a reopened
             // conversation still shows what was thought and what was called.
             // `skills` is already a list from the server; `|| undefined` so an
-            // empty one leaves the trace unrendered rather than drawing an empty
-            // frame around nothing.
-            .map((m) =>
+            // empty one leaves the trace unrendered rather than drawing an
+            // empty frame around nothing.
+            shown.map((m) =>
               message(m.role, m.content, {
                 // Milliseconds since the epoch, as the server stores it.
                 sentAt: m.created_at,
@@ -168,9 +183,11 @@ export function useChat(
                 agentId: m.agent_id || null,
               }),
             ),
-          data.compactions || [],
-        ),
-      );
+            part.compactions || [],
+          ),
+        );
+      });
+      setMessages(thread);
       jumpToEnd();
       onSessionsChanged();
       return data.session;

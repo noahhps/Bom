@@ -41,7 +41,11 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
 
 
 ### Messages and group chats
-Bom is built for everyday work on a small local model: the calendar, reminders, drafting, spreadsheets, paperwork and research. So the home screen is **Messages**. Press the pencil, put Bom or one or more agents on the **To:** line, and write. If those people already have a conversation, it opens under the To: line and your message carries it on, the same as in a messenger. If you add two or more agents, it's a group chat.
+Bom is built for everyday work on a small local model: the calendar, reminders, drafting, spreadsheets, paperwork and research. So the home screen is **Messages**.
+
+Each agent has **one conversation**, like a contact in a messenger. Writing to an agent (the pencil, or **Message** on the Agents page) always opens that conversation and carries it on. The server enforces this too, and an agent's scheduled tasks post into it, so the Secretary's reminder arrives where you talk to the Secretary. If older builds left an agent with several conversations, they appear as one thread, the earlier parts above a dated divider.
+
+**Conversations with more than one agent** are created as often as you like, each named by its topic. Press **New group** (or put two or more agents on the To: line; the ⊕ adds another) and the first message makes the group. If a group with exactly those agents already exists, it's offered under the To: line so you can carry it on instead. Chats with Bom itself work the same way.
 
 In a group, one member answers each message: whoever you @-mention (`@Analyst`), everyone for `@everyone`, and otherwise whoever answered last. Each answer is a full turn run as that agent, with its instructions and its tools. The others' replies reach it as messages from them, not as its own words. Add or remove members from the conversation's details (click the names at the top).
 

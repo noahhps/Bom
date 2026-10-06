@@ -1,20 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { lookOf, taglineOf } from "../lib/accessories";
-import { BOM, membersOf, namesOf, personOf, whenOf } from "../lib/threads";
+import {
+  BOM,
+  namesOf,
+  personOf,
+  soloAgent,
+  threadOf,
+  threadsWith,
+  titleOf,
+  whenOf,
+} from "../lib/threads";
 import { AgentAvatar } from "./AgentAvatar";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 
 /* Messages: the home screen, laid out like a messenger.
  *
- * Down the left, every conversation, newest first, each headed by who it is
- * with -- an agent, a group of them, or Bom itself -- with a line of the last
- * thing said. On the right, the open one. The pencil starts a new message:
- * a "To:" line where you add people, and the moment the people you have added
- * already have a conversation, that conversation is what appears beneath it,
- * so writing to someone you have talked to before carries on where you left
- * off rather than starting over. Add a second person and it is a group chat.
+ * Down the left, every conversation, newest first, with a line of the last
+ * thing said. On the right, the open one.
+ *
+ * Each agent has one conversation, like a contact: writing to an agent -- the
+ * pencil and its name on the "To:" line, or "Message" on the Agents page --
+ * always opens that one, carried on where it was left. Conversations with
+ * more than one agent are made, as many as you like, each named by what it is
+ * about: put two or more agents on the "To:" line (the + adds another, and
+ * "New group" starts with the picker open), and the first message makes it.
+ * Chats with Bom itself work the same way. When the people on a new message
+ * already have a conversation or two, those are offered under the "To:" line
+ * to carry on instead.
  *
  * The conversation itself -- thread, composer, canvas -- is the app's own,
  * handed in as `children`, so a chat here has every ability a chat anywhere
@@ -46,7 +60,8 @@ function Typing() {
   );
 }
 
-function ThreadRow({ session, people, presets, active, live, onOpen, onDelete }) {
+function ThreadRow({ thread, people, presets, active, live, onOpen, onDelete }) {
+  const name = titleOf(thread, people);
   const names = namesOf(people);
   return (
     <li className="msgs-row-wrap">
@@ -54,25 +69,27 @@ function ThreadRow({ session, people, presets, active, live, onOpen, onDelete })
         type="button"
         className="msgs-row"
         aria-current={active ? "true" : undefined}
-        onClick={() => onOpen(session.id)}
+        // Who is in it, for a conversation named by what it is about.
+        title={thread.agent ? undefined : names}
+        onClick={() => onOpen(thread.id)}
       >
         <ThreadAvatar people={people} presets={presets} size={42} live={live} />
         <span className="msgs-row-text">
           <span className="msgs-row-top">
-            <span className="msgs-row-name">{names}</span>
-            <span className="msgs-row-when">{whenOf(session.updated_at)}</span>
+            <span className="msgs-row-name">{name}</span>
+            <span className="msgs-row-when">{whenOf(thread.updated_at)}</span>
           </span>
           <span className="msgs-row-line">
-            {live ? <Typing /> : session.preview || session.title || "No messages yet"}
+            {live ? <Typing /> : thread.session.preview || "No messages yet"}
           </span>
         </span>
       </button>
       <button
         type="button"
         className="msgs-row-delete"
-        aria-label={`Delete conversation with ${names}`}
+        aria-label={`Delete ${thread.agent ? `your conversation with ${name}` : name}`}
         title="Delete conversation"
-        onClick={() => onDelete(session.id, names)}
+        onClick={() => onDelete(thread)}
       >
         <Icon name="trash" />
       </button>
@@ -87,7 +104,7 @@ function ThreadRow({ session, people, presets, active, live, onOpen, onDelete })
  * off, and Enter with nothing typed moves on to the message. Bom is one of
  * the choices, but only on its own: it is the app itself, not a member of a
  * group of its agents. */
-function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }) {
+function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus, pickToken = 0, grouping = false }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
@@ -96,6 +113,13 @@ function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }
   useEffect(() => {
     if (autoFocus) field.current?.focus();
   }, [autoFocus]);
+
+  // "New group", or the +: the picker, open, with the caret in it.
+  useEffect(() => {
+    if (!pickToken) return;
+    field.current?.focus();
+    setOpen(true);
+  }, [pickToken]);
 
   const people = chosen.map((id) => personOf(id, agents)).filter(Boolean);
   const options = useMemo(() => {
@@ -114,12 +138,14 @@ function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }
     // Picking an agent while Bom is the only one chosen swaps Bom out: a
     // conversation with Bom and an agent is not one there is a way to have.
     const base = person.bom ? [] : chosen.filter((id) => id !== BOM);
-    onChange([...base, person.id]);
+    const next = [...base, person.id];
+    onChange(next);
     setQuery("");
     setIndex(0);
-    // Shut until the next keystroke: the conversation with these people may
-    // just have appeared underneath, and it is what to look at now.
-    setOpen(false);
+    // Shut until the next keystroke or the +: an agent's conversation may
+    // just have appeared underneath, and it is what to look at now. Picking
+    // a group, it stays open until there are two.
+    setOpen(grouping && next.length < 2);
     field.current?.focus();
   };
 
@@ -149,7 +175,15 @@ function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }
         <input
           ref={field}
           value={query}
-          placeholder={people.length ? "" : "Bom, or an agent"}
+          placeholder={
+            grouping && chosen.length < 2
+              ? "Choose two or more agents"
+              : chosen.length === 0
+                ? "Bom, an agent, or several for a group"
+                : chosen.includes(BOM)
+                  ? ""
+                  : "Add another for a group"
+          }
           aria-label="Add a recipient"
           aria-expanded={open && options.length > 0}
           aria-controls="msgs-to-options"
@@ -185,6 +219,7 @@ function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }
         />
         {open && options.length > 0 ? (
           <ul className="msgs-to-options" id="msgs-to-options" role="listbox">
+            {grouping ? <li className="msgs-to-hint" role="presentation">Choose two or more agents</li> : null}
             {options.map((p, i) => (
               <li key={p.id} role="option" aria-selected={i === index}>
                 <button
@@ -209,6 +244,25 @@ function RecipientField({ chosen, agents, presets, onChange, onDone, autoFocus }
           </ul>
         ) : null}
       </div>
+      {/* Add someone, the visible way -- the picker otherwise opens only on
+          typing, and a conversation with more than one agent is made right
+          here. */}
+      {chosen.includes(BOM) ? null : (
+        <button
+          type="button"
+          className="msgs-to-add"
+          aria-label="Add an agent"
+          title="Add an agent"
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation();
+            field.current?.focus();
+            setOpen(true);
+          }}
+        >
+          <Icon name="plus" />
+        </button>
+      )}
     </div>
   );
 }
@@ -284,7 +338,7 @@ function ThreadDetails({ people, agents, presets, onCustomize, onMembers, onDele
       ) : (
         <button type="button" className="btn msgs-details-more" onClick={() => setAdding(true)}>
           <Icon name="plus" />
-          {group ? "Add to the group" : "Start a group with…"}
+          {group ? "Add to the group" : "New group with…"}
         </button>
       )}
       <button type="button" className="msgs-details-delete" onClick={onDelete}>
@@ -296,7 +350,7 @@ function ThreadDetails({ people, agents, presets, onCustomize, onMembers, onDele
 }
 
 export function MessagesScreen({
-  sessions,
+  threads,
   agents,
   presets,
   activeId,
@@ -326,28 +380,36 @@ export function MessagesScreen({
   // On a phone the list and the thread take turns: back shows the list
   // without closing the conversation, and opening one shows it again.
   const [listed, setListed] = useState(false);
+  // "New group": the picker opens, and stays open until there are two.
+  const [grouping, setGrouping] = useState(false);
+  const [pickToken, setPickToken] = useState(0);
   const { confirm } = useDialog();
 
+  const peopleOf = (ids) => ids.map((id) => personOf(id, agents)).filter(Boolean);
   const rows = useMemo(() => {
     const typed = search.trim().toLowerCase();
-    return sessions
-      .map((session) => ({
-        session,
-        people: membersOf(session)
-          .map((id) => personOf(id, agents))
-          .filter(Boolean),
-      }))
-      .filter(({ session, people }) => {
+    return threads
+      .map((thread) => ({ thread, people: peopleOf(thread.members) }))
+      .filter(({ thread, people }) => {
         if (!typed) return true;
-        const haystack = [namesOf(people), session.title, session.preview].join(" ").toLowerCase();
+        const haystack = [titleOf(thread, people), namesOf(people), thread.session.preview]
+          .join(" ")
+          .toLowerCase();
         return haystack.includes(typed);
       });
-  }, [sessions, agents, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads, agents, search]);
 
-  const open = sessions.find((s) => s.id === activeId) || null;
-  const people = (composing ? null : membersOf(open))
-    ?.map((id) => personOf(id, agents))
-    .filter(Boolean) || [];
+  const openThread = composing ? null : threadOf(threads, activeId);
+  const people = composing ? peopleOf(recipients) : openThread ? peopleOf(openThread.members) : [];
+  const group = people.length > 1;
+  const titled = openThread && !openThread.agent && openThread.session.title;
+  // A new message to a group, or to Bom: the conversations already with
+  // exactly them, to carry on instead of starting another.
+  const existing =
+    composing && recipients.length && !soloAgent(recipients) && !(grouping && recipients.length < 2)
+      ? threadsWith(threads, recipients).slice(0, 3)
+      : [];
 
   // A different conversation is a different set of people: the details of the
   // last one should not stay open over it.
@@ -355,21 +417,27 @@ export function MessagesScreen({
     setDetails(false);
     setListed(false);
   }, [activeId, composing]);
+  useEffect(() => {
+    if (!composing) setGrouping(false);
+  }, [composing]);
 
-  const remove = async (id, names) => {
-    const sure = await confirm(`The conversation with ${names} and everything in it will be deleted.`, {
-      title: "Delete this conversation?",
-      confirmLabel: "Delete",
-      destructive: true,
-    });
-    if (sure) onDelete(id);
+  const remove = async (thread) => {
+    const who = peopleOf(thread.members);
+    const name = titleOf(thread, who);
+    const sure = await confirm(
+      thread.agent
+        ? `Your conversation with ${name}, and everything in it, will be deleted. ${name} stays in your agents.`
+        : `“${name}”, and everything in it, will be deleted.`,
+      { title: "Delete this conversation?", confirmLabel: "Delete", destructive: true },
+    );
+    if (sure) onDelete(thread.id);
   };
 
   return (
     <div
       className="msgs"
       data-composing={composing ? "" : undefined}
-      data-open={(open || composing) && !listed ? "" : undefined}
+      data-open={(openThread || composing) && !listed ? "" : undefined}
     >
       <aside className="msgs-side" aria-label="Conversations">
         <div className="msgs-side-head">
@@ -377,10 +445,27 @@ export function MessagesScreen({
           <button
             type="button"
             className="msgs-compose"
+            title="New group"
+            aria-label="New group"
+            aria-pressed={composing && grouping}
+            onClick={() => {
+              onCompose();
+              setGrouping(true);
+              setPickToken((n) => n + 1);
+            }}
+          >
+            <Icon name="agents" />
+          </button>
+          <button
+            type="button"
+            className="msgs-compose"
             title="New message"
             aria-label="New message"
-            aria-pressed={composing}
-            onClick={onCompose}
+            aria-pressed={composing && !grouping}
+            onClick={() => {
+              setGrouping(false);
+              onCompose();
+            }}
           >
             <Icon name="pen" />
           </button>
@@ -401,14 +486,14 @@ export function MessagesScreen({
           </p>
         ) : (
           <ul className="msgs-list">
-            {rows.map(({ session, people: who }) => (
+            {rows.map(({ thread, people: who }) => (
               <ThreadRow
-                key={session.id}
-                session={session}
+                key={thread.key}
+                thread={thread}
                 people={who}
                 presets={presets}
-                active={!composing && session.id === activeId}
-                live={session.id === liveId}
+                active={!composing && thread.id === activeId}
+                live={Boolean(liveId) && thread.sessions.some((s) => s.id === liveId)}
                 onOpen={(id) => {
                   setListed(false);
                   onOpen(id);
@@ -439,9 +524,11 @@ export function MessagesScreen({
                 chosen={recipients}
                 agents={agents}
                 presets={presets}
-                onChange={onRecipients}
+                onChange={(ids) => onRecipients(ids, { grouping })}
                 onDone={onRecipientsDone}
                 autoFocus={recipients.length === 0}
+                pickToken={pickToken}
+                grouping={grouping}
               />
             </>
           ) : (
@@ -457,8 +544,12 @@ export function MessagesScreen({
                 onClick={() => setDetails((was) => !was)}
               >
                 <ThreadAvatar people={people} presets={presets} size={30} />
-                <span className="msgs-who-name">{namesOf(people)}</span>
-                {people.length > 1 ? <span className="msgs-who-count">{people.length} agents</span> : null}
+                <span className="msgs-who-name">{openThread ? titleOf(openThread, people) : namesOf(people)}</span>
+                {group ? (
+                  <span className="msgs-who-count" title={namesOf(people)}>
+                    {titled ? namesOf(people) : `${people.length} agents`}
+                  </span>
+                ) : null}
                 <Icon name="chevron" />
               </button>
               <span className="msgs-head-tools">
@@ -489,7 +580,7 @@ export function MessagesScreen({
                   </button>
                 ) : null}
               </span>
-              {details && open ? (
+              {details && openThread ? (
                 <ThreadDetails
                   people={people}
                   agents={agents}
@@ -500,11 +591,11 @@ export function MessagesScreen({
                   }}
                   onMembers={(ids) => {
                     setDetails(false);
-                    onMembers(open, ids);
+                    onMembers(openThread.session, ids);
                   }}
                   onDelete={() => {
                     setDetails(false);
-                    remove(open.id, namesOf(people));
+                    remove(openThread);
                   }}
                   onClose={() => setDetails(false)}
                 />
@@ -512,6 +603,17 @@ export function MessagesScreen({
             </>
           )}
         </header>
+        {existing.length > 0 ? (
+          <div className="msgs-existing" aria-label="Conversations already with them">
+            <span className="msgs-existing-label">Carry on</span>
+            {existing.map((thread) => (
+              <button key={thread.key} type="button" onClick={() => onOpen(thread.id)}>
+                <span className="msgs-existing-name">{titleOf(thread, people)}</span>
+                <span className="msgs-existing-when">{whenOf(thread.updated_at)}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {children}
       </div>
     </div>

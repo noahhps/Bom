@@ -2634,16 +2634,16 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
  *
  * Dormant, the petals are drawn part-way in behind a 15px bud and twisted,
  * so only their pointed edges show round it -- a closed flower, not a disc.
- * Live, the bud shrinks back to a face and the flower blooms on a loop: the
- * petals come out from under the face one at a time, it holds, and all eight
- * fold back under together. The eyes open and blink. When the turn ends the
- * loop is caught where it is and eased into the bud (see AgentFlower.jsx).
- * The logo blooms the same way while hovered.
+ * Opened, the bud shrinks back to a face and the ring comes out as one. Live,
+ * a wave runs round it: each petal in turn leans out a little and settles
+ * back, then the flower rests before the next. The eyes open and blink. When
+ * the turn ends the wave is caught where it is and the petals glide home (see
+ * AgentFlower.jsx). The logo waves the same way while hovered.
  *
- * The bloom's keyframes are generated from a millisecond timeline in
- * lib/drawkit.js rather than written here: eight petals each open at their
- * own moment but close at the same one, which is eight sets of keyframes that
- * would all have to be re-derived whenever one duration changed.
+ * The wave's keyframes are generated from a millisecond timeline in
+ * lib/drawkit.js rather than written here: eight petals each swell at their
+ * own moment inside one cycle, which is eight sets of keyframes that would
+ * all have to be re-derived whenever one duration changed.
  *
  * The petals are the `--petal-*` tokens and do not follow the accent: the
  * flower is where the palette comes from, so it is the one thing that keeps
@@ -2851,8 +2851,18 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .flower[data-mood="down"] .flower-eyes { transform: scaleY(0.18); }
 
 /* A turn mounts already live, so without this it would appear fully open.
-   Starting it from the bud makes the first bloom as visible as the close.
+   Starting it from the bud lets the answer's flower open as it arrives.
    A webview without @starting-style simply skips the entrance. */
+/* The wave waits for that opening to finish. An animation outranks the
+   transition carrying the petals out of the bud, so a wave that began at once
+   would show the ring fully out on the first frame -- the entrance lost. Held
+   past the opening's 120ms delay and 1100ms run, it starts on a flower that is
+   already whole. A replay is a click on a flower that is already open, so it
+   waves at once. */
+.answer > .flower[data-bloom]:not([data-replay]) .flower-petal {
+  animation-delay: 1200ms;
+}
+
 @starting-style {
   .flower[data-open] .flower-petal {
     transform: rotate(calc(var(--i) * 45deg - 25deg)) scale(0.72);

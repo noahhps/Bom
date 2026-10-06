@@ -13,9 +13,9 @@ import { bloomTimeline, installMotion } from "../lib/drawkit";
  * approval opens and closes with exactly the same honesty as the stop button
  * does.
  *
- * While it is live it blooms: the petals come out from under the face one at
- * a time, the whole flower holds, and then all eight fold back under together
- * and it starts again. See BLOOM in lib/drawkit for the timeline.
+ * While it is live a wave runs round it: each petal in turn leans out a
+ * little and settles back, and the flower rests before the next one. See
+ * BLOOM in lib/drawkit for the timeline.
  *
  * As the logo (`mark`) it is the same character, drawn open at `size` pixels
  * across and left in the normal flow: the head of the rail and the greeting on
@@ -38,22 +38,18 @@ installMotion();
 
 const PETALS = 8;
 
-// A replay starts where a resting flower already is -- fully open, the loop's
-// `shut` moment -- and runs one whole cycle back round to it: close, the beat
-// on the bare face, bloom, hold. Started anywhere else the petals would jump
-// to the loop's first frame (tucked) on the click, and stopped anywhere else
-// they would ease out to open afterwards, a second movement.
-const { shut: OPEN_AT, cycle: CYCLE } = bloomTimeline();
+// A replay is one wave. The loop starts and ends on the open flower a resting
+// one already is, so it needs no offset to begin without a jump.
+const { cycle: CYCLE } = bloomTimeline();
 
 function Flower({ open, bloom, mood, rest = false, replay = false, onClick }) {
   const petals = useRef(null);
   // What the DOM is doing, which lags `bloom` by one render on the way down.
   const [blooming, setBlooming] = useState(bloom);
 
-  // Starting is immediate. Stopping is not: the loop is caught wherever it has
-  // got to, frozen there inline, and then handed to the petals' own
-  // transition -- so a flower whose turn ends mid-close eases into the bud
-  // instead of jumping to it. Removing the animation alone would snap: a
+  // Starting is immediate. Stopping is not: the wave is caught wherever it has
+  // got to, frozen there inline, and then glided home -- so a petal caught
+  // mid-swell settles back instead of jumping. Removing the animation alone would snap: a
   // transition never starts from an animated value.
   useLayoutEffect(() => {
     if (bloom) {
@@ -78,8 +74,12 @@ function Flower({ open, bloom, mood, rest = false, replay = false, onClick }) {
       // Flush the frozen pose as a style of its own, so the transition that
       // follows has something to start from.
       void getComputedStyle(arm).transform;
-      arm.style.transition = "";
+      // Home quickly and without overshoot. The petals' own transition is the
+      // bud's slow, springing opening, which on a swell of a tenth would read
+      // as a wobble; this one is lent for the glide and handed back after.
+      arm.style.transition = "transform var(--dur-settle) var(--ease-out)";
       arm.style.transform = "";
+      arm.addEventListener("transitionend", () => (arm.style.transition = ""), { once: true });
     }
   }, [blooming]);
 
@@ -91,6 +91,7 @@ function Flower({ open, bloom, mood, rest = false, replay = false, onClick }) {
       data-mood={mood || undefined}
       data-rest={rest ? "" : undefined}
       data-playable={onClick ? "" : undefined}
+      data-replay={replay ? "" : undefined}
       aria-hidden="true"
       onClick={onClick}
     >
@@ -99,7 +100,7 @@ function Flower({ open, bloom, mood, rest = false, replay = false, onClick }) {
           <span
             key={i}
             className="flower-petal"
-            style={replay ? { "--i": i, animationDelay: `-${OPEN_AT}ms` } : { "--i": i }}
+            style={{ "--i": i }}
           />
         ))}
       </span>

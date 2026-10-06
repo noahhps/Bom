@@ -1,8 +1,8 @@
 /* The motion kit: the flower's Bloom and the canvas boards.
  *
  * Both are CSS animations whose parts each need their own moment inside one
- * shared cycle -- eight petals opening one after another but closing
- * together; a marker's strokes drawn one after another but wiped together.
+ * shared cycle -- eight petals swelling one after another, then all still;
+ * a marker's strokes drawn one after another but wiped together.
  * `animation-delay` cannot say that, because a delay moves a part's end along
  * with its start. So every part gets its own keyframes, written here as a
  * timeline in milliseconds and turned into percentages, rather than as
@@ -53,39 +53,43 @@ function track(cls, cycle, points) {
 
 /* -- Bloom -------------------------------------------------------------------
  *
- * The flower opening a petal at a time, then folding away.
+ * A wave round the open flower.
  *
- * Nothing fades. Every petal is scaled about the flower's centre, and at 0.3
- * its tip is at radius 4 against a face of 6.5 -- so a closed petal is not
- * transparent, it is tucked under the face. Opening, a petal grows out from
- * behind the face with a small overshoot; closing, all eight retract under it
- * together. The two rests -- the whole flower held, and the bare face after --
- * are what make it a cycle rather than a churn: without the hold, eight petals
- * opening and at once shutting read as a shiver; without the beat, the first
- * petal of the next flower leaves in the frame the last one arrived.
+ * The petals never leave. The flower stays whole, and a swell travels round
+ * the ring clockwise from the top: each petal leans out a little past its
+ * rest, 10% longer, and settles straight back, starting 80ms after the one
+ * before it -- so at any moment three or four neighbours are mid-swell and the
+ * eye reads one movement going round rather than eight petals taking turns.
+ * Then the flower sits still before the next one. That rest is what keeps it
+ * calm: a wave with no gap between them is a shimmer, and a working flower
+ * beside a long answer has to be something you can stop noticing.
  *
- *      0  petal 0 starts out from under the face
- *    130  petal 1, and on every 130ms
- *   1250  petal 7 settles -- the flower is whole
- *   1700  a 450ms hold, then all eight retract
- *   2200  all eight back under the face (500ms)
- *   2400  a 200ms beat on the bare face, then round again
+ * It used to be a full bloom -- every petal tucked under the face and grown
+ * out again, once every 2.4s. That said "working" loudly enough to pull the
+ * eye off the words arriving next to it.
+ *
+ * Each swell is the same soft curve up and down, so the leaning out and the
+ * coming back are one motion, not a push and a recoil. Nothing fades, and a
+ * petal is at exactly its rest scale at both ends of the cycle, so the loop
+ * can start or stop on an open flower without a jump -- a replay simply runs
+ * one cycle.
+ *
+ *      0  petal 0 starts to lean out
+ *     80  petal 1, and on every 80ms
+ *   1060  petal 7 is back -- the wave has been all the way round
+ *   1760  a 700ms rest, then round again
  */
 export const BLOOM = {
-  step: 130, // between one petal opening and the next
-  peak: 240, // into a petal's own opening, where it overshoots
-  settle: 340, // a petal's whole opening
-  hold: 450, // the whole flower, before it starts to close
-  shutFor: 500, // all eight retracting, together
-  beat: 200, // the bare face, before it opens again
-  tucked: 0.3,
-  overshoot: 1.08,
+  step: 80, // between one petal leaning out and the next
+  rise: 200, // a petal leaning out
+  fall: 300, // and settling back
+  rest: 700, // the still flower, before the next wave
+  peak: 1.1,
 };
 
 export function bloomTimeline(b = BLOOM) {
-  const whole = 7 * b.step + b.settle;
-  const shut = whole + b.hold;
-  return { whole, shut, cycle: shut + b.shutFor + b.beat };
+  const wave = 7 * b.step + b.rise + b.fall;
+  return { wave, cycle: wave + b.rest };
 }
 
 /**
@@ -93,20 +97,18 @@ export function bloomTimeline(b = BLOOM) {
  * slot so the arm keeps its place on the ring while it scales.
  */
 export function bloomCSS(b = BLOOM) {
-  const { shut, cycle } = bloomTimeline(b);
+  const { cycle } = bloomTimeline(b);
   let css = "";
   for (let i = 0; i < 8; i++) {
     const at = (s) => `transform: rotate(${i * 45}deg) scale(${s})`;
-    const open = i * b.step;
+    const out = i * b.step;
     const points = [];
-    if (open > 0) points.push([0, at(b.tucked)]);
+    if (out > 0) points.push([0, at(1)]);
     points.push(
-      [open, at(b.tucked), "cubic-bezier(.16,.9,.3,1)"],
-      [open + b.peak, at(b.overshoot), "cubic-bezier(.4,0,.3,1)"],
-      [open + b.settle, at(1)],
-      [shut, at(1), "cubic-bezier(.55,0,.35,1)"],
-      [shut + b.shutFor, at(b.tucked)],
-      [cycle, at(b.tucked)],
+      [out, at(1), SOFT],
+      [out + b.rise, at(b.peak), SOFT],
+      [out + b.rise + b.fall, at(1)],
+      [cycle, at(1)],
     );
     css +=
       `.flower[data-bloom] .flower-petal:nth-child(${i + 1}) ` +

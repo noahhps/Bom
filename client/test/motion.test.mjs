@@ -2,8 +2,8 @@
 //
 // Run with `npm test` in client/. The kit is pure -- timelines in, CSS out --
 // so everything that can go wrong with it can be checked here without a
-// browser: a petal opening out of turn, the eight closing at different
-// moments, a marker running ahead of its line, a word that is not true.
+// browser: a petal swelling out of turn or tucking away, a marker running
+// ahead of its line, a word that is not true.
 
 import assert from "node:assert/strict";
 
@@ -33,20 +33,20 @@ function stops(css, name) {
 }
 
 test("bloom's timeline is the one the design settled on", () => {
-  assert.deepEqual(bloomTimeline(), { whole: 1250, shut: 1700, cycle: 2400 });
+  assert.deepEqual(bloomTimeline(), { wave: 1060, cycle: 1760 });
 });
 
-test("each petal opens 130ms after the last, and all eight close together", () => {
+test("the wave goes round 80ms a petal, and every petal starts and ends at rest", () => {
   const css = bloomCSS();
-  const { shut, cycle } = bloomTimeline();
-  const closeAt = +((shut / cycle) * 100).toFixed(3);
-  const tuckedAt = +(((shut + BLOOM.shutFor) / cycle) * 100).toFixed(3);
+  const { cycle } = bloomTimeline();
   for (let i = 0; i < 8; i++) {
     const s = stops(css, `flower-bloom-${i}`);
-    const opens = s.find(([, body]) => body.includes(`scale(${BLOOM.tucked})`) && body.includes("cubic-bezier(.16"));
-    assert.equal(opens[0], +(((i * BLOOM.step) / cycle) * 100).toFixed(3), `petal ${i} opens on time`);
-    assert.ok(s.some(([p, body]) => p === closeAt && body.includes("scale(1)")), `petal ${i} starts closing at ${closeAt}%`);
-    assert.ok(s.some(([p, body]) => p === tuckedAt && body.includes(`scale(${BLOOM.tucked})`)), `petal ${i} is tucked by ${tuckedAt}%`);
+    const peak = s.find(([, body]) => body.includes(`scale(${BLOOM.peak})`));
+    const at = +(((i * BLOOM.step + BLOOM.rise) / cycle) * 100).toFixed(3);
+    assert.equal(peak[0], at, `petal ${i} peaks on time`);
+    assert.ok(s[0][0] === 0 && s[0][1].includes("scale(1)"), `petal ${i} starts open`);
+    assert.ok(s.at(-1)[0] === 100 && s.at(-1)[1].includes("scale(1)"), `petal ${i} ends open`);
+    assert.ok(s.every(([, body]) => /scale\((1|1\.1)\)/.test(body)), `petal ${i} never tucks`);
     assert.ok(s.every(([, body]) => body.includes(`rotate(${i * 45}deg)`)), `petal ${i} keeps its slot`);
   }
 });

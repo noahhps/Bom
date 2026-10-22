@@ -418,3 +418,118 @@
   .lq-switch-swell,
   .seek-skin { transition-duration: 160ms; }
 }
+
+/* ── magnifying dock ───────────────────────────────────────────────────── */
+.dock {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 12px 6px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px -20px rgba(var(--shadow-rgb), 0.45);
+}
+.dock-item {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 46px;
+  color: var(--ink);
+  opacity: 0.5;
+  transition: opacity 220ms ease, color 220ms ease;
+}
+.dock-item[data-near="1"] { opacity: 0.75; }
+.dock-item[data-near="0"],
+.dock-item[data-on] { opacity: 1; }
+.dock-item[data-on] { color: var(--accent); }
+.dock-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 12px; }
+.dock-glyph {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  transform-origin: center bottom;
+  transition:
+    transform 420ms cubic-bezier(0.24, 1.34, 0.38, 1),
+    background-color 220ms ease;
+}
+.dock-item[data-on] .dock-glyph { background: var(--accent-wash); }
+.dock-glyph svg { width: 20px; height: 20px; }
+.dock-count {
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--ground);
+  box-shadow: 0 0 0 1px var(--line);
+  font: 500 9.5px/16px var(--font);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.dock-item[data-on] .dock-count { background: var(--accent); box-shadow: none; color: var(--on-accent, #fff); }
+.dock-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 220ms ease, transform 420ms cubic-bezier(0.24, 1.34, 0.38, 1);
+}
+.dock-item[data-on] .dock-dot { opacity: 1; transform: scale(1); }
+.dock-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font: 500 var(--t-xs)/28px var(--font);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+.dock-tip > span { flex: none; }
+.dock-tip:not([data-ready]) { transition: opacity 160ms ease; }
+.dock-tip[data-on] { opacity: 1; }
+
+/* ── tilt card ─────────────────────────────────────────────────────────── */
+.tilt { position: relative; }
+.tilt-card {
+  position: relative;
+  /* No will-change: it pins the card as a bitmap, and text on it stays soft. */
+}
+.tilt-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-glyph { transition-duration: 160ms; }
+}

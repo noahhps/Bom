@@ -3995,6 +3995,66 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 /* Switched off: dimmed, but never hidden -- the row is the only way back on. */
 .skill-item[data-off] .skill-item-text { opacity: 0.55; }
 
+/* Shelved (Skills.jsx). The shelves sit in two columns where there is room --
+   CSS columns rather than a grid, so a short shelf does not leave a hole the
+   height of the long one beside it. Each shelf is still a list: hairlines
+   between rows, never a card per skill. */
+.skill-shelves {
+  columns: 2 440px;
+  column-gap: 18px;
+  margin-top: 18px;
+}
+.skill-shelves[data-one] { columns: 1; }
+.skill-shelf { break-inside: avoid; margin-bottom: 18px; }
+.skill-shelf[data-wide] { column-span: all; }
+.skill-none { color: var(--text-dim); font-size: var(--t-sm); }
+
+.shelf-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px 10px;
+}
+.shelf-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--ink);
+}
+.shelf-glyph svg { width: 16px; height: 16px; }
+.shelf-name { font-size: var(--t-md); }
+.shelf-beads { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-width: 0; }
+.shelf-beads i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(var(--ink-rgb), 0.16);
+  transition: background-color 300ms ease, transform 300ms var(--spring);
+}
+.shelf-beads i[data-on] { background: var(--accent-fill, var(--accent)); }
+.shelf-count { flex: none; color: var(--text-faint); }
+
+.skill-item-name { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; }
+.skill-id {
+  font: 400 var(--t-micro)/1.3 var(--font-mono);
+  color: var(--text-faint);
+}
+/* Two lines in a shelf; the whole description is on hover (title) and the
+   model reads all of it either way. */
+.skill-item .skill-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+.skill-item { padding: 13px 16px; gap: 14px; }
+
 /* An MCP server's skills, folded under its name (Skills.jsx McpSkillGroup).
    One header row per server inside the same list, its tools nested and hidden
    until the header is opened -- so a handful of servers is a handful of lines
@@ -7839,7 +7899,123 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
 .segmented svg { width: 15px; height: 15px; flex: none; }
 
 .prj-tabs { margin-bottom: 18px; }
-.skills-tabs { margin-bottom: 16px; }
+.skills-tabs { position: relative; margin-bottom: 16px; }
+/* One pill that slides between the tabs (Skills.jsx) instead of each tab
+   painting its own: the tabs sit above it with no fill of their own. */
+.skills-tabs > button { position: relative; z-index: 1; }
+.skills-tabs > button[data-active],
+.skills-tabs > button[data-active]:hover { background: transparent; }
+.skills-tabs-pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: calc(var(--r-pill) - 2px);
+  background: var(--ink);
+}
+.skills-tabs-pill[data-ready] {
+  transition:
+    transform 460ms cubic-bezier(0.3, 1.3, 0.5, 1),
+    width 460ms cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+
+/* -- the MCP gallery -------------------------------------------------------- */
+.preset-lane { gap: 10px; }
+.preset-lane .shelf-glyph { width: 24px; height: 24px; border-radius: 8px; }
+.preset-lane .shelf-glyph svg { width: 14px; height: 14px; }
+.preset-lane-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb), 0.06);
+  font-style: normal;
+  color: var(--text-dim);
+}
+/* Cards are not stretched to their row: one opening its form would pull its
+   neighbours down with it. They line up anyway, because every description
+   holds three lines whether it fills them or not. */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(var(--shadow-rgb), 0.04);
+  transition: border-color var(--dur-quick) ease, box-shadow 300ms ease;
+}
+.preset-card:hover { border-color: var(--line); box-shadow: 0 14px 30px -22px rgba(var(--shadow-rgb), 0.5); }
+.preset-card[data-open] { border-color: var(--accent); }
+.preset-top { display: flex; align-items: center; gap: 12px; }
+.preset-card .mcp-avatar { width: 40px; height: 40px; border-radius: 12px; }
+.preset-card .mcp-avatar[data-mono] { font-size: 13px; }
+.preset-card .mcp-avatar[data-logo] img { width: 22px; height: 22px; }
+.preset-card .mcp-avatar svg { width: 20px; height: 20px; }
+.preset-name { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.preset-name .h { font-size: var(--t-body); }
+.preset-setup {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font: 500 var(--t-micro)/1.4 var(--font);
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--text-dim);
+}
+.preset-setup[data-tone="accent"] { background: var(--accent-wash); color: var(--accent); }
+.preset-setup[data-tone="ochre"] { background: var(--ochre-field); color: var(--ochre); }
+.preset-setup[data-tone="green"] { background: var(--green-field); color: var(--green); }
+.preset-body {
+  margin: 0;
+  min-height: calc(3 * 1.55em);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font: 400 var(--t-sm)/1.55 var(--font);
+  color: var(--text-dim);
+}
+.preset-foot { display: flex; align-items: center; gap: 8px; }
+.preset-foot .spacer { flex: 1; }
+.preset-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 13px 7px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font: 500 var(--t-sm)/1 var(--font);
+  transition: background-color var(--dur-quick) ease, scale 200ms var(--spring);
+}
+.preset-add svg { width: 14px; height: 14px; }
+.preset-add:hover:not(:disabled) { background: var(--accent); }
+.preset-add:active:not(:disabled) { scale: 0.95; }
+.preset-add[data-open],
+.preset-add[data-open]:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
+.preset-add:disabled { opacity: 0.5; }
+.preset-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 500 var(--t-sm)/1 var(--font);
+  color: var(--green);
+}
+.preset-active svg { width: 14px; height: 14px; }
+.mcp-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px dashed var(--line-firm);
+  border-radius: 14px;
+}
+.mcp-empty p { margin: 0; font: 400 var(--t-sm)/1.6 var(--font); color: var(--text-dim); }
+.mcp-empty b { color: var(--ink); font-weight: 500; }
 .prj-none { color: var(--text-dim); max-width: 60ch; }
 
 .prj-sub { color: var(--text-faint); padding: 4px 8px 0; }

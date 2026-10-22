@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useSkills } from "../hooks/useSkills";
 import { iconForServer } from "../lib/mcpIcons";
 import { serverOrigin } from "../lib/serverOrigin";
+import { SHELVES, serviceName, shelfOf, skillTitle } from "../lib/skillShelf";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
 import { SeekField } from "./bencho/SeekField";
+import { Dock } from "./bencho/Dock";
 import { Switch } from "./bencho/Switch";
+import { TiltCard } from "./bencho/TiltCard";
 
 function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
   const [key, setKey] = useState("");
@@ -26,8 +29,11 @@ function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
   return (
     <div className="skill-item" data-off={skill.enabled ? undefined : ""}>
       <div className="skill-item-text">
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span className="h">{skill.name}</span>
+        <div className="skill-item-name">
+          <span className="h">{skillTitle(skill.name)}</span>
+          {/* The name the model calls it by, which is what a transcript
+              shows when it runs. */}
+          <code className="skill-id">{skill.name}</code>
           {/* Which server, not merely that there is one. Every MCP tool used
               to wear the same "MCP" badge, so a list of thirty of them said
               thirty times over the one thing they had in common. */}
@@ -43,7 +49,9 @@ function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
             </span>
           ) : null}
         </div>
-        <p className="skill-body">{skill.description}</p>
+        <p className="skill-body" title={skill.description}>
+          {skill.description}
+        </p>
 
         {blocked ? (
           <div className="skill-needs">
@@ -169,15 +177,39 @@ function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, ask
   );
 }
 
+/* A shelf's heading: its glyph, its name, and how much of it is on -- said in
+ * words and drawn as a row of beads, one per skill, filled when it is on. The
+ * beads are the page's at-a-glance read: a shelf with a gap in it shows one
+ * from across the room, before any row is read. */
+function ShelfHead({ icon, label, skills }) {
+  const on = skills.filter((s) => s.enabled).length;
+  return (
+    <header className="shelf-head">
+      <span className="shelf-glyph" aria-hidden="true">
+        <Icon name={icon} />
+      </span>
+      <span className="h shelf-name">{label}</span>
+      <span className="shelf-beads" aria-hidden="true">
+        {skills.map((skill) => (
+          <i key={skill.name} data-on={skill.enabled ? "" : undefined} title={skill.name} />
+        ))}
+      </span>
+      <span className="mi shelf-count">
+        {on === skills.length ? `all ${on} on` : `${on} of ${skills.length} on`}
+      </span>
+    </header>
+  );
+}
+
 /* How the preset gallery is sectioned, in this order. A preset with a category
  * not listed here lands in the last section rather than disappearing. */
 const PRESET_SECTIONS = [
-  { id: "work", label: "Work tools", note: "Sign in with your company account — no token to create or paste." },
-  { id: "code", label: "Code & docs" },
-  { id: "google", label: "Google Workspace" },
-  { id: "design", label: "Design" },
-  { id: "research", label: "Research & the web" },
-  { id: "local", label: "On this machine" },
+  { id: "work", label: "Work tools", icon: "enterprise", note: "Sign in with your company account — no token to create or paste." },
+  { id: "code", label: "Code & docs", icon: "code" },
+  { id: "google", label: "Google Workspace", icon: "mail" },
+  { id: "design", label: "Design", icon: "design" },
+  { id: "research", label: "Research & the web", icon: "globe" },
+  { id: "local", label: "On this machine", icon: "terminal" },
 ];
 
 // A sign-in is polled while the other tab is open: often enough to feel
@@ -209,50 +241,52 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
     setOpen(false);
   };
 
+  // What adding it will ask of you, said on the card before you press.
+  const needsKey = inputs.some((i) => i.secret && i.required);
+  const setup =
+    preset.auth === "oauth"
+      ? { label: "Sign in", tone: "accent" }
+      : needsKey
+        ? { label: "API key", tone: "ochre" }
+        : inputs.length
+          ? { label: "A few settings", tone: "quiet" }
+          : { label: "No setup", tone: "green" };
+
   return (
-    <div
-      style={{
-        padding: "16px",
-        background: "var(--surface)",
-        border: "1px solid var(--line-soft)",
-        borderRadius: "var(--r-surface)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "10px",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+    /* Bencho's tilt card: it sinks under the pointer. Held still while its
+       form is open, so it does not move under the hand that is typing. */
+    <TiltCard className="preset-card" still={open} data-open={open ? "" : undefined} data-installed={isInstalled ? "" : undefined}>
+      <div className="preset-top">
         <ServiceIcon api={api} name={preset.name} presetId={preset.id} hasIcon={preset.has_icon} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <span className="h" style={{ fontSize: "var(--t-md)" }}>
-            {preset.name}
+        <div className="preset-name">
+          <span className="h">{serviceName(preset.name)}</span>
+          <span className="preset-setup" data-tone={setup.tone}>
+            {setup.label}
           </span>
-          {preset.auth === "oauth" ? <span className="mcp-chip">Sign in</span> : null}
-          <p style={{ margin: "4px 0 0", color: "var(--text-dim)", fontSize: "var(--t-sm)" }}>
-            {preset.description}
-          </p>
         </div>
+      </div>
+      <p className="preset-body" title={preset.description}>
+        {preset.description}
+      </p>
+      <div className="preset-foot">
+        <code className="skill-id">{preset.name}</code>
+        <span className="spacer" />
         {isInstalled ? (
-          <span
-            style={{
-              fontSize: "var(--t-xs)",
-              padding: "3px 8px",
-              background: "var(--green-field)",
-              color: "var(--green)",
-              borderRadius: "var(--r-pill)",
-              fontWeight: 600,
-            }}
-          >
-            Active
+          <span className="preset-active">
+            <Icon name="check" />
+            Added
           </span>
         ) : (
           <button
             type="button"
-            className="btn"
+            className="preset-add"
+            data-open={open ? "" : undefined}
             disabled={busy}
+            aria-expanded={open}
             onClick={() => setOpen((was) => !was)}
           >
-            {open ? "Cancel" : "Add Server"}
+            <Icon name={open ? "close" : "plus"} />
+            {open ? "Cancel" : "Add"}
           </button>
         )}
       </div>
@@ -330,7 +364,7 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
           </button>
         </form>
       ) : null}
-    </div>
+    </TiltCard>
   );
 }
 
@@ -511,6 +545,13 @@ export function Skills({ api }) {
     useSkills(api);
   const [tab, setTab] = useState("skills"); // "skills" | "mcp"
   const [query, setQuery] = useState("");
+  const [shelf, setShelf] = useState("all"); // a SHELVES key, "servers" or "all"
+
+  // The tabs' dark pill is one element that slides to whichever tab is on,
+  // rather than each tab painting its own -- measured, because the labels
+  // carry counts and so change width.
+  const tabsRef = useRef(null);
+  const [pill, setPill] = useState(null);
 
   // MCP State
   const [mcpServers, setMcpServers] = useState([]);
@@ -819,6 +860,37 @@ export function Skills({ api }) {
     return { builtin, groups };
   }, [shown]);
 
+  // The built-in skills, shelved (lib/skillShelf). Every shelf is kept, even
+  // one the filter has emptied, so the dock below does not reshuffle as you
+  // type; an empty shelf is simply not drawn.
+  const shelves = useMemo(() => {
+    const all = new Map(SHELVES.map((def) => [def.key, { ...def, total: 0, list: [] }]));
+    for (const skill of skills) if (!skill.server) all.get(shelfOf(skill.name)).total += 1;
+    for (const skill of builtin) all.get(shelfOf(skill.name)).list.push(skill);
+    return [...all.values()].filter((entry) => entry.total > 0);
+  }, [skills, builtin]);
+  const serverSkills = skills.filter((s) => s.server).length;
+
+  const dockItems = [
+    { key: "all", label: "Everything", icon: "apps", count: skills.length },
+    ...shelves.map((entry) => ({ key: entry.key, label: entry.label, icon: entry.icon, count: entry.total })),
+    ...(serverSkills
+      ? [{ key: "servers", label: "From MCP servers", icon: "tools", count: serverSkills }]
+      : []),
+  ];
+  // A search looks on every shelf: a match on a shelf the dock is not showing
+  // would otherwise read as "nothing found".
+  const everyShelf = shelf === "all" || Boolean(query.trim());
+  const showing = (key) => everyShelf || shelf === key;
+  const nothingShown =
+    !shelves.some((entry) => showing(entry.key) && entry.list.length) &&
+    !(showing("servers") && groups.length);
+
+  useLayoutEffect(() => {
+    const active = tabsRef.current?.querySelector("button[data-active]");
+    if (active) setPill((was) => ({ x: active.offsetLeft, w: active.offsetWidth, ready: Boolean(was) }));
+  }, [tab, skills.length, mcpServers.length]);
+
   const on = skills.filter((s) => s.enabled).length;
   const installedServerNames = new Set(mcpServers.map((s) => s.name));
 
@@ -873,7 +945,15 @@ export function Skills({ api }) {
         <div className="page-col" style={{ alignSelf: "stretch" }}>
           {/* The two halves of the page, as the app's segmented control --
               the same one the Projects page switches kinds with. */}
-          <div className="segmented skills-tabs" role="tablist" aria-label="Skills and MCP servers">
+          <div ref={tabsRef} className="segmented skills-tabs" role="tablist" aria-label="Skills and MCP servers">
+            {pill ? (
+              <span
+                className="skills-tabs-pill"
+                aria-hidden="true"
+                data-ready={pill.ready ? "" : undefined}
+                style={{ width: pill.w, transform: `translateX(${pill.x}px)` }}
+              />
+            ) : null}
             <button
               type="button"
               role="tab"
@@ -959,35 +1039,67 @@ export function Skills({ api }) {
                   No skills registered. Go to the <strong>MCP Servers & Presets</strong> tab to activate GitHub, Figma, Google Workspace, or custom MCP servers.
                 </p>
               ) : (
-                <div className="skill-list">
-                  {builtin.map((skill) => (
-                    <SkillRow
-                      key={skill.name}
-                      skill={skill}
-                      busy={pending.includes(skill.name)}
-                      onToggle={setEnabled}
-                      onKey={setKey}
-                      askFirst={askFirst}
-                      onApproval={setApproval}
-                    />
-                  ))}
+                <>
+                  {/* Which shelf: the magnifying dock -- Bencho's, swelling
+                      toward the pointer, naming what is under it. */}
+                  <Dock items={dockItems} value={shelf} onChange={setShelf} label="Kind of skill" />
 
-                  {groups.map(({ server, list }) => (
-                    <McpSkillGroup
-                      key={server}
-                      server={server}
-                      skills={list}
-                      // Open every server while filtering, so a match inside a
-                      // collapsed one is not hidden.
-                      forceOpen={Boolean(query.trim())}
-                      busyOf={(name) => pending.includes(name)}
-                      onToggle={setEnabled}
-                      onKey={setKey}
-                      askFirst={askFirst}
-                      onApproval={setApproval}
-                    />
-                  ))}
-                </div>
+                  <div className="skill-shelves" data-one={everyShelf ? undefined : ""}>
+                    {shelves.map((entry) =>
+                      showing(entry.key) && entry.list.length ? (
+                        <section key={entry.key} className="skill-shelf">
+                          <ShelfHead icon={entry.icon} label={entry.label} skills={entry.list} />
+                          <div className="skill-list">
+                            {entry.list.map((skill) => (
+                              <SkillRow
+                                key={skill.name}
+                                skill={skill}
+                                busy={pending.includes(skill.name)}
+                                onToggle={setEnabled}
+                                onKey={setKey}
+                                askFirst={askFirst}
+                                onApproval={setApproval}
+                              />
+                            ))}
+                          </div>
+                        </section>
+                      ) : null,
+                    )}
+
+                    {showing("servers") && groups.length ? (
+                      <section className="skill-shelf" data-wide="">
+                        <ShelfHead
+                          icon="tools"
+                          label="From MCP servers"
+                          skills={groups.flatMap((g) => g.list)}
+                        />
+                        <div className="skill-list">
+                          {groups.map(({ server, list }) => (
+                            <McpSkillGroup
+                              key={server}
+                              server={server}
+                              skills={list}
+                              // Open every server while filtering, so a match
+                              // inside a collapsed one is not hidden.
+                              forceOpen={Boolean(query.trim())}
+                              busyOf={(name) => pending.includes(name)}
+                              onToggle={setEnabled}
+                              onKey={setKey}
+                              askFirst={askFirst}
+                              onApproval={setApproval}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                  </div>
+
+                  {nothingShown ? (
+                    <p className="skill-none">
+                      {query.trim() ? `Nothing here matches “${query.trim()}”.` : "Nothing on this shelf."}
+                    </p>
+                  ) : null}
+                </>
               )}
             </>
           ) : (
@@ -1018,50 +1130,6 @@ export function Skills({ api }) {
                   </button>
                 </div>
               ) : null}
-
-              {/* Presets, by section */}
-              {PRESET_SECTIONS.map((section, index) => {
-                const known = PRESET_SECTIONS.map((s) => s.id);
-                const inSection = mcpPresets.filter((preset) =>
-                  index === PRESET_SECTIONS.length - 1
-                    ? preset.category === section.id || !known.includes(preset.category)
-                    : preset.category === section.id,
-                );
-                if (!inSection.length) return null;
-                return (
-                  <div key={section.id}>
-                    <div className="lane" style={{ marginBottom: section.note ? "6px" : "12px" }}>
-                      <span className="mi" data-strong>
-                        {section.label}
-                      </span>
-                      <i />
-                    </div>
-                    {section.note ? (
-                      <p className="settings-note" style={{ margin: "0 0 12px" }}>
-                        {section.note}
-                      </p>
-                    ) : null}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                        gap: "12px",
-                      }}
-                    >
-                      {inSection.map((preset) => (
-                        <PresetCard
-                          key={preset.id}
-                          api={api}
-                          preset={preset}
-                          isInstalled={installedServerNames.has(preset.name)}
-                          onInstall={handleInstallPreset}
-                          busy={mcpBusy}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
 
               {/* Installed MCP Servers */}
               <div>
@@ -1280,9 +1348,16 @@ export function Skills({ api }) {
                 ) : null}
 
                 {mcpServers.length === 0 ? (
-                  <p style={{ color: "var(--text-dim)", fontSize: "var(--t-sm)" }}>
-                    No MCP servers configured yet. Pick an integration above — GitHub, Figma, Exa, Context7 and more — or add your own with "+ Add Custom MCP Server" or "Import Config".
-                  </p>
+                  <div className="mcp-empty">
+                    <span className="shelf-glyph" aria-hidden="true">
+                      <Icon name="apps" />
+                    </span>
+                    <p>
+                      <b>Nothing connected yet.</b> Pick an integration from the gallery below — GitHub,
+                      Figma, Exa, Context7 and more — or bring your own with “+ Add Custom MCP Server” or
+                      “Import Config”.
+                    </p>
+                  </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     {mcpServers.map((server) => (
@@ -1303,6 +1378,48 @@ export function Skills({ api }) {
                   </div>
                 )}
               </div>
+              {/* Presets, by section */}
+              {PRESET_SECTIONS.map((section, index) => {
+                const known = PRESET_SECTIONS.map((s) => s.id);
+                const inSection = mcpPresets.filter((preset) =>
+                  index === PRESET_SECTIONS.length - 1
+                    ? preset.category === section.id || !known.includes(preset.category)
+                    : preset.category === section.id,
+                );
+                if (!inSection.length) return null;
+                return (
+                  <div key={section.id}>
+                    <div className="lane preset-lane" style={{ marginBottom: section.note ? "6px" : "12px" }}>
+                      <span className="shelf-glyph" aria-hidden="true">
+                        <Icon name={section.icon} />
+                      </span>
+                      <span className="mi" data-strong>
+                        {section.label}
+                      </span>
+                      <span className="mi preset-lane-count">{inSection.length}</span>
+                      <i />
+                    </div>
+                    {section.note ? (
+                      <p className="settings-note" style={{ margin: "0 0 12px" }}>
+                        {section.note}
+                      </p>
+                    ) : null}
+                    <div className="preset-grid">
+                      {inSection.map((preset) => (
+                        <PresetCard
+                          key={preset.id}
+                          api={api}
+                          preset={preset}
+                          isInstalled={installedServerNames.has(preset.name)}
+                          onInstall={handleInstallPreset}
+                          busy={mcpBusy}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
             </div>
           )}
         </div>

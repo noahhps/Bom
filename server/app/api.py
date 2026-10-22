@@ -2188,6 +2188,9 @@ def build_router(
         # A flag, not the bytes: the endpoint is authenticated, so the client
         # fetches it with the bearer header and wraps it in an object URL.
         data["has_icon"] = _stored_icon(server) is not None
+        # Whether that icon is one somebody uploaded: the client draws its own
+        # bundled mark for known services, and only an upload outranks it.
+        data["icon_uploaded"] = store.get_mcp_icon(_icon_keys(server)[0]) is not None
         # Whether the server wants a person signed in, and whether one is.
         # Never the tokens themselves.
         data["auth"] = {

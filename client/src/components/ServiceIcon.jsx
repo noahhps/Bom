@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { iconForServer } from "../lib/mcpIcons";
+import { logoFor } from "../lib/serviceLogos";
 
-/* The logo an MCP server wears, with two fallbacks behind it.
+/* The logo an MCP server wears, with fallbacks behind it.
  *
  * A real logo first -- these rows are read as brands ("the GitHub one"), and a
  * wall of identical glyphs is the slowest possible way to find one of fourteen
- * services. Then a monogram, then the functional glyph the rest of the shell
- * uses.
+ * services. In order: a logo someone uploaded for this server, the mark
+ * bundled with the app (lib/serviceLogos -- no request, sharp at any size),
+ * whatever the service's site serves, the functional glyph the rest of the
+ * shell uses, then a monogram.
  *
  * Unlike every other icon here, a fetched logo is drawn as an <img> rather than
  * as a mask over currentColor. Masking exists so a Material silhouette inherits
@@ -40,12 +43,15 @@ function monogram(name) {
   return letters.join("").slice(0, 2);
 }
 
-export function ServiceIcon({ api, name, serverId, presetId, hasIcon = true, off = false }) {
+export function ServiceIcon({ api, name, serverId, presetId, hasIcon = true, uploaded = false, off = false }) {
   const [url, setUrl] = useState(null);
   const [failed, setFailed] = useState(false);
+  const bundled = logoFor(name);
+  // Only an upload outranks the bundled mark; a fetched favicon never does.
+  const fetchIt = hasIcon && (!bundled || (serverId && uploaded));
 
   useEffect(() => {
-    if (!api || !hasIcon || (!serverId && !presetId)) return undefined;
+    if (!api || !fetchIt || (!serverId && !presetId)) return undefined;
 
     let revoked = false;
     let objectUrl = null;
@@ -71,12 +77,20 @@ export function ServiceIcon({ api, name, serverId, presetId, hasIcon = true, off
       // re-renders on every sync would leak one per row per render.
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [api, serverId, presetId, hasIcon]);
+  }, [api, serverId, presetId, fetchIt]);
 
   if (url && !failed) {
     return (
       <span className="mcp-avatar" data-logo="" data-off={off ? "" : undefined}>
         <img src={url} alt="" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  if (bundled) {
+    return (
+      <span className="mcp-avatar" data-logo="" data-brand="" data-off={off ? "" : undefined}>
+        <img src={bundled} alt="" aria-hidden="true" />
       </span>
     );
   }

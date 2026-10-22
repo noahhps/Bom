@@ -147,8 +147,8 @@ function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, ask
         aria-expanded={expanded}
         onClick={() => setOpen((was) => !was)}
       >
-        <Icon name={iconForServer(server)} />
-        <span className="mcp-group-name h">{server}</span>
+        <ServiceIcon name={server} />
+        <span className="mcp-group-name h">{serviceName(server)}</span>
         <span className="mi mcp-group-count">
           {on} of {skills.length} on
         </span>
@@ -407,6 +407,7 @@ function McpServerRow({
         name={server.name}
         serverId={server.id}
         hasIcon={server.has_icon}
+        uploaded={server.icon_uploaded}
         off={!server.connected}
       />
 

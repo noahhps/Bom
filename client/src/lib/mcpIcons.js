@@ -17,6 +17,13 @@ const RULES = [
   ["mail", "mail"],
   ["figma", "design"],
   ["drive", "apps"],
+  // Presets with no bundled mark (lib/serviceLogos) still say what they are.
+  ["deepwiki", "document"],
+  ["context7", "code"],
+  ["filesystem", "folder"],
+  ["sequential_thinking", "thinking"],
+  ["remote_bridge", "terminal"],
+  ["hosted_oauth", "globe"],
 ];
 
 /* An unrecognised server is still a server, so this is a real answer rather

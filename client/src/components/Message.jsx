@@ -3,7 +3,6 @@ import { Fragment, memo, useMemo } from "react";
 import { useReveal } from "../hooks/useReveal";
 import { workingWord } from "../lib/skillWidgets";
 import { turnTimeline } from "../lib/timeline";
-import { AgentWear } from "./AgentAvatar";
 import { AgentFlower } from "./AgentFlower";
 import { MessageAttachments } from "./Attachments";
 import { Decode } from "./Decode";
@@ -103,7 +102,6 @@ export const Message = memo(function Message({
   compaction = null,
   usage = null,
   sentAt,
-  look = null,
 }) {
   // The answer in the order it happened: thinking, skills and words as they
   // came, rather than all the thinking, then all the skills, then the words.
@@ -193,9 +191,6 @@ export const Message = memo(function Message({
 
       <div className="answer">
         <AgentFlower open={Boolean(streaming)} />
-        {/* In an agent's room the answering flower is the agent, so it wears
-            what the agent wears. */}
-        <AgentWear look={look} className="answer-wear" />
 
         {parts.map((part, index) => {
           const last = index === parts.length - 1;

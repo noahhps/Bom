@@ -21,8 +21,6 @@ export function MessageList({
   // What an empty conversation says above the composer. The chat's greeting
   // by default; a design conversation hands in its own.
   head = null,
-  // What the answering flower wears -- the agent's look, in its room.
-  look = null,
 }) {
   const ref = useRef(null);
 
@@ -68,7 +66,6 @@ export function MessageList({
             compaction={m.compaction}
             usage={m.usage}
             sentAt={m.sentAt}
-            look={m.role === "assistant" ? look : null}
             // Only the turn that is actually from the assistant carries the
             // provenance line; a user bubble and an error have no model.
             model={m.role === "assistant" ? model : null}

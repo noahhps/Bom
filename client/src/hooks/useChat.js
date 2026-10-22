@@ -58,7 +58,6 @@ export function useChat(
     onWorkspace,
     onProjects,
     provider = null,
-    agentId = null,
     mode = "chat",
     design = null,
     workspace = null,
@@ -234,10 +233,6 @@ export function useChat(
           attachments,
           thinkingLevel,
           provider,
-          // A selected agent belongs to the unsent conversation only. Existing
-          // sessions keep their server-side assignment and are edited through
-          // the top-bar picker instead.
-          sessionId ? null : agentId,
           controller.signal,
           // Likewise what a new conversation is started as: a design chat,
           // and the look picked on its empty screen before anything was sent.
@@ -506,7 +501,6 @@ export function useChat(
       onWorkspace,
       onProjects,
       onSessionsChanged,
-      agentId,
       mode,
       design,
       workspace,

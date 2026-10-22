@@ -25,7 +25,6 @@ class TaskIn(BaseModel):
     repeat: str = "once"
     tz: str | None = Field(default=None, max_length=64)
     utc_offset: int | None = Field(default=None, ge=-840, le=840)
-    agent_id: str | None = None
 
 
 class TaskPatch(BaseModel):
@@ -34,7 +33,6 @@ class TaskPatch(BaseModel):
     starts_at: str | None = None
     repeat: str | None = None
     enabled: bool | None = None
-    agent_id: str | None = None
 
 
 def _check(starts_at: str, repeat: str) -> None:
@@ -60,8 +58,6 @@ def build_schedule_router(store: Store, scheduler: Scheduler, auth) -> APIRouter
     @router.post("/scheduled-tasks")
     def create_task(body: TaskIn) -> dict:
         _check(body.starts_at, body.repeat)
-        if body.agent_id and not store.get_agent(body.agent_id):
-            raise HTTPException(404, "no such agent")
         zone = zone_for(body.tz, body.utc_offset)
         first = first_run_ms(body.starts_at, body.repeat, zone, int(time.time() * 1000))
         if first is None:
@@ -69,7 +65,7 @@ def build_schedule_router(store: Store, scheduler: Scheduler, auth) -> APIRouter
         task = store.add_task(
             body.title.strip(), body.prompt.strip(), body.starts_at,
             repeat=body.repeat, tz=body.tz, utc_offset=body.utc_offset,
-            next_run_at=first, agent_id=body.agent_id,
+            next_run_at=first,
         )
         return task.to_dict()
 
@@ -77,9 +73,6 @@ def build_schedule_router(store: Store, scheduler: Scheduler, auth) -> APIRouter
     def update_task(task_id: str, body: TaskPatch) -> dict:
         task = _get(task_id)
         changes = body.model_dump(exclude_unset=True)
-        agent = changes.get("agent_id")
-        if agent and not store.get_agent(agent):
-            raise HTTPException(404, "no such agent")
 
         starts_at = changes.get("starts_at", task.starts_at)
         repeat = changes.get("repeat", task.repeat)

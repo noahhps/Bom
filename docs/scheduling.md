@@ -2,7 +2,7 @@
 
 A scheduled task is a prompt and a time. When the time comes the server opens a
 new conversation, runs the prompt as its first message through the normal turn
-loop (same skills, memory, agent and provider routing as a chat), and saves the
+loop (same skills, memory and provider routing as a chat), and saves the
 result in the conversation list under the task's title.
 
 ## Making one
@@ -16,7 +16,7 @@ Or over HTTP (all under `/api`, bearer-token protected):
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/scheduled-tasks` | list, soonest first |
-| POST | `/scheduled-tasks` | `title`, `prompt`, `starts_at` (`YYYY-MM-DDTHH:MM` local), `repeat`, `tz` / `utc_offset`, `agent_id` |
+| POST | `/scheduled-tasks` | `title`, `prompt`, `starts_at` (`YYYY-MM-DDTHH:MM` local), `repeat`, `tz` / `utc_offset` |
 | PATCH | `/scheduled-tasks/{id}` | change any of the above, or `enabled` to pause/resume |
 | DELETE | `/scheduled-tasks/{id}` | |
 | POST | `/scheduled-tasks/{id}/run` | run now, without touching the schedule |

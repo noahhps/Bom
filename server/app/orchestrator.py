@@ -17,6 +17,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 
 from . import attachments as files
+from .agentic import AGENTIC_METHOD
 from . import compaction
 from .approvals import (
     ALLOW_ALWAYS,
@@ -174,7 +175,6 @@ class Orchestrator:
 
     def _skill_schemas(
         self,
-        allowed: set[str] | None = None,
         blocked: set[str] = frozenset(),
         mode: str | None = None,
     ) -> list[dict] | None:
@@ -185,12 +185,6 @@ class Orchestrator:
         list, because an empty `tools` array still trips the chat template's
         tool branch and tells the model it has a shelf with nothing on it.
 
-        `allowed` narrows that to an agent's subset: None means "every enabled
-        skill" (no agent, or an agent that named none to restrict), and a set --
-        even an empty one -- means only those. An empty set therefore collapses
-        to None below, which is correct: an agent given no skills is offered no
-        tools at all.
-
         `mode` narrows it to the tools that belong in this kind of conversation:
         the code tools in a code conversation and not elsewhere, the canvas and
         design tools everywhere but there. See `Skill.modes`.
@@ -200,8 +194,7 @@ class Orchestrator:
         schemas = [
             skill.schema()
             for name, skill in self.registry.enabled()
-            if (allowed is None or name in allowed)
-            and name not in blocked
+            if name not in blocked
             and _offered_in(skill, mode)
         ]
         return schemas or None
@@ -239,31 +232,14 @@ class Orchestrator:
         assembling a prompt, and a prompt builder that writes to the database
         is a prompt builder you cannot call twice.
         """
-        prompt = self.settings.system_preamble
+        # The preamble, then how Bom works: agentic by default, in every
+        # conversation (see agentic.py). Both are fixed text, so together they
+        # are the stable, cacheable prefix.
+        prompt = f"{self.settings.system_preamble}\n\n{AGENTIC_METHOD}"
 
-        # An agent's persona, when the conversation is assigned to one. After
-        # the static preamble and before the situation, which keeps it in the
-        # stable-prefix region of the prompt: an agent rarely changes mid
-        # conversation, so this does not churn the cache the way a fact does.
-        # Additive, never a replacement -- the preamble carries what every
-        # answer needs, and the agent specialises on top of it.
-        agent = self.store.session_agent(session_id) if session_id else None
-        if agent:
-            # Who it is, before what it is for. The preamble introduces Bom,
-            # and an agent is Bom with a specialty -- so without this line a
-            # researcher asked its name answers "Bom", which is true of the
-            # engine and wrong for the person talking to it in its room.
-            prompt = (
-                f"{prompt}\n\nIn this conversation you are {agent.name}, one of "
-                f"Bom's agents: Bom with a specialty and all of Bom's abilities. "
-                f"If you are asked who you are, you are {agent.name}."
-            )
-            if agent.instructions and agent.instructions.strip():
-                prompt = f"{prompt}\n\n{agent.instructions.strip()}"
-
-        # A design conversation's working method. In the stable prefix beside
-        # the agent, and for the same reason: a conversation's mode is fixed
-        # when it starts, so this never churns the cache.
+        # A design conversation's working method. In the stable prefix, beside
+        # the method: a conversation's mode is fixed when it starts, so this
+        # never churns the cache.
         mode = self.store.session_mode(session_id) if session_id else "chat"
         if mode == DESIGN:
             prompt = f"{prompt}\n\n{DESIGN_PREAMBLE}"
@@ -519,20 +495,17 @@ class Orchestrator:
             f"{markdown.strip()}{theme}"
         )
 
-    def _design_offered(self, allowed_skills: set[str] | None) -> bool:
+    def _design_offered(self) -> bool:
         """Whether the design question can be put in this conversation at all.
 
-        Only when ask_for_design is switched on, and within an agent's subset
-        where there is one: a reader who switched the chooser off has said they
-        do not want to be asked, and a gate that asked anyway would be the
-        chooser by another name.
+        Only when ask_for_design is switched on: a reader who switched the
+        chooser off has said they do not want to be asked, and a gate that
+        asked anyway would be the chooser by another name.
         """
         if self.registry is None:
             return False
         skill = self.registry.get("ask_for_design")
-        if skill is None or not skill.enabled or not skill.available:
-            return False
-        return allowed_skills is None or "ask_for_design" in allowed_skills
+        return skill is not None and skill.enabled and skill.available
 
     def _memory_enabled(self) -> bool:
         """The "Remember between chats" switch, checked where it matters.
@@ -866,20 +839,10 @@ class Orchestrator:
             if requested["tool"] in offered:
                 choice = requested
                 blocked = blocked_by(choice)
-        # The agent's skill subset, if the conversation is assigned to one.
-        # `parsed_skills()` is None for "every enabled skill" and a list --
-        # possibly empty -- for a restriction; the set is passed on to both
-        # what the model is offered and what it is allowed to actually run.
         # Settled before the window, because the shelf it offers is sent with
         # every request and has to be paid for out of the same budget.
-        agent = self.store.session_agent(session_id)
-        allowed_skills = (
-            set(agent.parsed_skills())
-            if agent and agent.parsed_skills() is not None
-            else None
-        )
         mode = self.store.session_mode(session_id)
-        tools = self._skill_schemas(allowed_skills, blocked, mode)
+        tools = self._skill_schemas(blocked, mode)
         # Whether this backend's model can look at a picture. A skill that
         # answers with one is offered only when it can; a picture sent to a
         # model that cannot see is dropped without a word.
@@ -1161,20 +1124,15 @@ class Orchestrator:
                         record["healed"] = list(mend.notes)
                     used.append(record)
 
-                    # An agent is only offered its own skills, but a model can
-                    # still name one it was not given -- from habit, or because
-                    # it is always-registered like recall. Refuse it before the
-                    # approval prompt so a restricted agent cannot reach past its
-                    # set, and tell the model plainly rather than silently.
-                    refused = allowed_skills is not None and call.name not in allowed_skills
+                    # A model can still name a tool it was not offered -- from
+                    # habit, or one from another kind of conversation. Refuse
+                    # it before the approval prompt, and tell the model plainly
+                    # rather than silently.
                     known = self.registry.get(call.name) if self.registry else None
                     elsewhere = known is not None and not _offered_in(known, mode)
-                    if refused or elsewhere or call.name in blocked:
+                    if elsewhere or call.name in blocked:
                         result = (
-                            f"{call.name} is not one of this agent's skills, so it "
-                            "did not run. Answer without it."
-                            if refused
-                            else f"{call.name} is not available in this kind of "
+                            f"{call.name} is not available in this kind of "
                             "conversation, so it did not run. Use the tools you "
                             "were given."
                             if elsewhere
@@ -1288,7 +1246,7 @@ class Orchestrator:
                             and skill_asked is not None
                             and skill_asked.wants_design(call.arguments)
                             and self.store.session_design(session_id) is None
-                            and self._design_offered(allowed_skills)
+                            and self._design_offered()
                         ):
                             request_id, waiter = self.choices.open()
                             yield _sse(

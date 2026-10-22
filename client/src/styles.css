@@ -98,8 +98,8 @@
      not handed out to the app's tools, so no glyph or chip wears one to say
      which feature it is -- a label does that. Colour is kept for meaning:
      the accent says "chosen", "you are here" and "act here"; green, ochre and
-     the danger red say pass, caution and stop; an agent's own colour says
-     which agent. Everything else is ink and grey. */
+     the danger red say pass, caution and stop. Everything else is ink and
+     grey. */
 
   /* The bloom: all eight petals around a centre, in the flower's order and
      starting where its top petal starts. Blurred, it is the logo's light --
@@ -457,12 +457,11 @@ button {
 
 /* A press gives, the way a petal does. Only the round controls -- a pill or
    a circle can shrink without its label reflowing -- and never while motion
-   is unwanted. One list and one `--press`: the swatches and agent tiles each
+   is unwanted. One list and one `--press`: the swatches and tiles each
    used to dip by their own amount, and the sign-in button not at all. */
 @media (prefers-reduced-motion: no-preference) {
   :is(.btn, .btnp, .chip, .starter, .send, .effort button,
-      .navrail-mark, .navrail-circle, .gate-submit, .accent, .agent-wear,
-      .agent-room-new):not(:disabled):active {
+      .navrail-mark, .navrail-circle, .gate-submit, .accent):not(:disabled):active {
     transform: var(--press);
     transition-duration: var(--dur-press);
   }
@@ -1420,8 +1419,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 
 /* Filing the open conversation, in the top bar. */
-/* Project and Agent: one pill each, label and value inside the same outline,
-   so they read as two settings on the thread rather than as two form controls
+/* Project and standard: one pill each, label and value inside the same
+   outline, so they read as settings on the thread rather than as form controls
    dropped into the header. The native select chrome is taken off and the
    shell's own chevron drawn in its place -- a platform dropdown arrow is the
    one thing in this bar that would not be Bom's. */
@@ -1714,7 +1713,6 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 .popover-more:hover { background: rgba(var(--ink-rgb), 0.06); color: var(--ink); }
 
-
 /* The sheet. Inset from three edges so the shell frames it, and clipped to its
    own radius -- which is why the tinted page headers on Memory and Skills stop
    in a curve rather than running into the corner. */
@@ -1736,7 +1734,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background-size: var(--grid-step) var(--grid-step);
   /* `clip` over `hidden` for the same reason as the rail: the glows behind
      the sheet overhang it, and a box that is only hidden can still be
-     scrolled by the browser -- focusing the composer in an agent's room slid
+     scrolled by the browser -- focusing the composer in a narrow column slid
      the whole sheet 132px sideways. Clipped, it cannot scroll. */
   overflow: hidden;
   overflow: clip;
@@ -2032,137 +2030,12 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   color: var(--text-faint);
 }
 
-/* -- agents page -----------------------------------------------------------
- * The list of agents on the left, one editor on the right that "New" and a
- * picked agent share. Built on the same .page shell as Skills and Memory. */
-.agents-body { gap: 22px; }
-.agents-list {
-  width: 240px;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.agents-empty { padding: 6px 8px; }
-.agents-presets {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 2px 2px 12px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.agents-preset-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.agents-preset {
-  font: 500 var(--t-micro) var(--font-mono);
-  letter-spacing: var(--track-label);
-  text-transform: lowercase;
-  padding: 6px 11px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line-firm);
-  color: var(--ink);
-}
-.agents-preset:hover { border-color: var(--line-strong); background: rgba(var(--ink-rgb), 0.04); }
-.agents-list-head { padding: 2px 2px 4px; display: block; }
-.agents-item-head { display: flex; align-items: center; gap: 9px; }
-.agents-badge { display: inline-grid; place-items: center; width: 22px; height: 22px; color: var(--ink); flex: none; }
-.agents-badge svg { width: 17px; height: 17px; }
-
-/* The icon picker in the editor: a grid of glyph buttons, tinted with the
-   agent's own accent so picking a colour previews on them too. */
-.agents-icons { display: flex; flex-wrap: wrap; gap: 6px; }
-.agents-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-}
-.agents-icon:hover { border-color: var(--line-strong); }
-.agents-icon[data-on] { border-color: var(--ink); background: rgba(var(--ink-rgb), 0.05); }
-.agents-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 10px 12px;
-  border-radius: var(--r-pill);
-  border: 1px solid transparent;
-  color: var(--ink);
-  text-align: left;
-}
-.agents-item:hover { background: rgba(var(--ink-rgb), 0.05); }
-.agents-item[data-active] {
-  background: var(--surface);
-  border-color: var(--line);
-}
-.agents-item-name { font: 500 var(--t-body) var(--font); }
-
-.agents-editor {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 640px;
-}
-.agents-hint { padding: 6px 2px; }
-.agents-field { display: flex; flex-direction: column; gap: 7px; }
-.agents-field input[type="text"],
-.agents-instructions {
-  font: 400 var(--t-body)/1.6 var(--font);
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  padding: 10px 12px;
-}
-.agents-field input[type="text"]:focus,
-.agents-instructions:focus {
-  outline: none;
-  border-color: var(--line-strong);
-}
-.agents-instructions { min-height: 120px; resize: vertical; }
-
-.agents-check {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 5px 2px;
-  font: 400 var(--t-body) var(--font);
-  color: var(--ink);
-  cursor: pointer;
-}
-.agents-check input { width: 15px; height: 15px; flex: none; }
-.agents-skills {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 8px 10px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-pill);
-}
-
-.agents-actions { display: flex; gap: 9px; margin-top: 4px; }
-.agents-error { color: var(--danger); font: 400 var(--t-body) var(--font); margin: 0; }
 .btn[data-danger] { color: var(--danger); }
 .btn[data-danger]:hover { border-color: var(--danger); }
 
-@media (max-width: 900px) {
-  .agents-body { flex-direction: column; }
-  .agents-list { width: 100%; flex-direction: row; flex-wrap: wrap; }
-  .agents-editor { max-width: none; }
-}
-
 /* -- design page -----------------------------------------------------------
  * The standards a result can be held to: the presets that ship with the
- * server, then the reader's own. Same two-column shell as Agents -- a list
+ * server, then the reader's own. A two-column shell -- a list
  * that picks, a pane that shows -- except the pane is doing two jobs, reading
  * a preset and editing one of yours, and only one of them is ever open. */
 .design-body { gap: 22px; }
@@ -2323,7 +2196,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
    being cut off at an edge. Never in the way of a click. On an empty,
    glassy screen the ground is transparent and the fade vanishes with it --
    there is nothing scrolling there to soften. */
-:is(.topbar, .agent-chat-head)::after {
+:is(.topbar)::after {
   content: "";
   position: absolute;
   left: 0;
@@ -2764,7 +2637,6 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .flower-petal:nth-child(7) { --petal: var(--petal-violet); }
 .flower-petal:nth-child(8) { --petal: var(--petal-orchid); }
 
-
 /* The face, which is also the bud. */
 .flower-face {
   position: absolute;
@@ -3053,7 +2925,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* An answer still arriving. */
 /* The working label (Decode.jsx): noise in the faint label colour, and each
    letter taking the accent as it settles -- so the word reads as arriving in
-   the agent's colour, and a half-settled word shows how far along it is. */
+   the accent, and a half-settled word shows how far along it is. */
 .decode { display: inline-block; color: var(--text-decode); }
 /* In the mono, not the trace's serif: the word is the live signal, not an
    aside, and a fixed advance keeps the scramble from jittering the line as
@@ -3308,7 +3180,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   transition: border-color var(--composer-motion);
 }
 
-/* The tray: what the conversation is -- kind, what to make, agent, project.
+/* The tray: what the conversation is -- kind, what to make, project.
    A quieter strip, inset from the box's sides and tucked up under its
    rounded bottom, so it reads as a drawer the box sits on rather than as a
    second box. Set once and left, so it is out of the row the hand goes to
@@ -3340,16 +3212,16 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 /* In the tray the pickers are filled in the composer's own surface, a step
    lighter than the grey strip they sit on, so each reads as a control rather
    than blending into the drawer. No hairline -- the fill is the edge. */
-.composer-tray .composer-agent-control {
+.composer-tray .composer-pick-control {
   border-color: transparent;
   background: var(--surface);
   padding: 4px 8px;
   box-shadow: 0 1px 1px rgba(var(--shadow-rgb), 0.05);
 }
-.composer-tray .composer-agent-control:hover {
+.composer-tray .composer-pick-control:hover {
   background: color-mix(in srgb, var(--ink) 3%, var(--surface));
 }
-.composer-tray .composer-agent-control:focus-within { border-color: var(--accent); }
+.composer-tray .composer-pick-control:focus-within { border-color: var(--accent); }
 
 .composer-tray .composer-session {
   min-width: 0;
@@ -3517,21 +3389,14 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   min-height: 32px;
 }
 
-.composer-agent-picker {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-  flex: none;
-}
-.composer-agent-label { color: var(--text-faint); }
+.composer-pick-label { color: var(--text-faint); }
 .composer-make { display: flex; align-items: center; gap: 7px; flex: none; margin-left: 6px; }
-.composer-make .composer-agent-control { padding: 4px 8px; }
-.composer-make .composer-agent-control > svg { width: 14px; height: 14px; flex: none; opacity: 0.75; }
-.composer-make[data-pinned] .composer-agent-control { border-color: var(--accent); background: var(--accent-wash); }
-.composer-make[data-pinned] .composer-agent-control > svg { color: var(--accent); opacity: 1; }
+.composer-make .composer-pick-control { padding: 4px 8px; }
+.composer-make .composer-pick-control > svg { width: 14px; height: 14px; flex: none; opacity: 0.75; }
+.composer-make[data-pinned] .composer-pick-control { border-color: var(--accent); background: var(--accent-wash); }
+.composer-make[data-pinned] .composer-pick-control > svg { color: var(--accent); opacity: 1; }
 .composer-make select { max-width: 120px; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 var(--t-xs)/1.2 var(--font); }
-.composer-agent-control {
+.composer-pick-control {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -3540,15 +3405,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   background: var(--surface);
   padding: 5px 9px;
 }
-.composer-agent-control:focus-within { border-color: var(--accent); }
-.composer-agent-dot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent);
-}
-.composer-agent-control select {
+.composer-pick-control:focus-within { border-color: var(--accent); }
+.composer-pick-control select {
   max-width: 180px;
   border: 0;
   outline: 0;
@@ -4189,7 +4047,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .spark[data-tint="green"] i[data-cold] { background: rgba(var(--ink-rgb), 0.1); }
 
 /* -- permission ask (1f) ------------------------------------------------------ */
-
 
 /* The same glyph at row scale, naming a server rather than one of its tools. */
 .mcp-avatar {
@@ -4837,7 +4694,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
     transition-property: opacity, color, background-color, border-color, box-shadow, filter !important;
   }
 }
-
 
 /* -- attachments -----------------------------------------------------------
  *
@@ -8372,7 +8228,7 @@ html:not([data-shell]) .screen[data-glass] {
  * The Code view's conversation column is the exception (below): it stays the
  * solid sheet, so it is left out here. */
 .screen[data-glass]
-  :is(.composer-box, .starter, .chip, .composer-agent-control, .design-look,
+  :is(.composer-box, .starter, .chip, .composer-pick-control, .design-look,
       .topbar-project, .topbar-build, .topbar-mode, .code-picker-recent,
       .code-picker-dirs, .code-picker-typed input, .btn):not(.code-chat *) {
   --ground: var(--sheet);
@@ -8387,11 +8243,11 @@ html:not([data-shell]) .screen[data-glass] {
 }
 /* The tray's pickers stay quiet pills on the strip, as they are off the glass
    -- the rule above would otherwise box each one in white. */
-.screen[data-glass] .composer-tray .composer-agent-control:not(.code-chat *) {
+.screen[data-glass] .composer-tray .composer-pick-control:not(.code-chat *) {
   background: var(--sheet-surface);
   border-color: transparent;
 }
-.screen[data-glass] .composer-tray .composer-agent-control:not(.code-chat *):hover {
+.screen[data-glass] .composer-tray .composer-pick-control:not(.code-chat *):hover {
   background: color-mix(in srgb, var(--ink) 3%, var(--sheet-surface));
 }
 /* The shadow under the tray, not the box -- see `.composer-box`. */
@@ -8726,349 +8582,6 @@ html:not([data-shell]) .screen[data-glass] {
   .screen[data-view="design"] .read-resize { display: flex; }
 }
 
-/* -- agents ------------------------------------------------------------------
- *
- * An agent is the flower dressed for its job (AgentAvatar.jsx), so this page
- * is the one place the flower appears as a cast rather than as the logo:
- * cards you open to talk to one, presets you add, a sheet to dress one, and a
- * room that is the conversation with the agent beside it. */
-
-/* The flower and what it wears, stacked. The overlay is drawn in the logo's
-   own units and overflows the box on purpose -- a top hat stands above the
-   petals. Pointer events pass through it, so the flower under it still
-   blooms on hover. */
-.agent-avatar {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: var(--avatar);
-  height: var(--avatar);
-}
-.agent-avatar > .flower-mark { grid-area: 1 / 1; }
-/* Reset the sheet's glyph rule (18px, stroked in currentColor): an accessory
-   is filled artwork, and every stroke in it is set on the shape itself. */
-.agent-avatar-wear {
-  grid-area: 1 / 1;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  fill: none;
-  stroke: none;
-  stroke-width: 0;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* The flower beside an answer, dressed. `.answer > .flower` is a 38.5px box
-   at (-53.25, -6.25) whose open span is 27/22 of that -- 47.25px, centred at
-   (-34, 13) -- so the overlay is that span, centred on the same point. */
-.answer > .answer-wear {
-  inset: auto;
-  left: -57.625px;
-  top: -10.625px;
-  width: 47.25px;
-  height: 47.25px;
-}
-
-.agent-presets {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 10px;
-}
-.agent-preset {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 14px 14px 16px;
-  border-radius: var(--r-card);
-  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
-}
-.agent-preset-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.agent-preset-name { font: 600 var(--t-md)/1.2 var(--font); color: var(--ink); }
-.agent-preset-tagline { font: 400 var(--t-xs)/1.4 var(--font); color: var(--text-dim); }
-.agent-preset-actions { display: flex; gap: 6px; flex: none; }
-.agent-preset-actions .btn { padding: 9px 10px; }
-.agent-preset-actions .btnp { padding: 9px 13px; }
-
-/* The customise sheet. */
-.agent-sheet-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 160;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.32);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  animation: settings-in var(--dur-base) ease;
-}
-.agent-sheet {
-  position: relative;
-  width: min(640px, 100%);
-  max-height: min(860px, 100%);
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--r-float);
-  background: var(--menu);
-  box-shadow: var(--elevation-float);
-  overflow: hidden;
-}
-.agent-sheet-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--text-dim);
-  z-index: 1;
-}
-.agent-sheet-close:hover { background: var(--accent-wash); color: var(--ink); }
-.agent-sheet-close svg { width: 16px; height: 16px; }
-/* The agent itself at the head, in whatever it has on right now, with its
-   name under it as the one big field. Lit from behind by the bloom. */
-.agent-sheet-head {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 40px 24px 18px;
-}
-.agent-sheet-head::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: 50%;
-  top: 46%;
-  width: 260px;
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: var(--bloom);
-  filter: blur(46px);
-  opacity: calc(var(--bloom-opacity) * 1.2);
-}
-.agent-sheet-name {
-  width: min(360px, 100%);
-  padding: 8px 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  text-align: center;
-  font: 700 var(--t-xl)/1.1 var(--font);
-  color: var(--ink);
-}
-.agent-sheet-name:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
-.agent-sheet-name:focus { outline: none; background: var(--surface); }
-.agent-sheet-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 6px 28px 20px;
-}
-.agent-sheet-field { display: flex; flex-direction: column; gap: 9px; }
-.agent-sheet-field .agents-instructions { min-height: 120px; }
-/* Each choice is the agent wearing it, so the row is a line-up of the same
-   character in different hats. */
-.agent-wear-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.agent-wear {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 58px;
-  padding-top: 6px;
-  border-radius: var(--r-float);
-  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
-  transition: background var(--dur-quick) ease, box-shadow var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
-}
-.agent-wear:hover { background: var(--accent-wash); }
-.agent-wear[data-on] {
-  background: var(--accent-field);
-  box-shadow: inset 0 0 0 2px var(--accent-soft);
-}
-.agent-sheet-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 20px 18px;
-  border-top: 1px solid var(--line-soft);
-}
-.agent-sheet-actions .spacer { flex: 1; }
-.agent-sheet .agents-error { margin: 0 28px 4px; }
-
-/* The Agents screen, as a messenger: your agents down the left as contacts,
-   the one you picked on the right as its single ongoing chat. The chat
-   column is `position: relative` because the composer floats over the foot
-   of the thread by anchoring to its nearest positioned ancestor -- without
-   this it would span the contacts too. */
-.screen[data-view="agent"] { background-image: none; }
-.agent-room {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-.agent-room-side {
-  width: 280px;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  padding: 16px 10px;
-  border-right: 1px solid var(--line-soft);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.agent-room-list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 2px 4px 6px 12px;
-}
-.agent-room-heading { font: 700 var(--t-lg)/1.2 var(--font); color: var(--ink); }
-.agent-room-new {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--text-dim);
-  background: rgba(var(--ink-rgb), 0.06);
-  transition: background var(--dur-quick) ease, transform var(--dur-settle) var(--spring);
-}
-.agent-room-new:hover { background: rgba(var(--ink-rgb), 0.1); color: var(--ink); }
-@media (hover: hover) and (pointer: fine) {
-  .agent-room-new:hover { transform: scale(1.08); }
-}
-.agent-room-new[aria-pressed="true"] { background: var(--accent-field); color: var(--accent); }
-.agent-room-new svg { width: 16px; height: 16px; }
-.agent-room-empty { margin: 4px 12px; font-size: var(--t-sm); color: var(--text-faint); }
-
-.agent-contacts {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-/* A contact: the agent, dressed, with its name and the last thing its chat
-   was about -- or, before the first message, what it is for. Room above the
-   avatar for a tall hat. */
-.agent-contact {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px 8px;
-  border-radius: var(--r-float);
-  text-align: left;
-  transition: background var(--dur-quick) ease;
-}
-.agent-contact:hover { background: rgba(var(--ink-rgb), 0.05); }
-/* The one you are talking to: the only coloured row, in its own accent. */
-.agent-contact[aria-current] { background: var(--accent-field); }
-.agent-contact-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.agent-contact-top { display: flex; align-items: baseline; gap: 8px; }
-.agent-contact-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 600 var(--t-md)/1.2 var(--font);
-  color: var(--ink);
-}
-.agent-contact-when {
-  flex: none;
-  font: 500 var(--t-xs)/1 var(--font);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-}
-.agent-contact-line {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 400 var(--t-sm)/1.3 var(--font);
-  color: var(--text-dim);
-}
-
-.agent-room-main {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-/* Who you are talking to, heading the chat. */
-.agent-chat-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px 10px 24px;
-  background: var(--ground);
-  position: relative;
-  z-index: 6;
-}
-.agent-chat-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.agent-chat-name { font: 700 var(--t-md)/1.2 var(--font); color: var(--ink); }
-.agent-chat-tagline {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 400 var(--t-xs)/1.3 var(--font);
-  color: var(--text-dim);
-}
-.agent-chat-head .btn { padding: 8px 13px; }
-.agent-chat-head .btn svg { width: 15px; height: 15px; }
-
-/* Adding agents, on the right when none is picked. */
-.agent-gallery {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 40px 36px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-.agent-gallery-head {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  max-width: 640px;
-}
-.agent-gallery-head .h { font-size: var(--t-xl); }
-.agent-gallery-head p { margin: 0; color: var(--text-dim); font-size: var(--t-md); line-height: 1.55; }
-.agent-gallery-head .btnp svg { width: 15px; height: 15px; }
-.agent-gallery-section { display: flex; flex-direction: column; gap: 12px; max-width: 1000px; }
-
-/* On a phone the contacts would leave the chat no room: with an agent open
-   they go, and the rail's Agents is the way back to them. With none open,
-   the contacts sit above the gallery rather than beside it. */
-@media (max-width: 900px) {
-  .agent-room { flex-direction: column; overflow-y: auto; }
-  .agent-room-side { width: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--line-soft); }
-  .agent-room:has(.agent-chat-head) .agent-room-side { display: none; }
-  .agent-room:not(:has(.agent-chat-head)) .agent-room-main { flex: none; }
-  .agent-gallery { overflow: visible; padding: 24px 16px 40px; }
-}
-
 /* -- headings --------------------------------------------------------------
  *
  * Everything that is a heading rather than a line of text, in Bricolage
@@ -9086,9 +8599,6 @@ html:not([data-shell]) .screen[data-glass] {
   .design-reading-name,
   .page-head h1,
   .settings-head h2,
-  .agent-sheet-name,
-  .agent-room-heading,
-  .agent-chat-name,
   .body :is(h1, h2, h3)
 ) {
   font-family: var(--font-display);
@@ -9103,11 +8613,7 @@ html:not([data-shell]) .screen[data-glass] {
 :is(
   .gate-field > label,
   .design-tag,
-  .canvas-mode,
-  .agents-preset,
-  .agents-section-head,
-  .agent-contact-when
-) {
+  .canvas-mode) {
   font-family: var(--font-serif);
   font-style: italic;
   font-weight: 400;

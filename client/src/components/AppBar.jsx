@@ -9,8 +9,8 @@ import { Icon } from "./Icon";
  * attribute is on the bar and its filler only, so the buttons still click.
  *
  * Beside the toggle, the switch between the app's two spaces, where Claude
- * puts its Home and Code: Home is conversation -- chats, quick asks and the
- * agents you keep talking to -- and Studio the longer work, designs and code,
+ * puts its Home and Code: Home is conversation -- chats and quick asks --
+ * and Studio the longer work, designs and code,
  * with its own conversations and projects. Which kind of design-or-code a
  * new Studio conversation is, is chosen in its composer. */
 export const SPACES = [

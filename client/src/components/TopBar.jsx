@@ -26,9 +26,6 @@ export function TopBar({
   browserShown = false,
   browserOpen = false,
   onToggleBrowser,
-  agents = [],
-  agentId = null,
-  onAgent,
   // A design conversation: its tag beside the title, and the standard it is
   // styled to as a picker of its own.
   mode = "chat",
@@ -106,28 +103,6 @@ export function TopBar({
         </label>
       ) : null}
 
-      {/* Which agent answers in this conversation. Beside filing, and hidden
-          for the same reasons: it is a property of the thread, so an unsent
-          chat has no id to write it against, and it only appears once there is
-          at least one agent to choose. */}
-      {canFile && agents.length > 0 ? (
-        <label className="topbar-project">
-          <span className="mi">Agent</span>
-          <select
-            value={agentId || ""}
-            aria-label="Run this conversation as an agent"
-            onChange={(event) => onAgent(event.target.value || null)}
-          >
-            <option value="">Default</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-
       {onBuildInCode ? (
         <button
           type="button"
@@ -173,8 +148,6 @@ export function TopBar({
         </button>
       ) : null}
 
-      {/* Not in an agent's chat: an agent has one chat, so there is no new
-          one to start. */}
       {onNewSession ? (
         <button className="icon-btn" aria-label="New conversation" onClick={onNewSession}>
           <Icon name="plus" />

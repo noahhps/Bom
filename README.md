@@ -12,7 +12,7 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
 |---------|-------------|
 | **Local inference** | Uses Ollama to run models such as Mistral, Llama‑2, or any GGUF/ggml weights directly on your CPU/GPU.
 | **Tauri + React UI** | A responsive desktop app that looks and feels like a native application.
-| **Agent templates** | Built‑in agents for coding, research, analysis, etc.
+| **Agentic by default** | Every conversation works like an agent: it plans longer jobs, uses its skills to do the work, checks the result (runs the code, reads the file back, looks the fact up), and keeps going until the task is done.
 | **Design & work tools** | A Design tab that opens design conversations, plus slide decks and live spreadsheets in the canvas panel, styled to a design.md standard you pick.
 | **Safety sandbox** | Built‑in execution sandboxing.
 

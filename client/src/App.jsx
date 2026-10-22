@@ -3,10 +3,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AgentEditor } from "./components/AgentEditor";
-import { AgentGreeting, AgentsScreen } from "./components/AgentRoom";
-import { lookOf } from "./lib/accessories";
-import { AgentGallery } from "./components/Agents";
 import { AppBar } from "./components/AppBar";
 import { DesignStarters, DesignStartersHead } from "./components/DesignStarters";
 import { Canvas } from "./components/Canvas";
@@ -26,7 +22,6 @@ import { Starters } from "./components/Starters";
 import { RemoteGate } from "./components/RemoteGate";
 import { TokenGate } from "./components/TokenGate";
 import { TopBar } from "./components/TopBar";
-import { useAgents } from "./hooks/useAgents";
 import { useDesigns } from "./hooks/useDesigns";
 import { useDesignLibrary } from "./hooks/useDesignLibrary";
 import { useBrowser } from "./hooks/useBrowser";
@@ -103,7 +98,7 @@ export default function App() {
   // Which of the rail's destinations is on screen. "chat" is the conversation
   // screen, for a chat or a design and for every conversation not yet sent;
   // "code" is a code session's editor with the conversation beside it; and
-  // "projects", "skills" and "agents" are the rail's pages. (The design
+  // "projects" and "skills" are the rail's pages. (The design
   // standards are a screen of Settings.)
   const [view, setView] = useState("chat");
   const talking = view === "chat";
@@ -111,7 +106,7 @@ export default function App() {
   // chosen in its composer. One page for all three: the composer and what is
   // under it change to suit, rather than each kind having a page of its own.
   const [newKind, setNewKind] = useState("chat");
-  // The space the rail is in -- Home (chats, agents) or Studio (designs and
+  // The space the rail is in -- Home (chats) or Studio (designs and
   // code). It follows what is on screen (see the effect below); the switch at
   // the head of the rail moves it, and it is remembered for the next launch.
   const [space, setSpace] = useState(() => {
@@ -186,19 +181,10 @@ export default function App() {
   // backend uses is the opposite case and lives on the server -- see
   // useModels.
   const [provider, setProvider] = useState(null);
-  // The agent picked on the empty new-conversation screen. It is sent with
-  // the first turn so the server can assign it before the model runs.
-  const [newAgentId, setNewAgentId] = useState(null);
   // The project picked in the composer's tray for a conversation not yet
   // sent. It rides on the first message; after that the conversation's own
   // row says where it is filed.
   const [newProjectId, setNewProjectId] = useState(null);
-  // On the Agents page: whose room is open, or null for the roster. The room
-  // runs the app's one conversation as that agent.
-  const [roomAgentId, setRoomAgentId] = useState(null);
-  // The customise sheet: null when shut, else `{ agent, initial }` -- the
-  // stored agent being changed, or for a new one the preset it starts from.
-  const [agentSheet, setAgentSheet] = useState(null);
   // The look picked on an empty design conversation, sent with its first
   // message so the answer is styled from the start and nothing is asked.
   const [newDesign, setNewDesign] = useState(null);
@@ -262,7 +248,6 @@ export default function App() {
   // After `api`, not before it: hooks run in source order, and reading `api`
   // above its own `const` is a temporal dead zone error that blanks the page.
   const projects = useProjects(api);
-  const agents = useAgents(api);
   const designs = useDesigns(api);
   const { refresh } = sessions;
   const { refresh: refreshProjects } = projects;
@@ -316,7 +301,6 @@ export default function App() {
     onWorkspace,
     onProjects,
     provider,
-    agentId: newAgentId,
     // Only read for a conversation not yet sent: what it is started as, and
     // for a code one the folder it will work on.
     mode: newKind,
@@ -326,43 +310,14 @@ export default function App() {
   });
   const { setBadge, openSession, startNew } = chat;
 
-  // The agent whose room is on screen, if any. Looked up rather than stored,
-  // so deleting the agent drops back to the roster by itself.
-  const roomAgent =
-    view === "agents" && roomAgentId ? agents.agents.find((a) => a.id === roomAgentId) || null : null;
-  // A conversation is on screen: the chat screen, or an agent's chat -- which
-  // is the same conversation with the agent above it, canvas and all.
-  const conversing = talking || Boolean(roomAgent);
+  // A conversation is on screen.
+  const conversing = talking;
 
-  // Each agent's one chat: the latest conversation run as it (a code session
-  // aside, which lives in its editor). An agent is someone you keep talking
-  // to, so the Agents screen opens where you left off rather than listing
-  // conversations. Older ones from before an agent had a single chat stay in
-  // the main list as ordinary conversations.
-  const agentChats = useMemo(() => {
-    const chats = new Map();
-    for (const s of sessions.sessions) {
-      if (!s.agent_id || s.mode === "code") continue;
-      const was = chats.get(s.agent_id);
-      if (!was || (s.updated_at || 0) > (was.updated_at || 0)) chats.set(s.agent_id, s);
-    }
-    return chats;
-  }, [sessions.sessions]);
-  const agentChatIds = useMemo(
-    () => new Set([...agentChats.values()].map((s) => s.id)),
-    [agentChats],
-  );
-  // The main list, without the agents' chats -- those are on the Agents
-  // screen, the way a messenger's threads are not also in your inbox.
-  const plainSessions = useMemo(
-    () => sessions.sessions.filter((s) => !agentChatIds.has(s.id)),
-    [sessions.sessions, agentChatIds],
-  );
   // The rail's list is the space's own: chats in Home, designs and code in
   // Studio.
   const spaceSessions = useMemo(
-    () => plainSessions.filter((s) => spaceOf(s) === space),
-    [plainSessions, space],
+    () => sessions.sessions.filter((s) => spaceOf(s) === space),
+    [sessions.sessions, space],
   );
 
   // The open conversation's row, for its mode, its standard and its filing.
@@ -468,21 +423,13 @@ export default function App() {
   // open conversation as well as the lists, because an accent set to `auto`
   // is derived from what is being talked about -- it needs the messages, not
   // just the session row.
-  // On the Agents screen with no agent open, the conversation still loaded
-  // behind the gallery is not what is on screen, so its agent's colour should
-  // not dress the page: the theme resolves as for nothing open.
-  const themeIdle = view === "agents" && !roomAgent;
   const theme = useTheme({
     api,
-    sessionId: themeIdle ? null : chat.sessionId,
+    sessionId: chat.sessionId,
     sessions: sessions.sessions,
     projects: projects.projects,
-    // The accent is the agent's now, not the chat's -- useTheme resolves
-    // agent -> project -> app.
-    agents: agents.agents,
-    pendingAgentId: themeIdle ? null : newAgentId,
-    title: themeIdle ? "" : chat.title,
-    messages: themeIdle ? [] : chat.messages,
+    title: chat.title,
+    messages: chat.messages,
     // The accent is derived per mode: the same hue, drawn on a dark ladder.
     mode: appearance.mode,
   });
@@ -533,12 +480,6 @@ export default function App() {
         const first = list.find((s) => spaceOf(s) === remembered) || list[0];
         if (first) {
           if (first.mode === "code") setView("code");
-          // The newest conversation is, if it is an agent's, that agent's one
-          // chat -- so it reopens where it lives, on the Agents screen.
-          else if (first.agent_id) {
-            setView("agents");
-            setRoomAgentId(first.agent_id);
-          }
           await openSession(first.id);
         } else startNew();
         setPhase(READY);
@@ -666,7 +607,6 @@ export default function App() {
     (kind = "chat", { workspace } = {}) => {
       setView("chat");
       setSidebarOpen(false);
-      setNewAgentId(null);
       setNewProjectId(null);
       setNewKind(kind);
       if (kind === "design") setNewDesign(null);
@@ -679,28 +619,11 @@ export default function App() {
   const handleNewSession = useCallback(() => startNewOf("chat"), [startNewOf]);
   const handleNewDesign = useCallback(() => startNewOf("design"), [startNewOf]);
 
-  // To an agent's chat: its one conversation, opened where it was left, or --
-  // before the first message -- a fresh one that will become it, run as the
-  // agent from its first turn.
-  const startWithAgent = useCallback(
-    (agentId) => {
-      setView("agents");
-      setRoomAgentId(agentId);
-      setSidebarOpen(false);
-      setNewKind("chat");
-      setNewAgentId(agentId);
-      setNewProjectId(null);
-      startNew();
-      setFocusToken((n) => n + 1);
-    },
-    [startNew],
-  );
   // The space follows what is on screen: a design or a code conversation
-  // (or the empty page set to start one) is Studio's, a chat or an agent is
-  // Home's. Projects and Skills are in both, and leave it where it is.
+  // (or the empty page set to start one) is Studio's, a chat is Home's.
+  // Projects and Skills are in both, and leave it where it is.
   const onScreen =
     view === "code" ? "studio"
-    : view === "agents" ? "home"
     : view === "chat" ? (designing || startingCode ? "studio" : "home")
     : null;
   useEffect(() => {
@@ -708,21 +631,6 @@ export default function App() {
   }, [onScreen]);
 
 
-  const enterRoom = useCallback(
-    (agentId) => {
-      const existing = agentChats.get(agentId);
-      setView("agents");
-      setRoomAgentId(agentId);
-      setSidebarOpen(false);
-      if (!existing) {
-        startWithAgent(agentId);
-        return;
-      }
-      if (existing.id !== chat.sessionId) openSession(existing.id).catch(() => {});
-      setFocusToken((n) => n + 1);
-    },
-    [agentChats, chat.sessionId, openSession, startWithAgent],
-  );
   // From a code session, the next one starts in the same project -- changed
   // under the composer if it should be another.
   const handleNewCode = useCallback(
@@ -904,14 +812,6 @@ export default function App() {
   const handleOpenSession = useCallback(
     (id) => {
       const known = sessions.sessions.find((s) => s.id === id);
-      // An agent's chat opens on the Agents screen, with the agent.
-      if (known && agentChatIds.has(id)) {
-        setView("agents");
-        setRoomAgentId(known.agent_id);
-        setSidebarOpen(false);
-        openSession(id).catch(() => {});
-        return;
-      }
       const viewFor = (mode) => (mode === "code" ? "code" : "chat");
       // A code conversation's folder, before the conversation itself has
       // loaded: the editor stays on it rather than blinking to nothing.
@@ -924,7 +824,7 @@ export default function App() {
         })
         .catch(() => {});
     },
-    [openSession, sessions.sessions, agentChatIds],
+    [openSession, sessions.sessions],
   );
 
   // Each space's last conversation, so switching back is going back to where
@@ -932,8 +832,8 @@ export default function App() {
   // in the app, so this is what lets each space keep its own.
   const lastInSpace = useRef({ home: null, studio: null });
   useEffect(() => {
-    if (current && !agentChatIds.has(current.id)) lastInSpace.current[spaceOf(current)] = current.id;
-  }, [current, agentChatIds]);
+    if (current) lastInSpace.current[spaceOf(current)] = current.id;
+  }, [current]);
 
   // The switch in the app bar. Going to a space goes back to what it had on
   // screen -- still open, or the last conversation it had -- and otherwise
@@ -943,7 +843,7 @@ export default function App() {
     (next) => {
       setSpace(next);
       setSidebarOpen(false);
-      const open = current && !agentChatIds.has(current.id) ? current : null;
+      const open = current || null;
       if (open && spaceOf(open) === next) {
         setView(open.mode === "code" ? "code" : "chat");
         return;
@@ -955,7 +855,7 @@ export default function App() {
       }
       startNewOf(next === "home" ? "chat" : studioKind.current);
     },
-    [current, agentChatIds, sessions.sessions, handleOpenSession, startNewOf],
+    [current, sessions.sessions, handleOpenSession, startNewOf],
   );
 
   // The settings window: shut (null), or open on one of its screens. Opened
@@ -1039,11 +939,7 @@ export default function App() {
     );
   }
 
-  /* The conversation on screen -- top bar, thread, composer, openers -- for
-   * the chat screen, or with `room` set for an agent's room. One definition,
-   * so an agent's conversation is exactly the app's conversation: the room
-   * only takes away what the room already answers (which agent, what kind)
-   * and the width handles that belong to the full-width sheet. */
+  /* The conversation on screen -- top bar, thread, composer, openers. */
   // The folders this conversation can go in -- and the one it is in, so the
   // picker shows the truth for an older filing. A chat project also holds
   // designs; a design project holds only designs.
@@ -1054,9 +950,9 @@ export default function App() {
     return designing ? true : kind === "chat";
   });
 
-  const renderConversation = (room) => (
+  const renderConversation = () => (
     <>
-      {room ? null : ["left", "right"].map((side) => (
+      {["left", "right"].map((side) => (
         <div
           key={side}
           className="read-resize"
@@ -1072,10 +968,7 @@ export default function App() {
           <i />
         </div>
       ))}
-{/* An agent's chat is headed by the agent (AgentsScreen), not by a
-          conversation title and its pickers. */}
-      {room ? null : (
-              <TopBar
+      <TopBar
           // Until the server names it after the first exchange.
           title={
             !chat.sessionId || chat.title === "New conversation"
@@ -1103,13 +996,7 @@ export default function App() {
           projectId={current?.project_id || null}
           onProject={(projectId) => handleFileSession(chat.sessionId, projectId)}
           onNewSession={
-            room
-              ? () => startWithAgent(room.id)
-              : designing
-                ? handleNewDesign
-                : startingCode
-                  ? handleNewCode
-                  : handleNewSession
+            designing ? handleNewDesign : startingCode ? handleNewCode : handleNewSession
           }
           canvasCount={canvas.count}
           canvasOpen={canvas.open}
@@ -1117,28 +1004,17 @@ export default function App() {
           browserShown={browser.has}
           browserOpen={browser.open}
           onToggleBrowser={toggleBrowser}
-          // In a room the agent is the room; there is nothing to pick.
-          agents={room ? [] : agents.agents}
-          agentId={current?.agent_id || null}
-          onAgent={async (agentId) => {
-            await api.setSessionAgent(chat.sessionId, agentId);
-            await onSessionsChanged();
-          }}
         />
-      )}
 
       <MessageList
         messages={chat.messages}
-        look={room ? lookOf(room, agents.presets) : null}
         model={chat.badge?.text}
         scrollToken={chat.scrollToken}
         onDecide={chat.decide}
         onChooseDesign={chat.chooseDesign}
         onContinue={chat.continueTurn}
         head={
-          room ? (
-            <AgentGreeting agent={room} presets={agents.presets} />
-          ) : designing ? (
+          designing ? (
             <DesignStartersHead />
           ) : startingCode ? (
             <CodeStartersHead name={newWorkspace ? folderName(newWorkspace) : null} />
@@ -1151,8 +1027,7 @@ export default function App() {
         onStop={chat.stop}
         focusToken={focusToken}
         draft={draft}
-        // No name chip in an agent's chat: it has one chat, named by the agent.
-        sessionLabel={chat.sessionId && !room ? chat.title : null}
+        sessionLabel={chat.sessionId ? chat.title : null}
         // Whichever side is actually answering describes its own
         // reasoning control; the composer draws what it is handed.
         thinking={thinking}
@@ -1165,27 +1040,24 @@ export default function App() {
         // Design or Code, in Studio, before the first message. Home starts
         // chats and has nothing to choose.
         onKind={
-          !room && space === "studio" && !chat.sessionId && chat.messages.length === 0 ? chooseKind : null
+          space === "studio" && !chat.sessionId && chat.messages.length === 0 ? chooseKind : null
         }
         kinds={STUDIO_KINDS}
-        agents={chat.sessionId || room ? [] : agents.agents}
         // The project, in the tray: picked before the first message and sent
         // with it, or -- once the conversation exists -- filed straight away.
-        // Not for an agent's chat, and not for code, which goes by its folder.
+        // Not for code, which goes by its folder.
         // (The top bar no longer files: this is the one place.)
         projects={fileable}
         projectId={current ? current.project_id || null : newProjectId}
         onProject={
           // Not drawn with nothing to choose: a picker offering only "None"
           // is clutter.
-          room || startingCode || fileable.length === 0
+          startingCode || fileable.length === 0
             ? null
             : chat.sessionId
               ? (projectId) => handleFileSession(chat.sessionId, projectId)
               : setNewProjectId
         }
-        agentId={newAgentId}
-        onAgent={setNewAgentId}
         placeholder={
           designing
             ? "Describe what you want to make."
@@ -1274,33 +1146,6 @@ export default function App() {
             />
           ) : null}
 
-          {agentSheet ? (
-            <AgentEditor
-              api={api}
-              agent={agentSheet.agent}
-              initial={agentSheet.initial}
-              presets={agents.presets}
-              onSave={async (body) => {
-                if (agentSheet.agent) {
-                  await agents.update(agentSheet.agent.id, body);
-                } else {
-                  const created = await agents.create(body);
-                  if (created?.id) startWithAgent(created.id);
-                }
-                // An agent's accent is worn by its conversations, so the list
-                // and the theme pick the change up from the sessions.
-                await onSessionsChanged();
-              }}
-              onDelete={async (id) => {
-                await agents.remove(id);
-                if (roomAgentId === id) setRoomAgentId(null);
-                // Its conversations are kept, unassigned: refetch their rows.
-                await onSessionsChanged();
-              }}
-              onClose={() => setAgentSheet(null)}
-            />
-          ) : null}
-
           {/* The top row: the sidebar's toggle at its left -- on the narrow
               layout it opens the full-screen panel, on the wide one it pins
               the rail -- and the settings gear at its right. */}
@@ -1361,14 +1206,9 @@ export default function App() {
                 // The space's conversations, from a page: back to what the
                 // space had open, or a fresh one if what is loaded belongs to
                 // the other space.
-                if (next === "chat" && (!current || spaceOf(current) !== space || agentChatIds.has(current.id))) {
+                if (next === "chat" && (!current || spaceOf(current) !== space)) {
                   if (space === "studio") startNewOf(studioKind.current);
                   else handleNewSession();
-                  return;
-                }
-                // Back to Agents: the agent you were talking to, still open.
-                if (next === "agents" && roomAgentId && agents.agents.some((a) => a.id === roomAgentId)) {
-                  enterRoom(roomAgentId);
                   return;
                 }
                 goTo(next);
@@ -1389,7 +1229,6 @@ export default function App() {
               railWidth={rail.width}
               sessions={spaceSessions}
               projects={projects.projects}
-              agents={agents.agents}
               onFileSession={handleFileSession}
               activeId={chat.sessionId}
               onOpenSession={handleOpenSession}
@@ -1409,7 +1248,7 @@ export default function App() {
               className="screen"
               ref={screenRef}
               style={talking && readSize.width ? { "--read-w": `${readSize.width}px` } : undefined}
-              data-view={talking ? (designing ? "design" : "chat") : roomAgent ? "agent" : view}
+              data-view={talking ? (designing ? "design" : "chat") : view}
               data-empty={(conversing || view === "code") && chat.messages.length === 0 ? "" : undefined}
               // No conversation on screen -- an empty chat or design, or the
               // Code view's project page -- and the sheet turns to glass, the
@@ -1477,9 +1316,6 @@ export default function App() {
                         // say it twice.
                         thinking={thinking}
                         onSend={(text, files, effort) => chat.send(text, files, effort, null)}
-                        agents={chat.sessionId ? [] : agents.agents}
-                        agentId={newAgentId}
-                        onAgent={setNewAgentId}
                         placeholder={
                           workspaceRoot ? "Ask about this project, or describe a change." : "Pick a project on the left, or describe a new one."
                         }
@@ -1489,7 +1325,7 @@ export default function App() {
                   }
                 />
               ) : talking ? (
-                renderConversation(null)
+                renderConversation()
               ) : view === "projects" ? (
                 <Projects
                   // The space's kinds: chat projects in Home, design and code
@@ -1521,43 +1357,6 @@ export default function App() {
                 />
               ) : view === "skills" ? (
                 <Skills api={api} />
-              ) : view === "agents" ? (
-                <AgentsScreen
-                  agents={agents.agents}
-                  presets={agents.presets}
-                  chatOf={(id) => agentChats.get(id) || null}
-                  selected={roomAgent}
-                  busy={chat.streaming}
-                  onSelect={enterRoom}
-                  onGallery={() => setRoomAgentId(null)}
-                  onCustomize={(agent) => setAgentSheet({ agent, initial: null })}
-                  canvasCount={canvas.count}
-                  canvasOpen={canvas.open}
-                  onToggleCanvas={toggleCanvas}
-                  browserShown={browser.has}
-                  browserOpen={browser.open}
-                  onToggleBrowser={toggleBrowser}
-                  gallery={
-                    <AgentGallery
-                      presets={agents.presets}
-                      onNew={() => setAgentSheet({ agent: null, initial: null })}
-                      onCustomizePreset={(preset) => setAgentSheet({ agent: null, initial: preset })}
-                      // Added as it comes -- look, specialty and all -- and
-                      // opened, the way adding a contact opens the chat.
-                      onAddPreset={async (preset) => {
-                        const created = await agents.create({
-                          name: preset.name,
-                          instructions: preset.instructions || null,
-                          skills: preset.skills ?? null,
-                          look: preset.look || null,
-                        });
-                        if (created?.id) startWithAgent(created.id);
-                      }}
-                    />
-                  }
-                >
-                  {roomAgent ? renderConversation(roomAgent) : null}
-                </AgentsScreen>
               ) : null}
             </div>
 

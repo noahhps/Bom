@@ -60,7 +60,6 @@ import {
   IconTrash,
   IconUpload,
   IconUserCircle,
-  IconUsers,
   IconWorld,
   IconX,
 } from "@tabler/icons-react";
@@ -96,9 +95,6 @@ const GLYPHS = {
   slides: IconPresentation,
   // A screen with its header bar: a wireframe.
   wireframe: IconLayoutNavbar,
-  // More than one person: a team of agents.
-  agents: IconUsers,
-  // The glyphs an agent can wear -- the Agents editor offers these by name.
   search: IconSearch,
   code: IconCode,
   pen: IconPencil,

@@ -6,10 +6,11 @@ the reader came to make a deck, a sheet, a page or a poster, and wants it to
 look finished rather than merely correct -- so it reads a second preamble on
 top of the first, written as a working method rather than as a personality.
 
-Additive, like an agent's persona: the base preamble still carries what every
-answer needs (honesty, dates, how to use a tool), and this specialises on top
-of it. It sits in the stable prefix of the prompt, after the preamble and the
-agent, because a conversation's mode never changes once it has begun.
+Additive: the base preamble and the agentic method (agentic.py) still carry
+what every answer needs (honesty, dates, how to use a tool, how to carry work
+through), and this specialises on top of them. It sits in the stable prefix of
+the prompt, after both, because a conversation's mode never changes once it
+has begun.
 """
 
 from __future__ import annotations

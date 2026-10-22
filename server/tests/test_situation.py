@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agentic import AGENTIC_METHOD
 from app.config import Settings
 from app.db import Database
 from app.main import create_app
@@ -207,7 +208,9 @@ def test_prompt_carries_the_situation(store: Store):
 def test_prompt_says_nothing_when_the_client_said_nothing(store: Store):
     session = store.create_session()
     prompt, _ = _orchestrator(store).build_system_prompt(session["id"])
-    assert prompt == "You are Bom."
+    # The preamble and the agentic method every conversation gets -- and no
+    # situation block, because the client sent none.
+    assert prompt == f"You are Bom.\n\n{AGENTIC_METHOD}"
 
 
 def test_situation_sits_between_the_preamble_and_the_facts(store: Store):

@@ -4,13 +4,10 @@ import { seedFromContext } from "../lib/autotheme";
 import { DEFAULT_ACCENT, applyPalette, palette, seedOf } from "../lib/theme";
 
 /**
- * The accent the app is currently wearing, and the three places it can be set.
+ * The accent the app is currently wearing, and the places it can be set.
  *
- * Three scopes, nearest wins: the agent the conversation is assigned to, then
- * the project it is filed under, then the app. The accent is a property of the
- * agent, not of the conversation -- a chat run as an agent wears that agent's
- * colour, which is what makes a team of them legible. A scope with nothing set
- * is not a scope that chose nothing -- it is one that has not chosen, and the
+ * Two scopes, nearest wins: the project the conversation is filed under, then
+ * the app. A scope with nothing set is not a scope that chose nothing -- it is one that has not chosen, and the
  * decision falls through to the next. That is the difference between clearing
  * an accent and setting it to "off", and it is the only subtle thing here.
  *
@@ -24,18 +21,14 @@ export function useTheme({
   sessionId,
   sessions,
   projects,
-  agents,
   title,
   messages,
-  pendingAgentId = null,
   mode = "light",
 }) {
   const [appAccent, setAppAccent] = useState(null);
   const [loaded, setLoaded] = useState(false);
   // Local echo of what the server holds for a folder, so a swatch lights up on
-  // the click rather than a round trip later. The agent's own accent is set
-  // and saved from the Agents editor, so it needs no echo here -- the list is
-  // re-read on save.
+  // the click rather than a round trip later.
   const [projectOverrides, setProjectOverrides] = useState({});
 
   useEffect(() => {
@@ -59,39 +52,18 @@ export function useTheme({
     () => sessions.find((s) => s.id === sessionId) || null,
     [sessions, sessionId],
   );
-  const agent = useMemo(
-    () => {
-      const id = session?.agent_id || (!sessionId ? pendingAgentId : null);
-      return (agents || []).find((a) => a.id === id) || null;
-    },
-    [agents, pendingAgentId, session, sessionId],
-  );
   const project = useMemo(
     () => projects.find((p) => p.id === session?.project_id) || null,
     [projects, session],
   );
 
-  // An agent is itself a color scope. If it has no explicit accent, automatic
-  // color still needs to stay with the agent rather than falling through to a
-  // project or the app; that is what makes switching personas legible.
-  const agentAccent = useMemo(
-    () => (agent ? agent.theme || { mode: "auto" } : null),
-    [agent],
-  );
-  const agentSeed = useMemo(
-    () =>
-      agent
-        ? seedFromContext({ id: agent.id, title: agent.name })
-        : null,
-    [agent],
-  );
   const projectAccent =
     (project && projectOverrides[project.id] !== undefined
       ? projectOverrides[project.id]
       : project?.theme) || null;
 
   // Nearest scope with an opinion, and the app's own default if none has one.
-  const active = agentAccent || projectAccent || appAccent || DEFAULT_ACCENT;
+  const active = projectAccent || appAccent || DEFAULT_ACCENT;
 
   /* The auto seed, remembered per conversation.
    *
@@ -130,8 +102,8 @@ export function useTheme({
   }, [sessionId, title, signature]);
 
   const tokens = useMemo(
-    () => palette(active, agentAccent ? agentSeed : contextSeed, mode),
-    [active, agentAccent, agentSeed, contextSeed, mode],
+    () => palette(active, contextSeed, mode),
+    [active, contextSeed, mode],
   );
 
   useEffect(() => {
@@ -179,7 +151,7 @@ export function useTheme({
   );
 
   return {
-    /** The accent in force, after the three scopes have been resolved. */
+    /** The accent in force, after the scopes have been resolved. */
     active,
     /** Its hue and chroma, or null when it is off. */
     seed: seedOf(active, contextSeed),
@@ -188,10 +160,9 @@ export function useTheme({
        it would actually set rather than the one already on screen. */
     contextSeed,
     appAccent,
-    agentAccent,
     projectAccent,
-    /** Which of the three scopes the active accent actually came from. */
-    source: agentAccent ? "agent" : projectAccent ? "project" : "app",
+    /** Which scope the active accent actually came from. */
+    source: projectAccent ? "project" : "app",
     setApp,
     setForProject,
     accentFor,

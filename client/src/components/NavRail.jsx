@@ -39,7 +39,6 @@ const DESTINATIONS = {
   home: [
     { id: "projects", label: "Projects", icon: "folder" },
     { id: "skills", label: "Skills", icon: "skills" },
-    { id: "agents", label: "Agents", icon: "agents" },
   ],
   studio: [
     { id: "projects", label: "Projects", icon: "folder" },
@@ -68,14 +67,10 @@ function Label({ label }) {
  *
  * Its own accent if it has one, otherwise its project's -- the same order
  * `useTheme` resolves in when it dresses the conversation itself, so a chat
- * shows the same colour in the rail as it does once opened.
- *
- * An assigned agent always gets a bead. Agents without an explicit theme use a
- * stable color derived from their name, while unassigned chats still fall back
- * to the project accent when one exists. */
+ * shows the same colour in the rail as it does once opened. */
 function accentOf(session, projects) {
   // The dot says which project a conversation is filed in, and nothing else:
-  // no project, no dot -- not an agent's colour, not the app's. A project
+  // no project, no dot -- not the app's colour. A project
   // that has not chosen a colour still gets one of its own, derived from its
   // name, so the dot always tells projects apart (the Projects page draws its
   // beads the same way).
@@ -169,7 +164,7 @@ function RailGroup({
 }
 
 /* One conversation, wherever it is filed. */
-function SessionRows({ sessions, projects, agents, activeId, onOpenSession, onDelete, empty }) {
+function SessionRows({ sessions, projects, activeId, onOpenSession, onDelete, empty }) {
   const { confirm } = useDialog();
   if (sessions.length === 0) {
     return (
@@ -253,7 +248,6 @@ export function NavRail({
   forceOpen = false,
   sessions,
   projects,
-  agents,
   onFileSession,
   activeId,
   onOpenSession,
@@ -455,7 +449,6 @@ export function NavRail({
               <SessionRows
                 sessions={sessions || []}
                 projects={projects}
-                agents={agents}
                 activeId={activeId}
                 onOpenSession={onOpenSession}
                 onDelete={onDelete}

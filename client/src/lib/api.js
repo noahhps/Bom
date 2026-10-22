@@ -335,31 +335,6 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
         body: JSON.stringify({ project_id: projectId }),
       }),
 
-    // -- agents ----------------------------------------------------------
-    // A named persona with an optional subset of the skills, that a
-    // conversation can be run as. No agent -- the default -- is the one
-    // assistant with the whole shelf.
-    listAgents: () => json("/agents"),
-    // Ready-made agents to start from. Instantiated by posting one to
-    // createAgent, or dropped into the editor to be tweaked first.
-    listAgentPresets: () => json("/agents/presets"),
-    createAgent: (agent) =>
-      json("/agents", { method: "POST", body: JSON.stringify(agent) }),
-    // Only the fields that changed. Sending `skills: null` resets an agent to
-    // every skill; omitting it leaves the subset alone -- see AgentPatch.
-    updateAgent: (id, patch) =>
-      json("/agents/" + encodeURIComponent(id), {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      }),
-    deleteAgent: (id) =>
-      request("/agents/" + encodeURIComponent(id), { method: "DELETE" }),
-    setSessionAgent: (sessionId, agentId) =>
-      json("/sessions/" + encodeURIComponent(sessionId) + "/agent", {
-        method: "PUT",
-        body: JSON.stringify({ agent_id: agentId }),
-      }),
-
     // -- accents ---------------------------------------------------------
     // Three scopes, one body. `theme: null` clears a scope rather than
     // turning colour off -- a cleared chat takes its project's accent, where
@@ -454,7 +429,6 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
       attachments = [],
       thinkingLevel = null,
       provider = null,
-      agentId = null,
       signal = undefined,
       // For a brand-new conversation only: "chat", "design" or "code", a design
       // standard chosen on the empty screen, and a code conversation's project
@@ -474,7 +448,6 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
           attachments: attachments.map(({ name, mime, data }) => ({ name, mime, data })),
           think: thinkingLevel,
           provider,
-          agent_id: agentId,
           mode,
           design,
           workspace,

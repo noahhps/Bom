@@ -194,6 +194,8 @@ class StoredTask:
     last_summary: str | None
     last_session_id: str | None
     run_count: int
+    # A column from when a task could run as one of the agents, which are
+    # gone; still on the row (rows load straight into this), never read.
     agent_id: str | None
     origin_session_id: str | None
     created_at: int
@@ -254,61 +256,6 @@ class StoredCanvas:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
-
-
-@dataclass
-class StoredAgent:
-    id: str
-    name: str
-    instructions: str | None
-    skills: str | None  # JSON array of skill names, or NULL for "all enabled"
-    created_at: int
-    updated_at: int
-    icon: str | None = None      # a glyph name the client draws
-    theme: str | None = None     # accent JSON, same shape as a session's
-    look: str | None = None      # JSON {"hat", "item"}: what its flower wears
-
-    def parsed_skills(self) -> list[str] | None:
-        """The allowed skill names, or None for "every enabled skill".
-
-        None and `[]` are different answers and both are kept: None is the
-        unconfigured default, `[]` is an agent deliberately given no skills.
-        """
-        if self.skills is None:
-            return None
-        try:
-            val = json.loads(self.skills)
-            return [str(x) for x in val] if isinstance(val, list) else None
-        except Exception:
-            return None
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "instructions": self.instructions,
-            "skills": self.parsed_skills(),
-            "icon": self.icon,
-            # Raw JSON string; the API parses it into an object with the same
-            # _read_accent a session or project row goes through.
-            "theme": self.theme,
-            "look": self.parsed_look(),
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-    def parsed_look(self) -> dict | None:
-        """What the agent's flower wears, or None for a bare flower. A row
-        that no longer parses reads as bare rather than failing the list."""
-        if not self.look:
-            return None
-        try:
-            val = json.loads(self.look)
-        except Exception:
-            return None
-        if not isinstance(val, dict):
-            return None
-        return {k: val[k] for k in ("hat", "item") if isinstance(val.get(k), str)}
 
 
 @dataclass
@@ -619,7 +566,7 @@ class Store:
         rows = self.db.query(
             """
             SELECT s.id, s.title, s.created_at, s.updated_at, s.project_id,
-                   s.agent_id, s.theme, s.mode, s.design, s.workspace,
+                   s.theme, s.mode, s.design, s.workspace,
                    (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
             FROM sessions s
             ORDER BY s.updated_at DESC
@@ -1476,7 +1423,7 @@ class Store:
     _TASK_FIELDS = frozenset({
         "title", "prompt", "starts_at", "tz", "utc_offset", "repeat", "enabled",
         "next_run_at", "last_run_at", "last_status", "last_summary",
-        "last_session_id", "run_count", "agent_id",
+        "last_session_id", "run_count",
     })
 
     def add_task(
@@ -1489,7 +1436,6 @@ class Store:
         tz: str | None = None,
         utc_offset: int | None = None,
         next_run_at: int | None,
-        agent_id: str | None = None,
         origin_session_id: str | None = None,
     ) -> StoredTask:
         now = _now()
@@ -1498,11 +1444,11 @@ class Store:
             """
             INSERT INTO scheduled_tasks
                 (id, title, prompt, starts_at, tz, utc_offset, repeat, enabled,
-                 next_run_at, agent_id, origin_session_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+                 next_run_at, origin_session_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
             """,
             (task_id, title, prompt, starts_at, tz, utc_offset, repeat,
-             next_run_at, agent_id, origin_session_id, now, now),
+             next_run_at, origin_session_id, now, now),
         )
         return self.get_task(task_id)  # type: ignore[return-value]
 
@@ -1916,104 +1862,6 @@ class Store:
         self.db.execute("DELETE FROM images WHERE id = ?", (image_id,))
         return existed
 
-    # -- agents -----------------------------------------------------------
-
-    @staticmethod
-    def _skills_json(skills: list[str] | None) -> str | None:
-        """A skill list as it is stored: JSON, or NULL for "all enabled".
-
-        None stays NULL; a list -- even an empty one -- is written, because an
-        empty array is a real choice (no skills) and must not read back as the
-        default.
-        """
-        return None if skills is None else json.dumps([str(s) for s in skills])
-
-    def create_agent(
-        self,
-        name: str,
-        *,
-        instructions: str | None = None,
-        skills: list[str] | None = None,
-        icon: str | None = None,
-        theme: str | None = None,
-        look: str | None = None,
-    ) -> StoredAgent:
-        now = _now()
-        agent = StoredAgent(
-            id=_new_id("agt"),
-            name=name,
-            instructions=instructions,
-            skills=self._skills_json(skills),
-            created_at=now,
-            updated_at=now,
-            icon=icon,
-            theme=theme,
-            look=look,
-        )
-        self.db.execute(
-            """
-            INSERT INTO agents
-                (id, name, instructions, skills, icon, theme, look, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (agent.id, agent.name, agent.instructions, agent.skills, agent.icon,
-             agent.theme, agent.look, agent.created_at, agent.updated_at),
-        )
-        return agent
-
-    def list_agents(self) -> list[StoredAgent]:
-        rows = self.db.query("SELECT * FROM agents ORDER BY name COLLATE NOCASE")
-        return [StoredAgent(**dict(row)) for row in rows]
-
-    def get_agent(self, agent_id: str) -> StoredAgent | None:
-        row = self.db.query_one("SELECT * FROM agents WHERE id = ?", (agent_id,))
-        return StoredAgent(**dict(row)) if row else None
-
-    def update_agent(self, agent_id: str, changes: dict) -> StoredAgent | None:
-        """Merge named fields into an agent. None if there is no such agent.
-
-        `changes` carries only what the caller means to set -- a key present
-        with value None clears that field, a key absent leaves it. `skills` is a
-        list or None coming in, and is serialised on the way to the column.
-        """
-        current = self.get_agent(agent_id)
-        if current is None:
-            return None
-        name = changes["name"] if "name" in changes else current.name
-        instructions = (
-            changes["instructions"] if "instructions" in changes else current.instructions
-        )
-        skills = (
-            self._skills_json(changes["skills"]) if "skills" in changes else current.skills
-        )
-        icon = changes["icon"] if "icon" in changes else current.icon
-        # `theme` arrives already serialised to JSON (or None), like the session
-        # and project theme setters -- the API layer does the accent shaping.
-        theme = changes["theme"] if "theme" in changes else current.theme
-        # `look`, like `theme`, arrives serialised (or None) from the API.
-        look = changes["look"] if "look" in changes else current.look
-        self.db.execute(
-            "UPDATE agents SET name = ?, instructions = ?, skills = ?, icon = ?, "
-            "theme = ?, look = ?, updated_at = ? WHERE id = ?",
-            (name, instructions, skills, icon, theme, look, _now(), agent_id),
-        )
-        return self.get_agent(agent_id)
-
-    def delete_agent(self, agent_id: str) -> bool:
-        # ON DELETE SET NULL: the agent's conversations survive as unassigned,
-        # back under the default assistant.
-        existed = self.get_agent(agent_id) is not None
-        self.db.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
-        return existed
-
-    def set_session_agent(self, session_id: str, agent_id: str | None) -> None:
-        """Run a conversation as an agent, or None for the default assistant."""
-        self.db.execute(
-            "UPDATE sessions SET agent_id = ? WHERE id = ?", (agent_id, session_id)
-        )
-
-    # -- designs ----------------------------------------------------------
-
     def create_design(
         self, name: str, markdown: str, *, summary: str | None = None
     ) -> StoredDesign:
@@ -2063,29 +1911,6 @@ class Store:
         existed = self.get_design(design_id) is not None
         self.db.execute("DELETE FROM designs WHERE id = ?", (design_id,))
         return existed
-
-    def session_agent(self, session_id: str) -> StoredAgent | None:
-        """The agent a conversation is assigned to, if any."""
-        row = self.db.query_one(
-            """
-            SELECT a.* FROM agents a
-            JOIN sessions s ON s.agent_id = a.id
-            WHERE s.id = ?
-            """,
-            (session_id,),
-        )
-        return StoredAgent(**dict(row)) if row else None
-
-    # -- accents ----------------------------------------------------------
-    #
-    # `theme` is the JSON the client sent, stored verbatim. None clears it,
-    # which is not the same as an accent that says "off": cleared means this
-    # scope has no opinion and the one above it decides, while off is a
-    # decision to wear no colour at all.
-    #
-    # Neither writer touches `updated_at`. Recolouring a conversation is not a
-    # change to the conversation, and bumping the timestamp would jump it to
-    # the top of a list ordered by when it was last actually said something.
 
     def set_session_theme(self, session_id: str, theme: str | None) -> None:
         self.db.execute(

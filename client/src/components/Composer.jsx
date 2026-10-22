@@ -4,8 +4,6 @@ import { StagedAttachments } from "./Attachments";
 import { DropZone } from "./bencho/DropZone";
 import { Icon } from "./Icon";
 import { STICK_PX } from "./MessageList";
-import { seedFromContext } from "../lib/autotheme";
-import { swatchOf } from "../lib/theme";
 
 
 /**
@@ -14,7 +12,7 @@ import { swatchOf } from "../lib/theme";
  * right -- the controls that are about *this message*.
  *
  * What the message is *for* -- the kind of conversation, what to make, which
- * agent, which project -- sits in a tray tucked under the box rather than in
+ * project -- sits in a tray tucked under the box rather than in
  * it. Those are set once and left, so they do not need to crowd the row the
  * hand goes to on every send.
  *
@@ -39,13 +37,6 @@ const LEGACY = {
   default: "medium",
   label: "Effort",
 };
-
-function agentColor(agent) {
-  return swatchOf(
-    agent?.theme || { mode: "auto" },
-    seedFromContext({ id: agent?.id || "default", title: agent?.name || "None" }),
-  );
-}
 
 function ThinkingControl({ control, value, onChange, disabled }) {
   const mode = control?.mode || "none";
@@ -175,8 +166,8 @@ function MakeControl({ value, onChange, disabled }) {
       data-pinned={current.id !== "auto" ? "" : undefined}
       title="What the model makes with this message. Auto lets it choose."
     >
-      <span className="composer-agent-label mi">Make</span>
-      <span className="composer-agent-control">
+      <span className="composer-pick-label mi">Make</span>
+      <span className="composer-pick-control">
         <Icon name={current.icon} />
         <select
           value={current.id}
@@ -200,8 +191,8 @@ function ProjectControl({ projects, value, onChange, disabled }) {
   const current = projects.find((p) => p.id === value) || null;
   return (
     <label className="composer-make composer-project" title="The project this conversation is filed in">
-      <span className="composer-agent-label mi">Project</span>
-      <span className="composer-agent-control">
+      <span className="composer-pick-label mi">Project</span>
+      <span className="composer-pick-control">
         <Icon name="folder" />
         <select
           value={current?.id || ""}
@@ -227,9 +218,6 @@ export function Composer({
   thinking,
   onSend,
   onStop,
-  agents = [],
-  agentId = null,
-  onAgent,
   make = null,
   onMake = null,
   kind = null,
@@ -249,7 +237,6 @@ export function Composer({
   // An absent descriptor is not the same as "none" -- see LEGACY above.
   const control = thinking || LEGACY;
   const mode = control.mode;
-  const selectedAgent = agents.find((agent) => agent.id === agentId) || null;
   useEffect(() => {
     setEffort(control.default);
     // Keyed on the mode, not the object: a re-fetch of /status hands back a
@@ -745,39 +732,14 @@ export function Composer({
           </div>
         </div>
 
-        {/* The conversation: what kind it is, what to make, who answers and
-            where it is filed. Only what applies is drawn, and with nothing
+        {/* The conversation: what kind it is, what to make and where it is
+            filed. Only what applies is drawn, and with nothing
             to show the tray is not drawn at all. */}
-        {onKind || onMake || agents.length > 0 || onProject || sessionLabel ? (
+        {onKind || onMake || onProject || sessionLabel ? (
           <div className="composer-tray">
             {onKind ? <KindControl value={kind} onChange={onKind} disabled={disabled} kinds={kinds} /> : null}
 
             {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
-
-            {agents.length > 0 ? (
-              <label className="composer-agent-picker">
-                <span className="composer-agent-label mi">Agent</span>
-                <span className="composer-agent-control">
-                  <i
-                    className="composer-agent-dot"
-                    aria-hidden="true"
-                    style={{
-                      background: selectedAgent ? agentColor(selectedAgent) : "var(--accent)",
-                    }}
-                  />
-                  <select
-                    value={agentId || ""}
-                    aria-label="Choose an agent for this conversation"
-                    onChange={(event) => onAgent?.(event.target.value || null)}
-                  >
-                    <option value="">None</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>{agent.name}</option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-            ) : null}
 
             {onProject ? (
               <ProjectControl

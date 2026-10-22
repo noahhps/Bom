@@ -50,7 +50,6 @@ from .mcp.settings import MCP_DEFAULTS
 from .situation import Situation
 from .store import Store
 from .skills.registry import Registry
-from .agent_presets import PRESETS as AGENT_PRESETS
 from . import code_projects, design_export
 from . import workspace as project
 from .design_mode import normalize as normalize_mode
@@ -109,10 +108,7 @@ class ChatRequest(BaseModel):
     # sentence is a real way to ask a question, but an empty POST is not.
     message: str = Field(default="", max_length=200_000)
     session_id: str | None = None
-    # Optional persona for a brand-new conversation. It is applied before the
-    # first turn runs, so the selected agent shapes the opening response too.
-    agent_id: str | None = None
-    # For a brand-new conversation only, like `agent_id`: what it is started
+    # For a brand-new conversation only: what it is started
     # as ("chat" or "design"), and a design standard picked on the empty
     # screen before anything was sent. Ignored once the session exists.
     mode: str | None = Field(default=None, max_length=20)
@@ -342,54 +338,6 @@ class CanvasPatch(BaseModel):
     language: str | None = Field(default=None, max_length=40)
 
 
-class AgentLook(BaseModel):
-    """What an agent's flower wears: a hat and one item. Names from the set the
-    client draws (lib/accessories.js), checked for shape here like `icon` -- an
-    unknown name is drawn as nothing, so the pattern is the guard that matters."""
-
-    hat: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
-    item: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
-
-
-def _look_json(look: "AgentLook | None") -> str | None:
-    """The column's JSON for a look, or None for a bare flower."""
-    if look is None:
-        return None
-    fields = look.model_dump(exclude_none=True)
-    return json.dumps(fields) if fields else None
-
-
-class AgentIn(BaseModel):
-    """A new agent: a named persona with an optional subset of the skills."""
-
-    name: str = Field(min_length=1, max_length=120)
-    # Persona, appended to the preamble for this agent's conversations.
-    instructions: str | None = Field(default=None, max_length=20_000)
-    # The skill names this agent may call. None -- the default -- means every
-    # enabled skill; an empty list is an agent deliberately given none.
-    skills: list[str] | None = None
-    # A glyph name the client draws. Named, not free text, so a typo is a 422
-    # here rather than a blank icon; the client holds the same list.
-    icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
-    # The agent's accent, the same shape a session or project carries.
-    theme: Accent | None = None
-    # What its flower wears.
-    look: AgentLook | None = None
-
-
-class AgentPatch(BaseModel):
-    """An edit. Every field optional; `exclude_unset` on the route is what lets
-    a caller clear `instructions`, `skills`, `icon` or `theme` back to null by
-    sending it explicitly, distinct from leaving it alone by omitting it."""
-
-    name: str | None = Field(default=None, min_length=1, max_length=120)
-    instructions: str | None = Field(default=None, max_length=20_000)
-    skills: list[str] | None = None
-    icon: str | None = Field(default=None, max_length=40, pattern="^[a-z][a-z0-9_]*$")
-    theme: Accent | None = None
-    look: AgentLook | None = None
-
-
 class DesignIn(BaseModel):
     """A design standard the reader is adding -- their own design.md."""
 
@@ -467,12 +415,6 @@ class SessionDesign(BaseModel):
 class CanvasCopy(BaseModel):
     # The conversation the copy goes into.
     session_id: str = Field(min_length=1, max_length=80)
-
-
-class SessionAgent(BaseModel):
-    # None runs the conversation as the default assistant. Explicitly nullable,
-    # like SessionProject, so "unassign" is something the client can say.
-    agent_id: str | None = None
 
 
 class Accent(BaseModel):
@@ -1194,76 +1136,6 @@ def build_router(
             raise HTTPException(404, "no such image")
         return {"ok": True}
 
-    # -- agents -----------------------------------------------------------
-    #
-    # A named persona with its own subset of the skills, that a conversation
-    # can be assigned to. The default -- no agent -- is the one assistant with
-    # the whole shelf, so these routes are only touched by someone building a
-    # team of them.
-
-    @router.get("/agents")
-    def list_agents() -> dict:
-        return {"agents": [_read_accent(a.to_dict()) for a in store.list_agents()]}
-
-    # Declared before `/agents/{agent_id}` so "presets" is matched as itself
-    # rather than as an agent with that id -- FastAPI resolves in declaration
-    # order, and nothing creates an agent under that id.
-    @router.get("/agents/presets")
-    def list_agent_presets() -> dict:
-        return {"presets": AGENT_PRESETS}
-
-    @router.post("/agents")
-    def create_agent(body: AgentIn) -> dict:
-        theme = body.theme.model_dump(exclude_none=True) if body.theme else None
-        agent = store.create_agent(
-            body.name.strip(),
-            instructions=body.instructions,
-            skills=body.skills,
-            icon=body.icon,
-            theme=json.dumps(theme) if theme else None,
-            look=_look_json(body.look),
-        )
-        return _read_accent(agent.to_dict())
-
-    @router.patch("/agents/{agent_id}")
-    def update_agent(agent_id: str, body: AgentPatch) -> dict:
-        # Only what the caller actually sent, so an omitted field is left alone
-        # while an explicit null clears it -- see AgentPatch.
-        changes = body.model_dump(exclude_unset=True)
-        if "name" in changes:
-            name = (changes["name"] or "").strip()
-            if not name:
-                raise HTTPException(400, "an agent needs a name")
-            changes["name"] = name
-        # theme comes off the wire as accent fields; the column holds the JSON
-        # string, like the session and project theme setters.
-        if "theme" in changes:
-            accent = body.theme.model_dump(exclude_none=True) if body.theme else None
-            changes["theme"] = json.dumps(accent) if accent else None
-        if "look" in changes:
-            changes["look"] = _look_json(body.look)
-        updated = store.update_agent(agent_id, changes)
-        if updated is None:
-            raise HTTPException(404, "no such agent")
-        return _read_accent(updated.to_dict())
-
-    @router.delete("/agents/{agent_id}")
-    def delete_agent(agent_id: str) -> dict:
-        if not store.delete_agent(agent_id):
-            raise HTTPException(404, "no such agent")
-        # Said out loud, like deleting a project: the conversations are not
-        # taken with it, they fall back to the default assistant.
-        return {"ok": True, "conversations": "kept, now unassigned"}
-
-    @router.put("/sessions/{session_id}/agent")
-    def set_session_agent(session_id: str, body: SessionAgent) -> dict:
-        if not store.get_session(session_id):
-            raise HTTPException(404, "no such session")
-        if body.agent_id and not store.get_agent(body.agent_id):
-            raise HTTPException(404, "no such agent")
-        store.set_session_agent(session_id, body.agent_id)
-        return {"ok": True, "agent_id": body.agent_id}
-
     # -- designs ----------------------------------------------------------
     #
     # A design.md is the styling brief a result is held to. The presets ship
@@ -1406,8 +1278,6 @@ def build_router(
             # usual case by the second message.
             store.set_session_situation(session_id, situation)
         else:
-            if body.agent_id and not store.get_agent(body.agent_id):
-                raise HTTPException(404, "no such agent")
             # Checked before the session exists, so a bad pick is refused
             # rather than leaving an unfiled conversation behind -- by the
             # same rules as filing one afterwards (PUT .../project).
@@ -1428,8 +1298,6 @@ def build_router(
                 design=_valid_design(body.design),
                 workspace=_workspace(body.workspace),
             )["id"]
-            if body.agent_id:
-                store.set_session_agent(session_id, body.agent_id)
             if project is not None:
                 store.set_session_project(session_id, project["id"])
 

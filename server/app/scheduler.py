@@ -3,7 +3,7 @@
 One loop, one job: every few seconds ask the store what is due, and for each
 task open a conversation and run its prompt through the same `run_turn` a
 person's message goes through. Nothing here is a second way of talking to the
-model -- a scheduled run has the same skills, memory, agent and provider
+model -- a scheduled run has the same skills, memory and provider
 routing as a chat, and leaves the same kind of record behind, a conversation
 in the list. That is deliberate: what a task did should be readable in the
 place everything else the assistant did is readable.
@@ -184,8 +184,6 @@ class Scheduler:
     def _open_session(self, task: StoredTask) -> str:
         situation = Situation(timezone=task.tz, utc_offset=task.utc_offset)
         session = self.store.create_session(title=task.title, situation=situation)
-        if task.agent_id and self.store.get_agent(task.agent_id):
-            self.store.set_session_agent(session["id"], task.agent_id)
         return session["id"]
 
     async def _drive(self, task: StoredTask, session_id: str) -> tuple[str, str]:

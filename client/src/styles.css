@@ -3970,51 +3970,12 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
 /* -- skills (1c) -------------------------------------------------------------- */
 
-/* The shelf, as a list. One row per skill: what it is on the left, the switch
-   on the right, hairlines between rather than a card each -- a card per row
-   turns a list of twenty into twenty things to look at instead of one. */
-.skill-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--r-surface);
-  background: var(--surface);
-  overflow: hidden;
-}
-.skill-item {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 15px 18px;
-  border-bottom: 1px solid var(--line-soft);
-}
-.skill-item:last-child { border-bottom: 0; }
-.skill-item-text { flex: 1; min-width: 0; }
-.skill-item-text .h { font-size: var(--t-body); }
-.skill-item .skill-body { margin: 4px 0 0; }
-/* Switched off: dimmed, but never hidden -- the row is the only way back on. */
-.skill-item[data-off] .skill-item-text { opacity: 0.55; }
-
-/* Shelved (Skills.jsx). The shelves sit in two columns where there is room --
-   CSS columns rather than a grid, so a short shelf does not leave a hole the
-   height of the long one beside it. Each shelf is still a list: hairlines
-   between rows, never a card per skill. */
-.skill-shelves {
-  columns: 2 440px;
-  column-gap: 18px;
-  margin-top: 18px;
-}
-.skill-shelves[data-one] { columns: 1; }
-.skill-shelf { break-inside: avoid; margin-bottom: 18px; }
-.skill-shelf[data-wide] { column-span: all; }
+/* Skills, as cards (Skills.jsx SkillGroupCard): one per shelf of built-ins
+   and one per connector, each with a single toggle for the group and a chip
+   per skill that turns just that one on or off. They share the connector
+   cards' frame (.preset-card) so the two tabs read as one page. */
 .skill-none { color: var(--text-dim); font-size: var(--t-sm); }
 
-.shelf-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 2px 10px;
-}
 .shelf-glyph {
   display: grid;
   place-items: center;
@@ -4026,70 +3987,117 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
   color: var(--ink);
 }
 .shelf-glyph svg { width: 16px; height: 16px; }
-.shelf-name { font-size: var(--t-md); }
-.shelf-beads { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; min-width: 0; }
-.shelf-beads i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgba(var(--ink-rgb), 0.16);
-  transition: background-color 300ms ease, transform 300ms var(--spring);
+.mcp-avatar.card-glyph { background: rgba(var(--ink-rgb), 0.06); color: var(--ink); }
+
+/* Skill cards stand as tall as their row (a long group's chips set it), with
+   the toggle pinned to the bottom, so a row reads as a row. */
+.preset-grid.skill-cards { align-items: stretch; }
+.skill-cards > .tilt > .tilt-card { height: 100%; }
+.skill-cards .preset-foot { margin-top: auto; }
+.skill-group-blurb { min-height: 0; -webkit-line-clamp: 2; }
+.skill-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--ground);
+  font: 500 var(--t-xs)/1.2 var(--font);
+  color: var(--text-faint);
+  transition:
+    background-color var(--dur-quick) ease,
+    border-color var(--dur-quick) ease,
+    color var(--dur-quick) ease,
+    opacity var(--dur-quick) ease,
+    scale 200ms var(--spring);
 }
-.shelf-beads i[data-on] { background: var(--accent-fill, var(--accent)); }
-.shelf-count { flex: none; color: var(--text-faint); }
+.skill-chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(var(--ink-rgb), 0.22);
+  transition: background-color var(--dur-quick) ease;
+}
+.skill-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--accent-wash);
+  color: var(--ink);
+}
+.skill-chip[aria-pressed="true"] i { background: var(--accent-fill, var(--accent)); }
+.skill-chip:hover:not(:disabled) { border-color: var(--accent); }
+.skill-chip:active:not(:disabled) { scale: 0.95; }
+.skill-chip:disabled { cursor: default; border-style: dashed; }
+/* A search dims the chips that did not match, rather than hiding them. */
+.skill-chip[data-dim] { opacity: 0.35; }
+
+.skill-needs-list { display: flex; flex-direction: column; gap: 2px; }
+.skill-needs-list .skill-needs { margin-top: 0; }
+.skill-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  font: 500 var(--t-xs)/1 var(--font);
+  color: var(--text-dim);
+}
+.skill-more svg { width: 13px; height: 13px; transition: transform var(--dur-settle) var(--spring); }
+.skill-more:hover { color: var(--ink); }
+.skill-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+.skill-details {
+  display: flex;
+  flex-direction: column;
+  margin: 2px -16px -16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--rail);
+  border-radius: 0 0 13px 13px;
+}
+.skill-detail { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+.skill-detail:last-child { border-bottom: 0; }
+.skill-detail[data-off] .skill-item-name .h,
+.skill-detail[data-off] .skill-detail-body { opacity: 0.55; }
+.skill-detail .skill-item-name .spacer { flex: 1; }
+.skill-detail-body { margin: 4px 0 0; font: 400 var(--t-sm)/1.55 var(--font); color: var(--text-dim); }
 
 .skill-item-name { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; }
+.skill-item-name .h { font-size: var(--t-md); }
 .skill-id {
   font: 400 var(--t-micro)/1.3 var(--font-mono);
   color: var(--text-faint);
 }
-/* Two lines in a shelf; the whole description is on hover (title) and the
-   model reads all of it either way. */
-.skill-item .skill-body {
+
+/* Off -- a group or a connector switched off -- dims the card but never its
+   toggle, which is the way back on. */
+.preset-card[data-off] > :not(.preset-foot):not(.skill-details):not(.skill-needs-list):not(.tilt-sheen) { opacity: 0.55; }
+
+/* An added connector's own bottom line (Skills.jsx ConnectorControls). */
+.conn-error {
+  margin: 0;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  font-size: var(--t-sm);
-  line-height: 1.55;
+  font: 400 var(--t-xs)/1.5 var(--font);
+  color: var(--ochre);
 }
-.skill-item { padding: 13px 16px; gap: 14px; }
-
-/* An MCP server's skills, folded under its name (Skills.jsx McpSkillGroup).
-   One header row per server inside the same list, its tools nested and hidden
-   until the header is opened -- so a handful of servers is a handful of lines
-   rather than a wall of identically-tagged rows. */
-.mcp-group { border-bottom: 1px solid var(--line-soft); }
-.mcp-group:last-child { border-bottom: 0; }
-.mcp-group-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 15px 18px;
-  text-align: left;
-  color: var(--ink);
+.conn-signin { align-self: flex-start; }
+.conn-tools { color: var(--text-faint); }
+.conn-link { font: inherit; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.conn-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--text-dim);
+  transition: background-color var(--dur-quick) ease, color var(--dur-quick) ease;
 }
-.mcp-group-head:hover { background: var(--rail); }
-.mcp-group-head .spacer { flex: 1; }
-.mcp-group-name { font-size: var(--t-body); }
-.mcp-group-count { flex: none; }
-.mcp-group-chevron {
-  display: inline-flex;
-  flex: none;
-  color: var(--text-faint);
-  /* Points right when shut, down when open. */
-  transform: rotate(-90deg);
-  transition: transform var(--rail-motion);
-}
-.mcp-group[data-open] .mcp-group-chevron { transform: rotate(0deg); }
-/* The server's own tools, nested under the header: indented and set on the
-   rail tint so the group reads as one block rather than as more loose rows.
-   The per-row "From X" tag is dropped in here -- the header already says it. */
-.mcp-group-body { background: var(--rail); border-top: 1px solid var(--line-soft); }
-.mcp-group-body .skill-item { padding-left: 34px; }
-.mcp-group-body .skill-item:last-child { border-bottom: 0; }
-.mcp-group-body .mcp-tag { display: none; }
+.conn-icon svg { width: 16px; height: 16px; }
+.conn-icon:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
+.conn-icon[data-tone="danger"]:hover:not(:disabled) { color: var(--danger); }
+.conn-icon:disabled { opacity: 0.4; }
+.preset-card .preset-foot .lq-switch { margin-left: 4px; }
 
 /* A skill that is listed but not yet usable. */
 .skill-needs { display: flex; align-items: baseline; gap: 9px; margin-top: 6px; }
@@ -4182,26 +4190,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 
 /* -- permission ask (1f) ------------------------------------------------------ */
 
-/* -- MCP provenance ---------------------------------------------------------
- *
- * Which server a tool came from, as a glyph and a name. The glyph is the part
- * that does the work: a shelf of MCP tools is a column of near-identical rows,
- * and "gmail" set in 9.5px mono is not something the eye finds while scanning
- * -- it is something it reads once it has already stopped. */
-.mcp-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 7px 2px 5px;
-  border-radius: var(--r-pill);
-  background: var(--accent-field);
-  color: var(--accent);
-  font: 500 var(--t-micro)/1 var(--font-mono);
-  letter-spacing: var(--track-label);
-  text-transform: lowercase;
-  white-space: nowrap;
-}
-.mcp-tag svg { width: 13px; height: 13px; }
 
 /* The same glyph at row scale, naming a server rather than one of its tools. */
 .mcp-avatar {
@@ -8008,24 +7996,6 @@ button.code-status-item:hover { background: rgba(var(--ink-rgb), 0.06); color: v
 .preset-add[data-open],
 .preset-add[data-open]:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
 .preset-add:disabled { opacity: 0.5; }
-.preset-active {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font: 500 var(--t-sm)/1 var(--font);
-  color: var(--green);
-}
-.preset-active svg { width: 14px; height: 14px; }
-.mcp-empty {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  border: 1px dashed var(--line-firm);
-  border-radius: 14px;
-}
-.mcp-empty p { margin: 0; font: 400 var(--t-sm)/1.6 var(--font); color: var(--text-dim); }
-.mcp-empty b { color: var(--ink); font-weight: 500; }
 .prj-none { color: var(--text-dim); max-width: 60ch; }
 
 .prj-sub { color: var(--text-faint); padding: 4px 8px 0; }
@@ -9133,7 +9103,6 @@ html:not([data-shell]) .screen[data-glass] {
 :is(
   .gate-field > label,
   .design-tag,
-  .mcp-tag,
   .canvas-mode,
   .agents-preset,
   .agents-section-head,

@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useSkills } from "../hooks/useSkills";
-import { iconForServer } from "../lib/mcpIcons";
 import { serverOrigin } from "../lib/serverOrigin";
 import { SHELVES, serviceName, shelfOf, skillTitle } from "../lib/skillShelf";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
 import { SeekField } from "./bencho/SeekField";
-import { Dock } from "./bencho/Dock";
 import { Switch } from "./bencho/Switch";
 import { TiltCard } from "./bencho/TiltCard";
 
-function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
+// Unavailable is blocked whether or not the server said why: it refuses to
+// turn on a skill that is not available, so offering the switch would only
+// produce an error.
+const blockedSkill = (skill) => !skill.available;
+const needOf = (skill) => skill.requires || "setting up on the server";
+
+/* What a skill is waiting for, and -- where the thing it needs is a key --
+ * the field to paste one into. One line per requirement, not per skill: four
+ * page tools that all need a browser say so once. */
+function SkillNeed({ skill, busy, onKey }) {
   const [key, setKey] = useState("");
   const [open, setOpen] = useState(false);
-  const blocked = skill.requires && !skill.available;
 
   const save = async (event) => {
     event.preventDefault();
@@ -27,145 +33,173 @@ function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
   };
 
   return (
-    <div className="skill-item" data-off={skill.enabled ? undefined : ""}>
-      <div className="skill-item-text">
-        <div className="skill-item-name">
-          <span className="h">{skillTitle(skill.name)}</span>
-          {/* The name the model calls it by, which is what a transcript
-              shows when it runs. */}
-          <code className="skill-id">{skill.name}</code>
-          {/* Which server, not merely that there is one. Every MCP tool used
-              to wear the same "MCP" badge, so a list of thirty of them said
-              thirty times over the one thing they had in common. */}
-          {skill.server ? (
-            <span className="mcp-tag" title={`From the ${skill.server} MCP server`}>
-              <Icon name={iconForServer(skill.server)} />
-              {skill.server}
-            </span>
-          ) : skill.requires?.includes("MCP") ? (
-            <span className="mcp-tag">
-              <Icon name="device_hub" />
-              MCP
-            </span>
-          ) : null}
-        </div>
-        <p className="skill-body" title={skill.description}>
-          {skill.description}
-        </p>
-
-        {blocked ? (
-          <div className="skill-needs">
-            <span className="mi">Needs {skill.requires}</span>
-            {skill.configurable ? (
-              <button type="button" className="mi" onClick={() => setOpen((was) => !was)}>
-                {open ? "cancel" : "add key"}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {skill.configurable && skill.available ? (
-          <div className="skill-needs">
-            <span className="mi">Key saved</span>
-            <button
-              type="button"
-              className="mi"
-              disabled={busy}
-              onClick={() => onKey(skill.name, "")}
-            >
-              remove
-            </button>
-          </div>
-        ) : null}
-
-        {open && blocked && skill.configurable ? (
-          <form className="skill-key" onSubmit={save}>
-            <input
-              type="password"
-              value={key}
-              autoFocus
-              autoComplete="off"
-              spellCheck="false"
-              placeholder="Paste the key"
-              aria-label={`${skill.requires} for ${skill.name}`}
-              onChange={(event) => setKey(event.target.value)}
-            />
-            <button type="submit" className="btnp" disabled={!key.trim() || busy}>
-              {busy ? "Checking…" : "Save"}
-            </button>
-          </form>
+    <div className="skill-need">
+      <div className="skill-needs">
+        <span className="mi">Needs {needOf(skill)}</span>
+        {skill.configurable ? (
+          <button type="button" className="mi" onClick={() => setOpen((was) => !was)}>
+            {open ? "cancel" : "add key"}
+          </button>
         ) : null}
       </div>
-      {/* Only while asking is on. Off, this control would claim to change
-          something that has no effect, which is worse than not being there. */}
-      {askFirst ? (
-        <button
-          type="button"
-          className="skill-always"
-          aria-pressed={skill.auto_approve}
-          title={
-            skill.auto_approve
-              ? `Ask again before running ${skill.name}`
-              : `Stop asking before running ${skill.name}`
-          }
-          onClick={() => onApproval({ auto_approve: { [skill.name]: !skill.auto_approve } })}
-        >
-          {skill.auto_approve ? "Always allowed" : "Ask first"}
-        </button>
+      {open ? (
+        <form className="skill-key" onSubmit={save}>
+          <input
+            type="password"
+            value={key}
+            autoFocus
+            autoComplete="off"
+            spellCheck="false"
+            placeholder="Paste the key"
+            aria-label={`${needOf(skill)} for ${skill.name}`}
+            onChange={(event) => setKey(event.target.value)}
+          />
+          <button type="submit" className="btnp" disabled={!key.trim() || busy}>
+            {busy ? "Checking…" : "Save"}
+          </button>
+        </form>
       ) : null}
-      <Switch
-        on={skill.enabled}
-        label={`${skill.enabled ? "Disable" : "Enable"} ${skill.name}`}
-        disabled={busy || blocked}
-        title={blocked ? `Needs ${skill.requires} first` : undefined}
-        onToggle={() => onToggle(skill.name, !skill.enabled)}
-      />
     </div>
   );
 }
 
-/* One MCP server's skills, folded under its name.
+/* One skill, opened up inside its card: the whole description, its saved
+ * key, and -- while asking first is on -- whether it may skip the asking. */
+function SkillDetail({ skill, busy, onKey, askFirst, onApproval }) {
+  return (
+    <div className="skill-detail" data-off={skill.enabled ? undefined : ""}>
+      <div className="skill-item-name">
+        <span className="h">{skillTitle(skill.name)}</span>
+        <code className="skill-id">{skill.name}</code>
+        <span className="spacer" />
+        {/* Only while asking is on. Off, this control would claim to change
+            something that has no effect, which is worse than not being there. */}
+        {askFirst ? (
+          <button
+            type="button"
+            className="skill-always"
+            aria-pressed={skill.auto_approve}
+            title={
+              skill.auto_approve
+                ? `Ask again before running ${skill.name}`
+                : `Stop asking before running ${skill.name}`
+            }
+            onClick={() => onApproval({ auto_approve: { [skill.name]: !skill.auto_approve } })}
+          >
+            {skill.auto_approve ? "Always allowed" : "Ask first"}
+          </button>
+        ) : null}
+      </div>
+      <p className="skill-detail-body">{skill.description}</p>
+      {skill.configurable && skill.available ? (
+        <div className="skill-needs">
+          <span className="mi">Key saved</span>
+          <button type="button" className="mi" disabled={busy} onClick={() => onKey(skill.name, "")}>
+            remove
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* A card per group of skills -- a shelf of built-ins, or everything one
+ * connector brought -- with one toggle for the lot.
  *
- * An MCP server can register a dozen tools, and a handful of servers turns the
- * flat list into a wall of rows that all say the same "From X" tag. Grouping
- * them under the server -- a header with the server's glyph, how many of its
- * skills are on, and a chevron -- puts one line per server on screen and hides
- * the individual tools behind a disclosure until they are wanted.
- *
- * Forced open while a filter is active, so a search still reaches a tool inside
- * a collapsed server rather than appearing to find nothing. */
-function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, askFirst, onApproval }) {
+ * The toggle reads "on" while anything in the group is on; flipping it turns
+ * every usable skill in the group off, or on. Single skills are still one
+ * press away: each is a chip that turns just itself on or off, so the card
+ * can be coarse without the page losing any control it had. Details opens the
+ * full descriptions and the per-skill approval policy. */
+function SkillGroupCard({ mark, title, blurb, skills, needle, busyOf, onSetEnabled, onKey, askFirst, onApproval }) {
   const [open, setOpen] = useState(false);
-  const expanded = forceOpen || open;
-  const on = skills.filter((s) => s.enabled).length;
+  const usable = skills.filter((skill) => !blockedSkill(skill));
+  const onCount = skills.filter((skill) => skill.enabled).length;
+  const anyOn = usable.some((skill) => skill.enabled);
+  const busy = skills.some((skill) => busyOf(skill.name));
+  const needs = [...new Map(skills.filter(blockedSkill).map((skill) => [needOf(skill), skill])).values()];
+  const matches = (skill) =>
+    !needle ||
+    skill.name.toLowerCase().includes(needle) ||
+    (skill.description || "").toLowerCase().includes(needle);
+
+  const state = !usable.length
+    ? { label: "Needs setup", tone: "ochre" }
+    : onCount === skills.length
+      ? { label: "All on", tone: "green" }
+      : onCount
+        ? { label: `${onCount} of ${skills.length} on`, tone: "quiet" }
+        : { label: "Off", tone: "quiet" };
+
+  const flipAll = () => {
+    const next = !anyOn;
+    for (const skill of usable) if (Boolean(skill.enabled) !== next) onSetEnabled(skill.name, next);
+  };
 
   return (
-    <div className="mcp-group" data-open={expanded ? "" : undefined}>
-      <button
-        type="button"
-        className="mcp-group-head"
-        aria-expanded={expanded}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <ServiceIcon name={server} />
-        <span className="mcp-group-name h">{serviceName(server)}</span>
-        <span className="mi mcp-group-count">
-          {on} of {skills.length} on
-        </span>
-        <span className="spacer" />
-        <span className="mcp-group-chevron" aria-hidden="true">
-          <Icon name="chevron" />
-        </span>
-      </button>
+    <TiltCard className="preset-card skill-group" still={open} data-off={anyOn ? undefined : ""}>
+      <div className="preset-top">
+        {mark}
+        <div className="preset-name">
+          <span className="h">{title}</span>
+          <span className="preset-setup" data-tone={state.tone}>
+            {state.label}
+          </span>
+        </div>
+      </div>
+      {blurb ? <p className="preset-body skill-group-blurb">{blurb}</p> : null}
 
-      {expanded ? (
-        <div className="mcp-group-body">
+      <div className="skill-chips" role="group" aria-label={`${title} skills`}>
+        {skills.map((skill) => (
+          <button
+            key={skill.name}
+            type="button"
+            className="skill-chip"
+            aria-pressed={Boolean(skill.enabled)}
+            data-dim={matches(skill) ? undefined : ""}
+            disabled={blockedSkill(skill) || busyOf(skill.name)}
+            title={
+              blockedSkill(skill)
+                ? `Needs ${needOf(skill)}`
+                : `${skill.enabled ? "Turn off" : "Turn on"} ${skill.name}`
+            }
+            onClick={() => onSetEnabled(skill.name, !skill.enabled)}
+          >
+            <i aria-hidden="true" />
+            {skillTitle(skill.name)}
+          </button>
+        ))}
+      </div>
+
+      {needs.length ? (
+        <div className="skill-needs-list">
+          {needs.map((skill) => (
+            <SkillNeed key={needOf(skill)} skill={skill} busy={busyOf(skill.name)} onKey={onKey} />
+          ))}
+        </div>
+      ) : null}
+
+      <div className="preset-foot">
+        <button type="button" className="skill-more" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+          {open ? "Hide details" : "Details"}
+          <Icon name="chevron" />
+        </button>
+        <span className="spacer" />
+        <Switch
+          on={anyOn}
+          label={`${anyOn ? "Turn off" : "Turn on"} ${title}`}
+          disabled={!usable.length || busy}
+          onToggle={flipAll}
+        />
+      </div>
+
+      {open ? (
+        <div className="skill-details">
           {skills.map((skill) => (
-            <SkillRow
+            <SkillDetail
               key={skill.name}
               skill={skill}
               busy={busyOf(skill.name)}
-              onToggle={onToggle}
               onKey={onKey}
               askFirst={askFirst}
               onApproval={onApproval}
@@ -173,31 +207,7 @@ function McpSkillGroup({ server, skills, forceOpen, busyOf, onToggle, onKey, ask
           ))}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-/* A shelf's heading: its glyph, its name, and how much of it is on -- said in
- * words and drawn as a row of beads, one per skill, filled when it is on. The
- * beads are the page's at-a-glance read: a shelf with a gap in it shows one
- * from across the room, before any row is read. */
-function ShelfHead({ icon, label, skills }) {
-  const on = skills.filter((s) => s.enabled).length;
-  return (
-    <header className="shelf-head">
-      <span className="shelf-glyph" aria-hidden="true">
-        <Icon name={icon} />
-      </span>
-      <span className="h shelf-name">{label}</span>
-      <span className="shelf-beads" aria-hidden="true">
-        {skills.map((skill) => (
-          <i key={skill.name} data-on={skill.enabled ? "" : undefined} title={skill.name} />
-        ))}
-      </span>
-      <span className="mi shelf-count">
-        {on === skills.length ? `all ${on} on` : `${on} of ${skills.length} on`}
-      </span>
-    </header>
+    </TiltCard>
   );
 }
 
@@ -217,7 +227,8 @@ const PRESET_SECTIONS = [
 const SIGNIN_POLL_MS = 2000;
 const SIGNIN_POLL_LIMIT = 300;
 
-function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
+function PresetCard({ api, preset, server, controls, onInstall, busy }) {
+  const isInstalled = Boolean(server);
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState({});
 
@@ -255,28 +266,48 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   return (
     /* Bencho's tilt card: it sinks under the pointer. Held still while its
        form is open, so it does not move under the hand that is typing. */
-    <TiltCard className="preset-card" still={open} data-open={open ? "" : undefined} data-installed={isInstalled ? "" : undefined}>
+    <TiltCard
+      className="preset-card"
+      still={open}
+      data-open={open ? "" : undefined}
+      data-installed={isInstalled ? "" : undefined}
+      data-off={isInstalled && !server.enabled ? "" : undefined}
+    >
       <div className="preset-top">
-        <ServiceIcon api={api} name={preset.name} presetId={preset.id} hasIcon={preset.has_icon} />
+        {isInstalled ? (
+          <ServiceIcon
+            api={api}
+            name={server.name}
+            serverId={server.id}
+            hasIcon={server.has_icon}
+            uploaded={server.icon_uploaded}
+          />
+        ) : (
+          <ServiceIcon api={api} name={preset.name} presetId={preset.id} hasIcon={preset.has_icon} />
+        )}
         <div className="preset-name">
           <span className="h">{serviceName(preset.name)}</span>
-          <span className="preset-setup" data-tone={setup.tone}>
-            {setup.label}
-          </span>
+          {isInstalled ? (
+            <ConnectorState server={server} />
+          ) : (
+            <span className="preset-setup" data-tone={setup.tone}>
+              {setup.label}
+            </span>
+          )}
         </div>
       </div>
       <p className="preset-body" title={preset.description}>
         {preset.description}
       </p>
+      {/* Added, the card is the connector: its toggle and its controls take
+          the place of the Add button. */}
+      {isInstalled ? (
+        <ConnectorControls server={server} busy={busy} controls={controls} />
+      ) : (
       <div className="preset-foot">
         <code className="skill-id">{preset.name}</code>
         <span className="spacer" />
-        {isInstalled ? (
-          <span className="preset-active">
-            <Icon name="check" />
-            Added
-          </span>
-        ) : (
+        {(
           <button
             type="button"
             className="preset-add"
@@ -290,6 +321,7 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
           </button>
         )}
       </div>
+      )}
 
       {open && !isInstalled ? (
         <form
@@ -368,175 +400,158 @@ function PresetCard({ api, preset, isInstalled, onInstall, busy }) {
   );
 }
 
-function McpServerRow({
-  api,
-  server,
-  onToggle,
-  onDelete,
-  onSync,
-  onLogo,
-  onResetLogo,
-  onSignIn,
-  onSignOut,
-  busy,
-}) {
+/* Where an added connector stands, in the chip under its name. */
+function ConnectorState({ server }) {
+  const state = !server.enabled
+    ? { label: "Off", tone: "quiet" }
+    : server.auth?.required
+      ? { label: "Sign in to finish", tone: "ochre" }
+      : server.connected
+        ? { label: "Connected", tone: "green" }
+        : server.error
+          ? { label: "Can't connect", tone: "ochre" }
+          : { label: "Connecting…", tone: "quiet" };
+  return (
+    <span className="preset-setup" data-tone={state.tone}>
+      {state.label}
+    </span>
+  );
+}
+
+/* The bottom of an added connector's card: what it registered, why it is not
+ * connected if it is not, its few actions as glyphs, and the toggle. */
+function ConnectorControls({ server, busy, controls }) {
   const fileInput = useRef(null);
+  const tools = server.tools?.length || 0;
 
   const pickLogo = (event) => {
     const file = event.target.files?.[0];
     // Cleared immediately so choosing the same file twice still fires a change.
     event.target.value = "";
-    if (file) onLogo(server.id, file);
+    if (file) controls.onLogo(server.id, file);
   };
 
   return (
-    <div
-      style={{
-        padding: "14px 16px",
-        background: "var(--surface)",
-        border: "1px solid var(--line-soft)",
-        borderRadius: "var(--r-surface)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "12px",
-      }}
-    >
-      <ServiceIcon
-        api={api}
-        name={server.name}
-        serverId={server.id}
-        hasIcon={server.has_icon}
-        uploaded={server.icon_uploaded}
-        off={!server.connected}
-      />
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span
-            style={{
-              width: "8px",
-              height: "8px",
-              borderRadius: "50%",
-              background: server.connected ? "var(--green)" : "var(--text-faint)",
-              display: "inline-block",
-            }}
-            title={server.connected ? "Connected" : "Disconnected"}
-          />
-          <span className="h" style={{ fontSize: "var(--t-md)" }}>
-            {server.name}
-          </span>
-          {server.auth?.signed_in ? <span className="mcp-chip" data-on>Signed in</span> : null}
-          <span
-            style={{
-              fontSize: "var(--t-micro)",
-              fontFamily: "var(--font-mono)",
-              color: "var(--text-faint)",
-              background: "var(--rail)",
-              padding: "2px 6px",
-              borderRadius: "var(--r-pill)",
-            }}
-          >
-            {server.transport}
-          </span>
-        </div>
-        <p style={{ margin: "4px 0 0", color: "var(--text-dim)", fontSize: "var(--t-sm)" }}>
-          {server.description ||
-            (server.transport === "stdio" ? server.command : server.url)}
+    <>
+      {server.error && server.enabled ? (
+        <p className="conn-error" title={server.error}>
+          {server.error}
         </p>
-        <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
-          <span style={{ fontSize: "var(--t-xs)", color: "var(--text-faint)" }}>
-            {server.tools?.length || 0} tool(s) registered
-          </span>
-          {server.error ? (
-            <span style={{ fontSize: "var(--t-xs)", color: "var(--ochre)" }}>
-              {server.error}
-            </span>
+      ) : null}
+      {server.auth?.required && server.auth?.can_sign_in ? (
+        <button
+          type="button"
+          className="btnp conn-signin"
+          disabled={busy}
+          title={`Sign in to ${server.name} in a new tab`}
+          onClick={() => controls.onSignIn(server)}
+        >
+          Sign in
+        </button>
+      ) : null}
+      <div className="preset-foot">
+        <span className="mi conn-tools">
+          {tools} {tools === 1 ? "tool" : "tools"}
+          {server.auth?.signed_in ? " · signed in" : ""}
+          {server.icon_uploaded ? (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="conn-link"
+                disabled={busy}
+                title="Drop your logo and go back to the service's own"
+                onClick={() => controls.onResetLogo(server.id)}
+              >
+                reset logo
+              </button>
+            </>
           ) : null}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        {server.auth?.required && server.auth?.can_sign_in ? (
-          <button
-            type="button"
-            className="btnp"
-            disabled={busy}
-            title={`Sign in to ${server.name} in a new tab`}
-            onClick={() => onSignIn(server)}
-          >
-            Sign in
-          </button>
-        ) : null}
-        {server.auth?.signed_in ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            title="Forget this sign-in and disconnect"
-            onClick={() => onSignOut(server)}
-          >
-            Sign out
-          </button>
-        ) : null}
+        </span>
+        <span className="spacer" />
         <input
           ref={fileInput}
           type="file"
           accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.ico"
-          style={{ display: "none" }}
+          hidden
           onChange={pickLogo}
         />
         <button
           type="button"
-          className="btn"
+          className="conn-icon"
           disabled={busy}
-          title="Use your own logo for this server"
+          title="Look for its tools again"
+          aria-label={`Sync ${server.name}`}
+          onClick={() => controls.onSync(server.id)}
+        >
+          <Icon name="refresh" />
+        </button>
+        <button
+          type="button"
+          className="conn-icon"
+          disabled={busy}
+          title={server.icon_uploaded ? "Use another logo" : "Use your own logo"}
+          aria-label={`Logo for ${server.name}`}
           onClick={() => fileInput.current?.click()}
         >
-          Logo
+          <Icon name="image" />
         </button>
+        {server.auth?.signed_in ? (
+          <button
+            type="button"
+            className="conn-icon"
+            disabled={busy}
+            title="Forget this sign-in and disconnect"
+            aria-label={`Sign out of ${server.name}`}
+            onClick={() => controls.onSignOut(server)}
+          >
+            <Icon name="external" />
+          </button>
+        ) : null}
         <button
           type="button"
-          className="btn"
+          className="conn-icon"
+          data-tone="danger"
           disabled={busy}
-          title="Drop any custom logo and look the service's own up again"
-          onClick={() => onResetLogo(server.id)}
+          title="Remove this connector"
+          aria-label={`Remove ${server.name}`}
+          onClick={() => controls.onDelete(server.id, server.name)}
         >
-          ↻
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy}
-          title="Force tool re-discovery"
-          onClick={() => onSync(server.id)}
-        >
-          Sync
+          <Icon name="trash" />
         </button>
         <Switch
           on={server.enabled}
-          label={`${server.enabled ? "Disable" : "Enable"} ${server.name}`}
+          label={`${server.enabled ? "Turn off" : "Turn on"} ${server.name}`}
           disabled={busy}
-          onToggle={() => onToggle(server.id, !server.enabled)}
+          onToggle={() => controls.onToggle(server.id, !server.enabled)}
         />
-        <button
-          type="button"
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--text-faint)",
-            cursor: "pointer",
-            fontSize: "var(--t-lg)",
-            padding: "4px 8px",
-          }}
-          title="Remove server"
-          disabled={busy}
-          onClick={() => onDelete(server.id, server.name)}
-        >
-          ×
-        </button>
       </div>
-    </div>
+    </>
+  );
+}
+
+/* A connector added by hand or imported, which has no preset card to live on. */
+function CustomConnectorCard({ api, server, busy, controls }) {
+  return (
+    <TiltCard className="preset-card" data-installed="" data-off={server.enabled ? undefined : ""}>
+      <div className="preset-top">
+        <ServiceIcon
+          api={api}
+          name={server.name}
+          serverId={server.id}
+          hasIcon={server.has_icon}
+          uploaded={server.icon_uploaded}
+        />
+        <div className="preset-name">
+          <span className="h">{serviceName(server.name)}</span>
+          <ConnectorState server={server} />
+        </div>
+      </div>
+      <p className="preset-body" title={server.description || undefined}>
+        {server.description || (server.transport === "stdio" ? server.command : server.url)}
+      </p>
+      <ConnectorControls server={server} busy={busy} controls={controls} />
+    </TiltCard>
   );
 }
 
@@ -546,7 +561,6 @@ export function Skills({ api }) {
     useSkills(api);
   const [tab, setTab] = useState("skills"); // "skills" | "mcp"
   const [query, setQuery] = useState("");
-  const [shelf, setShelf] = useState("all"); // a SHELVES key, "servers" or "all"
 
   // The tabs' dark pill is one element that slides to whichever tab is on,
   // rather than each tab painting its own -- measured, because the labels
@@ -736,7 +750,7 @@ export function Skills({ api }) {
       await refresh();
     } catch (err) {
       tab?.close();
-      await notify(`Failed activating preset: ${err.message || err}`);
+      await notify(`Could not add that connector: ${err.message || err}`);
       return;
     } finally {
       setMcpBusy(false);
@@ -753,16 +767,16 @@ export function Skills({ api }) {
       await loadMcpData();
       await refresh();
     } catch (err) {
-      await notify(`Failed toggling server: ${err.message || err}`);
+      await notify(`Could not switch that connector: ${err.message || err}`);
     } finally {
       setMcpBusy(false);
     }
   };
 
   const handleDeleteMcpServer = async (serverId, serverName) => {
-    const yes = await confirm(`Delete MCP server "${serverName}"?`, {
-      title: "Delete server",
-      confirmLabel: "Delete",
+    const yes = await confirm(`Remove the ${serviceName(serverName)} connector?`, {
+      title: "Remove connector",
+      confirmLabel: "Remove",
       destructive: true,
     });
     if (!yes) return;
@@ -772,7 +786,7 @@ export function Skills({ api }) {
       await loadMcpData();
       await refresh();
     } catch (err) {
-      await notify(`Failed deleting server: ${err.message || err}`);
+      await notify(`Could not remove that connector: ${err.message || err}`);
     } finally {
       setMcpBusy(false);
     }
@@ -825,67 +839,75 @@ export function Skills({ api }) {
       await loadMcpData();
       await refresh();
     } catch (err) {
-      await notify(`Failed adding server: ${err.message || err}`);
+      await notify(`Could not add that connector: ${err.message || err}`);
     } finally {
       setMcpBusy(false);
     }
   };
 
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return skills;
-    return skills.filter(
-      (s) =>
-        s.name.toLowerCase().includes(needle) ||
-        (s.description || "").toLowerCase().includes(needle),
-    );
-  }, [skills, query]);
+  const needle = query.trim().toLowerCase();
+  const matchesSkill = (skill) =>
+    skill.name.toLowerCase().includes(needle) ||
+    (skill.description || "").toLowerCase().includes(needle);
 
-  // Built-in skills stay as their own rows; anything an MCP server registered
-  // is folded under that server. Grouped from `shown`, so a filter narrows both
-  // the loose rows and what is inside each server.
-  const { builtin, groups } = useMemo(() => {
-    const builtin = [];
+  // One card per shelf of built-in skills (lib/skillShelf), then one per
+  // connector for the tools it registered.
+  const skillCards = useMemo(() => {
+    const shelves = new Map(SHELVES.map((def) => [def.key, { ...def, skills: [] }]));
     const byServer = new Map();
-    for (const skill of shown) {
+    for (const skill of skills) {
       if (skill.server) {
         if (!byServer.has(skill.server)) byServer.set(skill.server, []);
         byServer.get(skill.server).push(skill);
       } else {
-        builtin.push(skill);
+        shelves.get(shelfOf(skill.name)).skills.push(skill);
       }
     }
-    const groups = [...byServer.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([server, list]) => ({ server, list }));
-    return { builtin, groups };
-  }, [shown]);
+    return [
+      ...[...shelves.values()]
+        .filter((entry) => entry.skills.length)
+        .map((entry) => ({
+          key: entry.key,
+          title: entry.label,
+          blurb: entry.blurb,
+          mark: (
+            <span className="mcp-avatar card-glyph" aria-hidden="true">
+              <Icon name={entry.icon} />
+            </span>
+          ),
+          skills: entry.skills,
+        })),
+      ...[...byServer.entries()]
+        .sort((x, y) => x[0].localeCompare(y[0]))
+        .map(([server, list]) => ({
+          key: `server:${server}`,
+          title: serviceName(server),
+          blurb: `What the ${serviceName(server)} connector brought.`,
+          mark: <ServiceIcon name={server} />,
+          skills: list,
+        })),
+    ];
+  }, [skills]);
+  // A search keeps the cards with a match in them, and dims the rest of
+  // each card's chips (SkillGroupCard).
+  const shownCards = needle
+    ? skillCards.filter((card) => card.title.toLowerCase().includes(needle) || card.skills.some(matchesSkill))
+    : skillCards;
 
-  // The built-in skills, shelved (lib/skillShelf). Every shelf is kept, even
-  // one the filter has emptied, so the dock below does not reshuffle as you
-  // type; an empty shelf is simply not drawn.
-  const shelves = useMemo(() => {
-    const all = new Map(SHELVES.map((def) => [def.key, { ...def, total: 0, list: [] }]));
-    for (const skill of skills) if (!skill.server) all.get(shelfOf(skill.name)).total += 1;
-    for (const skill of builtin) all.get(shelfOf(skill.name)).list.push(skill);
-    return [...all.values()].filter((entry) => entry.total > 0);
-  }, [skills, builtin]);
-  const serverSkills = skills.filter((s) => s.server).length;
-
-  const dockItems = [
-    { key: "all", label: "Everything", icon: "apps", count: skills.length },
-    ...shelves.map((entry) => ({ key: entry.key, label: entry.label, icon: entry.icon, count: entry.total })),
-    ...(serverSkills
-      ? [{ key: "servers", label: "From MCP servers", icon: "tools", count: serverSkills }]
-      : []),
-  ];
-  // A search looks on every shelf: a match on a shelf the dock is not showing
-  // would otherwise read as "nothing found".
-  const everyShelf = shelf === "all" || Boolean(query.trim());
-  const showing = (key) => everyShelf || shelf === key;
-  const nothingShown =
-    !shelves.some((entry) => showing(entry.key) && entry.list.length) &&
-    !(showing("servers") && groups.length);
+  // Added connectors live on their preset's card; anything added by hand or
+  // imported gets a card of its own.
+  const presetNames = new Set(mcpPresets.map((preset) => preset.name));
+  const serverByName = new Map(mcpServers.map((server) => [server.name, server]));
+  const customServers = mcpServers.filter((server) => !presetNames.has(server.name));
+  const connectorControls = {
+    onToggle: handleToggleMcpServer,
+    onDelete: handleDeleteMcpServer,
+    onSync: handleSyncMcpServer,
+    onLogo: handleUploadLogo,
+    onResetLogo: handleResetLogo,
+    onSignIn: handleSignIn,
+    onSignOut: handleSignOut,
+  };
 
   useLayoutEffect(() => {
     const active = tabsRef.current?.querySelector("button[data-active]");
@@ -893,7 +915,6 @@ export function Skills({ api }) {
   }, [tab, skills.length, mcpServers.length]);
 
   const on = skills.filter((s) => s.enabled).length;
-  const installedServerNames = new Set(mcpServers.map((s) => s.name));
 
   return (
     <div className="page">
@@ -920,10 +941,10 @@ export function Skills({ api }) {
         />
         <div className="inner">
           <div>
-            <h1 className="h">Skills & MCP</h1>
+            <h1 className="h">Skills & Connectors</h1>
             <p>
-              Tools and Model Context Protocol servers I can use. Switch one off
-              and I stop being offered it.
+              What I can do, and the services I can reach. Turn a card off and I
+              stop being offered what is on it.
             </p>
           </div>
           <div className="actions">
@@ -946,7 +967,7 @@ export function Skills({ api }) {
         <div className="page-col" style={{ alignSelf: "stretch" }}>
           {/* The two halves of the page, as the app's segmented control --
               the same one the Projects page switches kinds with. */}
-          <div ref={tabsRef} className="segmented skills-tabs" role="tablist" aria-label="Skills and MCP servers">
+          <div ref={tabsRef} className="segmented skills-tabs" role="tablist" aria-label="Skills and connectors">
             {pill ? (
               <span
                 className="skills-tabs-pill"
@@ -963,7 +984,7 @@ export function Skills({ api }) {
               onClick={() => setTab("skills")}
             >
               <Icon name="skills" />
-              Active skills
+              Skills
               <span className="count">{skills.length}</span>
             </button>
             <button
@@ -974,7 +995,7 @@ export function Skills({ api }) {
               onClick={() => setTab("mcp")}
             >
               <Icon name="apps" />
-              MCP servers &amp; presets
+              Connectors
               <span className="count">{mcpServers.length}</span>
             </button>
           </div>
@@ -1037,68 +1058,30 @@ export function Skills({ api }) {
 
               {skills.length === 0 && !loading ? (
                 <p className="p" style={{ color: "var(--text-dim)" }}>
-                  No skills registered. Go to the <strong>MCP Servers & Presets</strong> tab to activate GitHub, Figma, Google Workspace, or custom MCP servers.
+                  No skills registered. Go to the <strong>Connectors</strong> tab to connect GitHub,
+                  Figma, Google Workspace, or a server of your own.
                 </p>
               ) : (
                 <>
-                  {/* Which shelf: the magnifying dock -- Bencho's, swelling
-                      toward the pointer, naming what is under it. */}
-                  <Dock items={dockItems} value={shelf} onChange={setShelf} label="Kind of skill" />
-
-                  <div className="skill-shelves" data-one={everyShelf ? undefined : ""}>
-                    {shelves.map((entry) =>
-                      showing(entry.key) && entry.list.length ? (
-                        <section key={entry.key} className="skill-shelf">
-                          <ShelfHead icon={entry.icon} label={entry.label} skills={entry.list} />
-                          <div className="skill-list">
-                            {entry.list.map((skill) => (
-                              <SkillRow
-                                key={skill.name}
-                                skill={skill}
-                                busy={pending.includes(skill.name)}
-                                onToggle={setEnabled}
-                                onKey={setKey}
-                                askFirst={askFirst}
-                                onApproval={setApproval}
-                              />
-                            ))}
-                          </div>
-                        </section>
-                      ) : null,
-                    )}
-
-                    {showing("servers") && groups.length ? (
-                      <section className="skill-shelf" data-wide="">
-                        <ShelfHead
-                          icon="tools"
-                          label="From MCP servers"
-                          skills={groups.flatMap((g) => g.list)}
-                        />
-                        <div className="skill-list">
-                          {groups.map(({ server, list }) => (
-                            <McpSkillGroup
-                              key={server}
-                              server={server}
-                              skills={list}
-                              // Open every server while filtering, so a match
-                              // inside a collapsed one is not hidden.
-                              forceOpen={Boolean(query.trim())}
-                              busyOf={(name) => pending.includes(name)}
-                              onToggle={setEnabled}
-                              onKey={setKey}
-                              askFirst={askFirst}
-                              onApproval={setApproval}
-                            />
-                          ))}
-                        </div>
-                      </section>
-                    ) : null}
+                  <div className="preset-grid skill-cards">
+                    {shownCards.map((card) => (
+                      <SkillGroupCard
+                        key={card.key}
+                        mark={card.mark}
+                        title={card.title}
+                        blurb={card.blurb}
+                        skills={card.skills}
+                        needle={needle}
+                        busyOf={(name) => pending.includes(name)}
+                        onSetEnabled={setEnabled}
+                        onKey={setKey}
+                        askFirst={askFirst}
+                        onApproval={setApproval}
+                      />
+                    ))}
                   </div>
-
-                  {nothingShown ? (
-                    <p className="skill-none">
-                      {query.trim() ? `Nothing here matches “${query.trim()}”.` : "Nothing on this shelf."}
-                    </p>
+                  {needle && !shownCards.length ? (
+                    <p className="skill-none">Nothing matches “{query.trim()}”.</p>
                   ) : null}
                 </>
               )}
@@ -1132,20 +1115,19 @@ export function Skills({ api }) {
                 </div>
               ) : null}
 
-              {/* Installed MCP Servers */}
+              {/* Your own connectors: anything added by hand or imported, as
+                  cards. Ones added from the gallery stay on their own card
+                  below, which gains a toggle once added. */}
               <div>
-                <div
-                  className="lane"
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <span className="mi" data-strong>
-                    Installed MCP Servers ({mcpServers.length})
+                <div className="lane preset-lane" style={{ marginBottom: "12px" }}>
+                  <span className="shelf-glyph" aria-hidden="true">
+                    <Icon name="plus" />
                   </span>
+                  <span className="mi" data-strong>
+                    Your own connectors
+                  </span>
+                  <span className="mi preset-lane-count">{customServers.length}</span>
+                  <i />
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button
                       type="button"
@@ -1155,18 +1137,18 @@ export function Skills({ api }) {
                         setCustomOpen((was) => !was);
                       }}
                     >
-                      {customOpen ? "Close Form" : "+ Add Custom MCP Server"}
+                      {customOpen ? "Close" : "+ Add a connector"}
                     </button>
                     <button
                       type="button"
                       className="btn"
-                      title="Paste an mcpServers config from anywhere"
+                      title="Paste an mcpServers config from any install page"
                       onClick={() => {
                         setCustomOpen(false);
                         setImportOpen((was) => !was);
                       }}
                     >
-                      {importOpen ? "Close Import" : "Import Config"}
+                      {importOpen ? "Close" : "Import a config"}
                     </button>
                   </div>
                 </div>
@@ -1185,7 +1167,7 @@ export function Skills({ api }) {
                     }}
                   >
                     <span className="h" style={{ fontSize: "var(--t-md)" }}>
-                      Import MCP Servers
+                      Import connectors
                     </span>
                     <p
                       style={{
@@ -1195,8 +1177,8 @@ export function Skills({ api }) {
                         lineHeight: 1.5,
                       }}
                     >
-                      Paste the <code>mcpServers</code> block from any MCP install page.
-                      Both the whole config file and the bare mapping work. Servers
+                      Paste the <code>mcpServers</code> block from any connector&apos;s install page.
+                      Both the whole config file and the bare mapping work. Connectors
                       whose names are already taken are reported and skipped, not
                       overwritten.
                     </p>
@@ -1243,12 +1225,12 @@ export function Skills({ api }) {
                     }}
                   >
                     <span className="h" style={{ fontSize: "var(--t-md)" }}>
-                      Add Custom MCP Server
+                      Add a connector
                     </span>
                     <div style={{ display: "flex", gap: "12px" }}>
                       <input
                         type="text"
-                        placeholder="Server Name (e.g. postgres, filesystem)"
+                        placeholder="Name (e.g. postgres, filesystem)"
                         value={customServer.name}
                         required
                         style={{
@@ -1343,42 +1325,31 @@ export function Skills({ api }) {
                     />
 
                     <button type="submit" className="btnp" style={{ alignSelf: "flex-start" }} disabled={mcpBusy}>
-                      {mcpBusy ? "Connecting…" : "Save & Connect Server"}
+                      {mcpBusy ? "Connecting…" : "Save & connect"}
                     </button>
                   </form>
                 ) : null}
 
-                {mcpServers.length === 0 ? (
-                  <div className="mcp-empty">
-                    <span className="shelf-glyph" aria-hidden="true">
-                      <Icon name="apps" />
-                    </span>
-                    <p>
-                      <b>Nothing connected yet.</b> Pick an integration from the gallery below — GitHub,
-                      Figma, Exa, Context7 and more — or bring your own with “+ Add Custom MCP Server” or
-                      “Import Config”.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {mcpServers.map((server) => (
-                      <McpServerRow
+                {customServers.length ? (
+                  <div className="preset-grid">
+                    {customServers.map((server) => (
+                      <CustomConnectorCard
                         key={server.id}
                         api={api}
                         server={server}
-                        onToggle={handleToggleMcpServer}
-                        onDelete={handleDeleteMcpServer}
-                        onSync={handleSyncMcpServer}
-                        onLogo={handleUploadLogo}
-                        onResetLogo={handleResetLogo}
-                        onSignIn={handleSignIn}
-                        onSignOut={handleSignOut}
                         busy={mcpBusy}
+                        controls={connectorControls}
                       />
                     ))}
                   </div>
+                ) : (
+                  <p className="settings-note" style={{ margin: 0 }}>
+                    Run a server of your own, or paste the config from any install page, and it
+                    shows up here as a card.
+                  </p>
                 )}
               </div>
+
               {/* Presets, by section */}
               {PRESET_SECTIONS.map((section, index) => {
                 const known = PRESET_SECTIONS.map((s) => s.id);
@@ -1411,7 +1382,8 @@ export function Skills({ api }) {
                           key={preset.id}
                           api={api}
                           preset={preset}
-                          isInstalled={installedServerNames.has(preset.name)}
+                          server={serverByName.get(preset.name) || null}
+                          controls={connectorControls}
                           onInstall={handleInstallPreset}
                           busy={mcpBusy}
                         />

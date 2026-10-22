@@ -1,4 +1,4 @@
-// How the Skills page shelves what the model can do.
+// How the Skills page groups what the model can do -- one card per shelf.
 //
 // The server registers skills as a flat list of tool names; fifty-odd rows of
 // identical weight is a wall, not a page. These are the shelves they go on,
@@ -7,15 +7,15 @@
 // so a new tool on the server is never hidden by an old client.
 
 export const SHELVES = [
-  { key: "time", label: "Time & schedule", icon: "calendar" },
-  { key: "files", label: "Files", icon: "folder" },
-  { key: "memory", label: "Memory", icon: "memory" },
-  { key: "canvas", label: "Canvas, decks & sheets", icon: "canvas" },
-  { key: "design", label: "Design & images", icon: "design" },
-  { key: "code", label: "Code", icon: "code" },
-  { key: "web", label: "The web", icon: "globe" },
-  { key: "browser", label: "Your browser", icon: "compass" },
-  { key: "other", label: "Other", icon: "tools" },
+  { key: "time", label: "Time & schedule", icon: "calendar", blurb: "Knows the time, keeps your calendar, and runs work later on its own." },
+  { key: "files", label: "Files", icon: "folder", blurb: "Finds and reads files in the folders you share with me." },
+  { key: "memory", label: "Memory", icon: "memory", blurb: "Remembers what you tell me, and searches everything we have said before." },
+  { key: "canvas", label: "Canvas, decks & sheets", icon: "canvas", blurb: "Writes and edits pages, slide decks, spreadsheets and wireframes." },
+  { key: "design", label: "Design & images", icon: "design", blurb: "Works to a design standard, checks the result, and makes pictures." },
+  { key: "code", label: "Code", icon: "code", blurb: "Reads, writes and runs code in a project, and in a sandbox." },
+  { key: "web", label: "The web", icon: "globe", blurb: "Searches the web and reads pages in a browser of my own." },
+  { key: "browser", label: "Your browser", icon: "compass", blurb: "Works in your own browser, where you are already signed in." },
+  { key: "other", label: "Other", icon: "tools", blurb: "Everything that does not fit on another card." },
 ];
 
 const RULES = [

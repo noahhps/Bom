@@ -6,6 +6,8 @@ import { serverOrigin } from "../lib/serverOrigin";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ServiceIcon } from "./ServiceIcon";
+import { SeekField } from "./bencho/SeekField";
+import { Switch } from "./bencho/Switch";
 
 function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
   const [key, setKey] = useState("");
@@ -103,19 +105,13 @@ function SkillRow({ skill, busy, onToggle, onKey, askFirst, onApproval }) {
           {skill.auto_approve ? "Always allowed" : "Ask first"}
         </button>
       ) : null}
-      <button
-        type="button"
-        className="switch"
-        role="switch"
-        aria-checked={skill.enabled}
-        aria-label={`${skill.enabled ? "Disable" : "Enable"} ${skill.name}`}
-        aria-pressed={skill.enabled}
+      <Switch
+        on={skill.enabled}
+        label={`${skill.enabled ? "Disable" : "Enable"} ${skill.name}`}
         disabled={busy || blocked}
         title={blocked ? `Needs ${skill.requires} first` : undefined}
-        onClick={() => onToggle(skill.name, !skill.enabled)}
-      >
-        <i />
-      </button>
+        onToggle={() => onToggle(skill.name, !skill.enabled)}
+      />
     </div>
   );
 }
@@ -482,18 +478,12 @@ function McpServerRow({
         >
           Sync
         </button>
-        <button
-          type="button"
-          className="switch"
-          role="switch"
-          aria-checked={server.enabled}
-          aria-label={`${server.enabled ? "Disable" : "Enable"} ${server.name}`}
-          aria-pressed={server.enabled}
+        <Switch
+          on={server.enabled}
+          label={`${server.enabled ? "Disable" : "Enable"} ${server.name}`}
           disabled={busy}
-          onClick={() => onToggle(server.id, !server.enabled)}
-        >
-          <i />
-        </button>
+          onToggle={() => onToggle(server.id, !server.enabled)}
+        />
         <button
           type="button"
           style={{
@@ -915,19 +905,19 @@ export function Skills({ api }) {
                   {loading ? "Checking" : `${on} on · ${skills.length} registered`}
                 </span>
                 <i />
-              </div>
-
-              {skills.length > 3 ? (
-                <div className="search" style={{ marginBottom: "16px" }}>
-                  <input
-                    type="search"
+                {/* The filter waits at the end of the lane as its own lens
+                    and opens into the field when pressed -- Bencho's search.
+                    A filter that is narrowing the list stays open. */}
+                {skills.length > 3 ? (
+                  <SeekField
                     value={query}
+                    onChange={setQuery}
                     placeholder="Filter skills by name or keyword"
-                    aria-label="Filter skills"
-                    onChange={(event) => setQuery(event.target.value)}
+                    label="Filter skills"
+                    width={300}
                   />
-                </div>
-              ) : null}
+                ) : null}
+              </div>
 
               {error ? (
                 <div className="callout" data-tint="ochre">
@@ -957,20 +947,11 @@ export function Skills({ api }) {
                     whenever the model asks for it.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="switch"
-                  role="switch"
-                  aria-checked={askFirst}
-                  // Both, as every other switch here does: `aria-checked` is
-                  // what `role="switch"` is read by, and the stylesheet keys
-                  // the on-state off `aria-pressed`.
-                  aria-pressed={askFirst}
-                  aria-label={askFirst ? "Stop asking before skills run" : "Ask before skills run"}
-                  onClick={() => setApproval({ ask_first: !askFirst })}
-                >
-                  <i />
-                </button>
+                <Switch
+                  on={askFirst}
+                  label={askFirst ? "Stop asking before skills run" : "Ask before skills run"}
+                  onToggle={() => setApproval({ ask_first: !askFirst })}
+                />
               </div>
 
               {skills.length === 0 && !loading ? (

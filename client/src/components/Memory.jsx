@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useMemory, when } from "../hooks/useMemory";
+import { Switch } from "./bencho/Switch";
 
 /* Artboard 1b: a soft pastel field for what it knows, an editable list beneath.
  *
@@ -339,18 +340,12 @@ export function Memory({ api, embedded = false }) {
               {SWITCHES.map((setting) => (
                 <div key={setting.id} className="toggle-row">
                   <span title={setting.note}>{setting.label}</span>
-                  <button
-                    type="button"
-                    className="switch"
-                    role="switch"
-                    aria-checked={Boolean(settings[setting.id])}
-                    aria-pressed={Boolean(settings[setting.id])}
-                    aria-label={setting.label}
+                  <Switch
+                    on={Boolean(settings[setting.id])}
+                    label={setting.label}
                     disabled={memory.loading}
-                    onClick={() => memory.setSetting(setting.id, !settings[setting.id])}
-                  >
-                    <i />
-                  </button>
+                    onToggle={() => memory.setSetting(setting.id, !settings[setting.id])}
+                  />
                 </div>
               ))}
             </div>

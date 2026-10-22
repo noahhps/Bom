@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { AgentFlower } from "./AgentFlower";
+import { FloatField } from "./bencho/FloatField";
+import { Icon } from "./Icon";
 import {
   DEFAULT_ORIGIN,
   needsExplicitOrigin,
@@ -24,8 +26,6 @@ export function TokenGate({ error, connecting, onSubmit, onRemote }) {
   const [shown, setShown] = useState(false);
   const desktop = needsExplicitOrigin();
   const [origin, setOrigin] = useState(() => serverOrigin() || DEFAULT_ORIGIN);
-  const tokenId = useId();
-  const originId = useId();
   const errorId = useId();
   const token = useRef(null);
 
@@ -68,51 +68,49 @@ export function TokenGate({ error, connecting, onSubmit, onRemote }) {
           }}
         >
           {desktop ? (
-            <div className="gate-field">
-              <label htmlFor={originId}>Server</label>
-              <input
-                id={originId}
-                className="gate-input"
-                type="text"
-                inputMode="url"
-                autoComplete="off"
-                autoCapitalize="off"
-                placeholder={DEFAULT_ORIGIN}
-                spellCheck="false"
-                value={origin}
-                onChange={(event) => setOrigin(event.target.value)}
-              />
-            </div>
+            <FloatField
+              label="Server"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="off"
+              placeholder={DEFAULT_ORIGIN}
+              spellCheck="false"
+              value={origin}
+              onChange={(event) => setOrigin(event.target.value)}
+            />
           ) : null}
 
-          <div className="gate-field">
-            <label htmlFor={tokenId}>Access token</label>
-            <div className="gate-secret">
-              <input
-                id={tokenId}
-                ref={token}
-                className="gate-input"
-                type={shown ? "text" : "password"}
-                autoComplete="current-password"
-                autoCapitalize="off"
-                placeholder="Paste your token"
-                spellCheck="false"
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? errorId : undefined}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-              />
+          {/* The label lifts into the outline as the field takes focus --
+              Bencho's label input; see components/bencho/FloatField. */}
+          <FloatField
+            label="Access token"
+            inputRef={token}
+            type={shown ? "text" : "password"}
+            autoComplete="current-password"
+            autoCapitalize="off"
+            placeholder="Paste your token"
+            spellCheck="false"
+            invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            trailingWidth={48}
+            trailing={
               <button
                 type="button"
-                className="gate-reveal"
+                className="flf-eye"
                 aria-pressed={shown}
                 aria-label={shown ? "Hide token" : "Show token"}
+                // Keep the field focused: the reveal is a glance, not a move.
+                onPointerDown={(event) => event.preventDefault()}
                 onClick={() => setShown((was) => !was)}
               >
-                {shown ? "Hide" : "Show"}
+                <Icon name="eye" />
+                <Icon name="eyeOff" />
               </button>
-            </div>
-          </div>
+            }
+          />
 
           {error ? (
             <p className="gate-error" id={errorId} role="alert">

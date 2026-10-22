@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { useDialog } from "./Dialog";
+import { Switch } from "./bencho/Switch";
 
 const STATE_LABEL = {
   off: "Off",
@@ -105,18 +106,12 @@ export function RemoteAccess({ api }) {
               this machine connects out to your relay and serves only your account.
             </p>
           </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={on}
-            aria-pressed={on}
-            aria-label="Allow remote access"
+          <Switch
+            on={on}
+            label="Allow remote access"
             disabled={busy || !status.configured}
-            onClick={() => act(on ? api.disableRemote : api.enableRemote)}
-          >
-            <i />
-          </button>
+            onToggle={() => act(on ? api.disableRemote : api.enableRemote)}
+          />
         </div>
 
         <div className="settings-row">

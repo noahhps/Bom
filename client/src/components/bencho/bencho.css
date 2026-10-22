@@ -1,0 +1,420 @@
+/* Bencho ports -- bencho.dev's interactive blocks (MIT), redrawn in Bom's
+ * tokens. Each block keeps its own short prefix so nothing here can reach a
+ * rule in styles.css: lq- (liquid switch), flf- (floating label field),
+ * seek- (search), otp- (code boxes), dropzone- (composer drop target).
+ *
+ * Bencho reads its own token set (--fill-on, --fill-slab, --pane ...). None
+ * of those exist here; every colour below is one of Bom's, so the blocks
+ * follow the accent engine and dark mode with the rest of the app. */
+
+/* ── liquid switch ─────────────────────────────────────────────────────── */
+.lq-switch {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb), 0.14);
+  cursor: pointer;
+  touch-action: none;
+  transition: background-color 360ms ease, box-shadow var(--dur-quick) ease;
+}
+.lq-switch:hover:not(:disabled) { background: rgba(var(--ink-rgb), 0.2); }
+.lq-switch[data-on] { background: var(--accent-fill, var(--accent)); }
+.lq-switch[data-on]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-fill, var(--accent)) 88%, var(--ink));
+}
+.lq-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.lq-switch:disabled { opacity: 0.5; cursor: default; }
+
+/* Three layers so three things can move the droplet without fighting:
+   the body is translated by the spring, the swell is scaled by CSS on
+   hover, and the drop is stretched by the spring's velocity. */
+.lq-switch-body {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+}
+.lq-switch-swell {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transition: scale 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lq-switch:hover:not(:disabled) .lq-switch-swell { scale: 1.08; }
+.lq-switch:active:not(:disabled) .lq-switch-swell { scale: 0.94; }
+.lq-switch-drop {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.18),
+    0 2px 6px -1px rgba(15, 23, 42, 0.12);
+}
+
+/* ── floating label field ──────────────────────────────────────────────── */
+.flf { position: relative; padding-top: 8px; }
+.flf-box { position: relative; width: 100%; background: var(--ground); cursor: text; }
+/* Sized here because styles.css gives every bare svg an icon's 18px. */
+.flf-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.flf-ring path {
+  fill: none;
+  stroke: var(--line-firm);
+  stroke-width: 1;
+  transition: stroke 220ms ease, stroke-width 220ms ease;
+}
+.flf[data-focus] .flf-ring path { stroke: var(--accent); stroke-width: 1.5; }
+.flf[data-invalid] .flf-ring path { stroke: var(--danger); }
+/* The notch opens from its own middle outward: each half of the gap is a
+   one-unit dash that slides off its own end. */
+.flf-gap {
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 0;
+  transition:
+    stroke 220ms ease,
+    stroke-width 220ms ease,
+    stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.flf[data-up] .flf-gap { stroke-dashoffset: -1; }
+
+.flf-label {
+  position: absolute;
+  left: var(--flf-x);
+  top: 50%;
+  z-index: 1;
+  font: 400 var(--t-body)/1 var(--font);
+  letter-spacing: -0.01em;
+  white-space: pre;
+  color: var(--text-faint);
+  transform-origin: left center;
+  transform: translateY(-50%);
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), color 220ms ease;
+  pointer-events: none;
+  user-select: none;
+}
+.flf[data-up] .flf-label {
+  transform: translateY(-50%) translateY(-25px) scale(0.8);
+  color: var(--text-dim);
+}
+.flf[data-focus] .flf-label { color: var(--accent); }
+.flf[data-invalid] .flf-label { color: var(--danger); }
+.flf-label span { display: inline-block; }
+.flf[data-focus] .flf-label span {
+  animation: flf-hop 460ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 24ms);
+}
+
+.flf-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 0 0 var(--flf-x);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  font: 400 var(--t-body)/1.2 var(--font);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  outline: none;
+}
+.flf-field::placeholder { color: transparent; }
+.flf[data-focus] .flf-field::placeholder { color: var(--text-faint); transition: color 200ms ease 160ms; }
+
+/* An eye that crossfades to a shut one -- Bencho's reveal, for the token. */
+.flf-eye {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+  border-radius: 999px;
+  color: var(--text-faint);
+  transition: color 160ms ease, background-color 160ms ease, scale 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.flf-eye:hover { color: var(--ink); background: rgba(var(--ink-rgb), 0.06); }
+.flf-eye:active { scale: 0.94; }
+.flf-eye svg {
+  grid-area: 1 / 1;
+  width: 17px;
+  height: 17px;
+  transition: opacity 220ms ease, scale 220ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease;
+}
+.flf-eye svg:last-child { opacity: 0; scale: 0.7; filter: blur(2px); }
+.flf-eye[aria-pressed="true"] svg:first-child { opacity: 0; scale: 0.7; filter: blur(2px); }
+.flf-eye[aria-pressed="true"] svg:last-child { opacity: 1; scale: 1; filter: none; }
+
+@keyframes flf-hop {
+  0% { transform: translateY(0); }
+  38% { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
+/* ── search ────────────────────────────────────────────────────────────── */
+.seek {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--seek-h);
+}
+.seek-skin {
+  position: relative;
+  width: var(--seek-h);
+  height: var(--seek-h);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line-firm);
+  overflow: hidden;
+  transform: translate(var(--lx, 0px), var(--ly, 0px)) scale(var(--sk, 1));
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms ease;
+}
+.seek:not([data-open]) .seek-skin:hover { --sk: 1.06; }
+.seek[data-press] .seek-skin {
+  --sk: 0.92;
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.seek[data-open] .seek-skin {
+  --lx: 0px;
+  --ly: 0px;
+  cursor: text;
+}
+.seek[data-open] .seek-skin:focus-within {
+  box-shadow:
+    inset 0 0 0 1.5px var(--accent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.seek-lens {
+  position: absolute;
+  left: calc((var(--seek-h) - var(--lens)) / 2);
+  top: 50%;
+  width: var(--lens);
+  height: var(--lens);
+  margin-top: calc(var(--lens) / -2);
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  pointer-events: none;
+  transition: stroke 220ms ease;
+}
+.seek-skin:hover .seek-lens { stroke: var(--ink); }
+.seek[data-open] .seek-lens { stroke: var(--text-faint); }
+.seek-field {
+  position: absolute;
+  left: calc((var(--seek-h) - var(--lens)) / 2 + var(--lens) + 9px);
+  right: 14px;
+  top: 0;
+  height: 100%;
+  border: 0;
+  background: none;
+  font: 400 var(--t-sm)/1 var(--font);
+  color: var(--ink);
+  outline: none;
+  opacity: var(--say, 0);
+  transform: translateX(calc((1 - var(--say, 0)) * -6px));
+  pointer-events: none;
+}
+.seek-field::-webkit-search-cancel-button { display: none; }
+.seek[data-open] .seek-field { pointer-events: auto; }
+.seek-field::placeholder { color: var(--text-faint); }
+.seek-hit {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.seek-hit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* ── code boxes ────────────────────────────────────────────────────────── */
+.otp { position: relative; flex: none; }
+.otp-row { position: relative; height: 44px; }
+.otp-row[data-shake] { animation: otp-shake 520ms cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+.otp-cell {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--line-firm);
+  transition:
+    box-shadow 200ms ease,
+    background-color 200ms ease,
+    scale 260ms cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.otp-cell[data-filled] { background: var(--surface); box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.22); }
+.otp-cell[data-here] {
+  box-shadow:
+    inset 0 0 0 1.5px var(--accent),
+    0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.otp[data-invalid] .otp-cell { box-shadow: inset 0 0 0 1px var(--danger); }
+.otp[data-invalid] .otp-char { color: var(--danger); }
+.otp[data-busy] .otp-cell {
+  animation: otp-breathe 900ms ease-in-out infinite;
+  animation-delay: calc(var(--i) * 70ms);
+}
+.otp[data-full]:not([data-busy]):not([data-invalid]) .otp-cell {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.otp-char {
+  font: 500 18px/1 var(--font-mono);
+  color: var(--ink);
+  animation: otp-in 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.otp-dash {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  margin: -1px 0 0 -4px;
+  border-radius: 2px;
+  background: var(--text-faint);
+}
+.otp-caret {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.otp-caret[data-on] { opacity: 1; animation: otp-blink 1.1s ease-in-out infinite alternate; }
+.otp-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  caret-color: transparent;
+  cursor: text;
+}
+
+@keyframes otp-in {
+  from { transform: translateY(45%) scale(0.86); opacity: 0; filter: blur(3px); }
+  to { transform: none; opacity: 1; filter: none; }
+}
+@keyframes otp-blink { from { opacity: 1; } to { opacity: 0.25; } }
+@keyframes otp-breathe { 50% { scale: 0.93; } }
+@keyframes otp-shake {
+  15% { transform: translateX(-7px); }
+  30% { transform: translateX(6px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-1px); }
+}
+
+/* ── composer drop target ──────────────────────────────────────────────── */
+.dropzone {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent-wash) 88%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+.dropzone[data-on] { opacity: 1; }
+.dropzone-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.dropzone-ring rect {
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  rx: 15px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 7 6;
+  animation: dropzone-march 900ms linear infinite;
+}
+.dropzone-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--ground);
+  color: var(--accent);
+  box-shadow: 0 6px 16px -8px rgba(var(--ink-rgb), 0.35);
+  translate: 0 6px;
+  transition: translate 420ms cubic-bezier(0.24, 1.34, 0.38, 1);
+}
+.dropzone-icon svg { width: 20px; height: 20px; }
+.dropzone[data-on] .dropzone-icon { translate: 0 -2px; animation: dropzone-bob 1.4s ease-in-out 420ms infinite alternate; }
+.dropzone-say { display: flex; flex-direction: column; gap: 3px; }
+.dropzone-say b { font: 500 var(--t-md)/1.2 var(--font); color: var(--ink); }
+.dropzone-say span { font: 400 var(--t-sm)/1.3 var(--font); color: var(--text-dim); }
+
+.composer[data-gulp] .composer-box { animation: dropzone-gulp 460ms cubic-bezier(0.3, 1.2, 0.4, 1); }
+
+@keyframes dropzone-march { to { stroke-dashoffset: -13; } }
+@keyframes dropzone-bob { to { translate: 0 -6px; } }
+@keyframes dropzone-gulp {
+  0% { scale: 1.015; }
+  35% { scale: 0.985; }
+  70% { scale: 1.005; }
+  100% { scale: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flf[data-focus] .flf-label span,
+  .otp-char,
+  .otp-caret[data-on],
+  .otp[data-busy] .otp-cell,
+  .otp-row[data-shake],
+  .dropzone-ring rect,
+  .dropzone[data-on] .dropzone-icon,
+  .composer[data-gulp] .composer-box { animation: none; }
+  .flf-label,
+  .flf-gap,
+  .lq-switch-swell,
+  .seek-skin { transition-duration: 160ms; }
+}

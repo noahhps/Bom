@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { StagedAttachments } from "./Attachments";
+import { DropZone } from "./bencho/DropZone";
 import { Icon } from "./Icon";
 import { STICK_PX } from "./MessageList";
 import { seedFromContext } from "../lib/autotheme";
@@ -261,6 +262,8 @@ export function Composer({
   // -- revoked on removal and on send, or the previews leak.
   const [staged, setStaged] = useState([]);
   const [dropping, setDropping] = useState(false);
+  // The box giving under a file as it lands -- see DropZone.
+  const [gulp, setGulp] = useState(false);
   const [popping, setPopping] = useState(false);
   const form = useRef(null);
   const input = useRef(null);
@@ -580,7 +583,11 @@ export function Composer({
       event.preventDefault();
       dragDepth.current = 0;
       setDropping(false);
-      if (event.dataTransfer?.files?.length) stage(event.dataTransfer.files);
+      if (event.dataTransfer?.files?.length) {
+        stage(event.dataTransfer.files);
+        setGulp(true);
+        setTimeout(() => setGulp(false), 460);
+      }
     };
     window.addEventListener("dragenter", enter);
     window.addEventListener("dragleave", leave);
@@ -654,12 +661,14 @@ export function Composer({
       onSubmit={submit}
       onClick={handleComposerClick}
       data-dropping={dropping ? "" : undefined}
+      data-gulp={gulp ? "" : undefined}
       data-popping={popping ? "" : undefined}
     >
       {/* The box and the tray under it move as one: the stack is what slides
           down out of the way and back up (see `.composer-stack`). */}
       <div className="composer-stack">
         <div className="composer-box">
+          <DropZone active={dropping} />
           <StagedAttachments items={staged} onRemove={unstage} />
 
           <textarea

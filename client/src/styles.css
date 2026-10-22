@@ -3855,23 +3855,7 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   font: 400 var(--t-sm)/1.5 var(--font);
   color: rgba(var(--ink-rgb), 0.72);
 }
-.switch {
-  width: 36px;
-  height: 20px;
-  border-radius: var(--r-pill);
-  background: rgba(var(--ink-rgb), 0.14);
-  padding: 3px;
-  display: flex;
-  flex: none;
-}
-.switch[aria-pressed="true"] { background: var(--accent-fill); justify-content: flex-end; }
-.switch i {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  display: block;
-}
+/* The switch itself is Bencho's liquid toggle now: components/bencho/. */
 
 .corpus { padding: 16px 18px; }
 .corpus-top { display: flex; align-items: center; gap: 11px; }
@@ -4010,7 +3994,6 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 .skill-item .skill-body { margin: 4px 0 0; }
 /* Switched off: dimmed, but never hidden -- the row is the only way back on. */
 .skill-item[data-off] .skill-item-text { opacity: 0.55; }
-.skill-item .switch:disabled { opacity: 0.5; cursor: default; }
 
 /* An MCP server's skills, folded under its name (Skills.jsx McpSkillGroup).
    One header row per server inside the same list, its tools nested and hidden
@@ -4573,8 +4556,10 @@ p.provider-problem { margin: 9px 0 0; font: 400 var(--t-sm)/1.5 var(--font); }
 }
 
 .remote-link-form { border-top: 1px solid var(--line-soft); padding-top: 16px; }
-.remote-code-row { display: flex; gap: 8px; }
-.remote-code-row .btn { flex: none; }
+/* The code boxes above, Continue under them: eight boxes and a button do not
+   share a line in a card this narrow. */
+.remote-code-row { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.remote-code-row .btn { flex: none; align-self: stretch; justify-content: center; }
 .remote-code-input {
   font-family: var(--font-mono);
   letter-spacing: 0.12em;
@@ -8438,7 +8423,6 @@ html:not([data-shell]) .screen[data-glass] {
 .settings-row b { display: block; font: 500 var(--t-body)/1.35 var(--font); color: var(--ink); }
 .settings-row p { margin: 6px 0 0; font: 400 var(--t-sm)/1.6 var(--font); color: var(--text-dim); }
 .settings-row > .btn,
-.settings-row > .switch { flex: none; }
 
 /* A small label beside an MCP preset or server: "Sign in", "Signed in". */
 .mcp-chip {

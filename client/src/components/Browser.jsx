@@ -7,6 +7,7 @@
  * and the browser will ask for the first time, spelt out here because the
  * dialogs that ask for them do not. */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Switch } from "./bencho/Switch";
 
 const POLL_MS = 1500;
 
@@ -167,18 +168,12 @@ export function Browser({ api }) {
               should not touch. Takes effect the next time it starts.
             </p>
           </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={Boolean(own.show_window)}
-            aria-pressed={Boolean(own.show_window)}
-            aria-label="Show Bom's browser window"
+          <Switch
+            on={Boolean(own.show_window)}
+            label="Show Bom's browser window"
             disabled={busy}
-            onClick={() => patch({ show_window: !own.show_window })}
-          >
-            <i />
-          </button>
+            onToggle={() => patch({ show_window: !own.show_window })}
+          />
         </div>
 
         {own.running ? (

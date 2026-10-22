@@ -5,6 +5,7 @@
  * numbers: an operator who raised a limit in the environment sees their
  * value here, not a default written into the client. */
 import { useCallback, useEffect, useState } from "react";
+import { Switch } from "./bencho/Switch";
 
 function format(value, unit) {
   if (value === null || value === undefined) return "—";
@@ -71,18 +72,12 @@ export function Enterprise({ api }) {
               message.
             </p>
           </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={on}
-            aria-pressed={on}
-            aria-label="Enterprise mode"
+          <Switch
+            on={on}
+            label="Enterprise mode"
             disabled={!state || saving}
-            onClick={toggle}
-          >
-            <i />
-          </button>
+            onToggle={toggle}
+          />
         </div>
       </div>
 

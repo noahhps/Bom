@@ -26,6 +26,7 @@ import {
   IconCopy,
   IconExternalLink,
   IconEye,
+  IconEyeOff,
   IconFileText,
   IconFolder,
   IconFolderOpen,
@@ -57,6 +58,7 @@ import {
   IconTopologyStar3,
   IconOctagonFilled,
   IconTrash,
+  IconUpload,
   IconUserCircle,
   IconUsers,
   IconWorld,
@@ -131,6 +133,11 @@ const GLYPHS = {
   // (see ServiceIcon) and the small inline tags.
   mail: IconMail,
   trash: IconTrash,
+  // A file going up into the composer, on its drop target.
+  upload: IconUpload,
+  // The token field's Show / Hide.
+  eye: IconEye,
+  eyeOff: IconEyeOff,
   design: IconPalette,
   apps: IconApps,
   device_hub: IconTopologyStar3,

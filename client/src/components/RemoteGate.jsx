@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { AgentFlower } from "./AgentFlower";
+import { CodeBoxes } from "./bencho/CodeBoxes";
 import { useDialog } from "./Dialog";
 import { isDesktop } from "../lib/serverOrigin";
 import {
@@ -616,17 +617,14 @@ function Devices({ account, error, connectingTo, onConnect, onChangeRelay }) {
           </div>
         ) : (
           <div className="remote-code-row">
-            <input
+            {/* Eight boxes that are one field -- Bencho's one-time code. */}
+            <CodeBoxes
               id={codeId}
-              className="gate-input remote-code-input"
-              type="text"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck="false"
-              placeholder="ABCD-EFGH"
-              aria-invalid={linkError ? true : undefined}
+              label="Device code"
               value={code}
-              onChange={(event) => setCode(formatCode(event.target.value))}
+              busy={linking}
+              invalid={Boolean(linkError)}
+              onChange={(typed) => setCode(formatCode(typed))}
             />
             <button
               type="submit"

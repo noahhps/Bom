@@ -22,6 +22,7 @@ import { RemoteAccess } from "./RemoteAccess";
 import { ThemePicker } from "./ThemePicker";
 import { APPEARANCES } from "../lib/appearance";
 import { DEFAULT_ACCENT } from "../lib/theme";
+import { Switch } from "./bencho/Switch";
 
 /* The menu. `words` are what the search also matches, beyond the label. */
 export const SETTINGS_SCREENS = [
@@ -123,17 +124,11 @@ function General({ pinned, onTogglePin, onSignOut, remoteName }) {
             <b>Keep the sidebar open</b>
             <p>Pinned, it takes its own width beside the conversation. Otherwise it opens when the pointer reaches the edge of the window.</p>
           </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={pinned}
-            aria-pressed={pinned}
-            aria-label="Keep the sidebar open"
-            onClick={onTogglePin}
-          >
-            <i />
-          </button>
+          <Switch
+            on={pinned}
+            label="Keep the sidebar open"
+            onToggle={onTogglePin}
+          />
         </div>
         {remoteName ? (
           <div className="settings-row">

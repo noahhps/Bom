@@ -5,6 +5,7 @@ import App from "./App";
 import { DialogProvider } from "./components/Dialog";
 import { applyAppearance, resolveAppearance, storedAppearance } from "./lib/appearance";
 import "./styles.css";
+import "./components/bencho/bencho.css";
 
 /* Mark the document when we are inside the desktop shell.
  *

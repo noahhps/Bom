@@ -8877,3 +8877,18 @@ html:not([data-shell]) .screen[data-glass] {
 }
 
 .navrail-rule { background: rgba(var(--ink-rgb), 0.12); }
+
+/* The Claude plan card's terminal command: the command, and a copy button
+   beside it (Providers.jsx ClaudePlanConnection). */
+.plan-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--ground);
+}
+.plan-command code { font: 400 var(--t-sm)/1.4 var(--font-mono); color: var(--ink); }
+.plan-command .btn { padding: 4px 10px; }

@@ -28,6 +28,7 @@ from .memory.indexer import Indexer
 from .orchestrator import Orchestrator
 from .remote import RemoteHost, build_remote_router
 from .schedule_api import build_schedule_router
+from .claude_code_api import build_claude_code_router
 from .scheduler import Scheduler
 from .providers import (
     NETWORK_URL_SETTING,
@@ -439,6 +440,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         prefix="/api",
     )
     app.include_router(build_schedule_router(store, scheduler, auth), prefix="/api")
+    # The Claude Code backend: its status, and the MCP bridge its `claude`
+    # processes call back on (which checks its own secret, not the token).
+    app.include_router(
+        build_claude_code_router(providers.claude_code, auth, settings.bind_host), prefix="/api"
+    )
     # The Code view's terminals and preview. Half behind the bearer token like
     # everything above; the socket and the preview's files check their own.
     app.include_router(

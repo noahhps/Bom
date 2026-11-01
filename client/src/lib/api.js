@@ -135,6 +135,9 @@ export function createApi(token, onUnauthorized = () => {}, { transport = null }
     // kept. Empty goes back to whatever the server's environment provides.
     setAnthropicKey: (key) =>
       json("/providers/cloud/key", { method: "PUT", body: JSON.stringify({ key }) }),
+    // Whether the Claude Code on the server is installed and signed in to a
+    // Claude plan -- asked afresh. A method and a yes/no, never a credential.
+    claudeCodeStatus: () => json("/providers/claude-code/status"),
     // Connections to OpenAI-compatible services (OpenAI, Gemini, Groq, a vLLM
     // box...). `check` tries an address and key and lists the models they
     // reach, before anything is saved.

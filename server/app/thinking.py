@@ -128,6 +128,9 @@ def control_for(provider: str, model: str) -> ThinkingControl:
     # says `reasoning: false` is drawn without this control.
     if provider == "openrouter":
         return _EFFORT
+    # Claude Code takes an effort word (`--effort`) for every model it offers.
+    if provider == "claude-code":
+        return _EFFORT
 
     name = _bare(model)
     for prefixes, control in _OLLAMA:

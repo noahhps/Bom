@@ -223,6 +223,13 @@ export function useModels(api) {
     [api, load],
   );
 
+  // Asks the server to look at its Claude Code again -- after the reader has
+  // installed it or run `claude auth login` -- then redraws with the answer.
+  const checkClaudeCode = useCallback(async () => {
+    await api.claudeCodeStatus();
+    await load();
+  }, [api, load]);
+
   return {
     providers,
     loading,
@@ -244,5 +251,6 @@ export function useModels(api) {
     removeConnection,
     setFallbackOrder,
     setAnthropicKey,
+    checkClaudeCode,
   };
 }

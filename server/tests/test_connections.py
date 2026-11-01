@@ -211,14 +211,14 @@ def test_connections_become_backends_and_join_the_fallback(tmp_path: Path):
          "api_key": "k", "model": "m", "enabled": 0},
     ])
     assert {"conn_a", "conn_b"} <= set(router.by_id) and "conn_off" not in router.by_id
-    assert router.fallback() == ["network", "openrouter", "cloud", "conn_a", "conn_b"]
+    assert router.fallback() == ["network", "openrouter", "cloud", "claudecode", "conn_a", "conn_b"]
     assert router.by_id["conn_b"].label == "Desk"
     # Windowed like what they are.
     assert router.by_id["conn_a"].context_tokens == 200_000
     assert router.by_id["conn_b"].context_tokens == 65536
 
     router.set_fallback_order(["conn_b", "cloud", LOCAL])
-    assert router.fallback() == ["conn_b", "cloud", "network", "openrouter", "conn_a"]
+    assert router.fallback() == ["conn_b", "cloud", "network", "openrouter", "claudecode", "conn_a"]
 
     # A changed key or model keeps the same provider object.
     same = router.by_id["conn_a"]

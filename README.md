@@ -39,6 +39,9 @@ Bom is a **desktop client** built with **Tauri + React** that lets you chat with
    The Tauri window will launch and you can start chatting.
 
 
+### Use your Claude plan
+**Settings → Models → Claude plan** answers with the Claude subscription you already have, through the Claude Code you installed and signed in to yourself (`claude auth login`). Bom never handles your Claude credentials, which is what Anthropic's terms require of third-party apps. See [docs/providers.md](docs/providers.md#your-claude-plan-through-claude-code).
+
 ### More model providers
 Besides Ollama, Anthropic and OpenRouter, **Settings → Models → Add a provider** connects OpenAI, Google Gemini, xAI, Mistral, DeepSeek, Groq, Cerebras, Together, Fireworks and Azure OpenAI. It also connects servers you run yourself (LM Studio, vLLM, llama.cpp, Jan) and any other OpenAI-compatible endpoint. Keys are checked before they're saved, and you set the order Auto falls back in. See [docs/providers.md](docs/providers.md).
 

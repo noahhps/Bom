@@ -44,7 +44,7 @@ from .providers import (
 from .providers import lan
 from .providers.openai_compat import OpenAICompatProvider
 from .providers.presets import get_connection_preset, list_connection_presets
-from .providers.router import FALLBACK_SETTING
+from .providers.router import CLAUDE_CODE, FALLBACK_SETTING
 from .mcp import icons as mcp_icons
 from .mcp.settings import MCP_DEFAULTS
 from .situation import Situation
@@ -1579,6 +1579,12 @@ def build_router(
                 {"key_source": "settings" if providers.cloud.api_key
                  else "environment" if getattr(provider, "configured", False) else ""}
                 if provider_id == CLOUD else {}
+            ),
+            # Whether Claude Code is installed and signed in, and how -- never
+            # a credential (providers/claude_code.py).
+            **(
+                {"plan": await providers.claude_code.auth_status()}
+                if provider_id == CLAUDE_CODE else {}
             ),
         }
 

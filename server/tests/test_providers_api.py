@@ -31,6 +31,7 @@ CATALOGUE = {
         {"id": "openrouter/auto", "name": "Auto"},
         {"id": "anthropic/claude-sonnet-4.5", "name": "Claude Sonnet 4.5"},
     ],
+    "claudecode": [{"id": "sonnet", "name": "Sonnet"}, {"id": "opus", "name": "Opus"}],
 }
 
 
@@ -69,7 +70,7 @@ def client(settings: Settings) -> TestClient:
 
 def test_models_lists_every_backend_with_its_catalogue(client: TestClient):
     payload = client.get("/api/models").json()["providers"]
-    assert [p["id"] for p in payload] == ["local", "network", "cloud", "openrouter"]
+    assert [p["id"] for p in payload] == ["local", "network", "cloud", "openrouter", "claudecode"]
     local = payload[0]
     assert local["healthy"] is True
     assert [m["id"] for m in local["models"]] == ["gpt-oss", "gemma4:12b"]
@@ -91,7 +92,7 @@ def test_status_names_which_backend_would_answer(client: TestClient):
     body = client.get("/api/status").json()
     assert body["serving"] == "local"
     assert body["local"]["url"].startswith("http")
-    assert {p["id"] for p in body["providers"]} == {"local", "network", "cloud", "openrouter"}
+    assert {p["id"] for p in body["providers"]} == {"local", "network", "cloud", "openrouter", "claudecode"}
 
     # Local down and OpenRouter connected: auto walks to the fallback in the
     # same order `resolve()` does, so this is genuinely what the next turn uses.

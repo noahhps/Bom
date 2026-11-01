@@ -15,6 +15,7 @@ const LABELS = {
   network: { name: "Network", blurb: "Ollama, on another machine on your network" },
   cloud: { name: "Cloud", blurb: "Anthropic" },
   openrouter: { name: "OpenRouter", blurb: "One key, several hundred models" },
+  claudecode: { name: "Claude plan", blurb: "Your Claude subscription, through Claude Code" },
 };
 
 /** What a backend is called: the four built in by name, a connection by its own. */
@@ -68,11 +69,15 @@ export function Providers({ models, provider, onProvider, serving }) {
                   short because it is set in the small caps of a card head. */}
               {entry.healthy
                 ? "reachable"
-                : entry.configured
-                  ? "unreachable"
-                  : entry.id === "network"
-                    ? "not connected"
-                    : "no key"}
+                : entry.id === "claudecode"
+                  ? entry.configured
+                    ? "not signed in"
+                    : "not installed"
+                  : entry.configured
+                    ? "unreachable"
+                    : entry.id === "network"
+                      ? "not connected"
+                      : "no key"}
             </span>
           </div>
 
@@ -84,6 +89,8 @@ export function Providers({ models, provider, onProvider, serving }) {
             <NetworkConnection models={models} entry={entry} />
           ) : entry.id === "cloud" ? (
             <AnthropicConnection models={models} entry={entry} />
+          ) : entry.id === "claudecode" ? (
+            <ClaudePlanConnection models={models} entry={entry} />
           ) : entry.connection ? (
             <ConnectionDetails models={models} entry={entry} />
           ) : (
@@ -551,6 +558,82 @@ function AnthropicConnection({ models, entry }) {
         </form>
       ) : null}
       {problem ? <p className="provider-problem">{problem}</p> : null}
+    </>
+  );
+}
+
+/** The reader's Claude plan, through the Claude Code they installed.
+ *
+ * There is nothing to paste and no sign-in here, on purpose: Anthropic only
+ * lets a plan be used through its own apps, so Bom runs the reader's own
+ * Claude Code and the sign-in happens there, in Anthropic's flow. This card
+ * says which of three states that is in and what to type to move it on. */
+function ClaudePlanConnection({ models, entry }) {
+  const plan = entry.plan || {};
+  const [checking, setChecking] = useState(false);
+  const [copied, setCopied] = useState("");
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      await models.checkClaudeCode();
+    } finally {
+      setChecking(false);
+    }
+  };
+  const copy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(text);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {
+      /* no clipboard over plain http -- the command is on screen to type */
+    }
+  };
+  const command = (text) => (
+    <span className="plan-command">
+      <code>{text}</code>
+      <button type="button" className="btn" onClick={() => copy(text)}>
+        {copied === text ? "Copied" : "Copy"}
+      </button>
+    </span>
+  );
+  const onKey = plan.method === "api_key" || plan.method === "api_key_helper";
+
+  return (
+    <>
+      {!plan.installed ? (
+        <p>
+          Use the Claude plan you already pay for. Install Claude Code on the machine running
+          Bom (code.claude.com), sign in to it with your Claude account, and Bom will answer
+          through it.
+        </p>
+      ) : !plan.logged_in ? (
+        <>
+          <p>
+            Claude Code {plan.version ? `${plan.version} ` : ""}is installed but not signed in.
+            In a terminal on the machine running Bom, run this and sign in with your Claude
+            account:
+          </p>
+          {command("claude auth login")}
+        </>
+      ) : (
+        <p>
+          {onKey
+            ? "Claude Code is signed in with an API key, so answers here are billed to that key rather than to a plan."
+            : "Signed in to your Claude plan through Claude Code. Answers count against your plan's usage limits, like any other Claude Code use."}{" "}
+          Bom's skills reach Claude through a connection only this machine can use.
+        </p>
+      )}
+      <p className="caveat" style={{ margin: "8px 0 0" }}>
+        Bom never sees your Claude password or sign-in token. It runs the Claude Code you
+        installed, unmodified, and the sign-in stays inside it, as Anthropic's terms require.
+      </p>
+      <div className="side-actions" style={{ marginTop: "10px" }}>
+        <button type="button" className="btn" disabled={checking} onClick={check}>
+          {checking ? "Checking…" : "Check again"}
+        </button>
+      </div>
     </>
   );
 }

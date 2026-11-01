@@ -1,7 +1,8 @@
 # Model providers
 
-Bom has four built-in backends: Ollama on this machine, Ollama on another
-machine on your network, Anthropic, and OpenRouter. **Settings → Models → Add a
+Bom has five built-in backends: Ollama on this machine, Ollama on another
+machine on your network, Anthropic (API key), OpenRouter, and your Claude plan
+through Claude Code. **Settings → Models → Add a
 provider** connects anything else that speaks OpenAI's chat-completions API.
 
 | Service | Preset | Key from |
@@ -70,6 +71,46 @@ handles the differences:
 - **Pictures.** Sent only to models the service lists as seeing images, or whose
   service generally does. They're never sent to a local server, where the model
   is unknown.
+
+## Your Claude plan (through Claude Code)
+
+The **Claude plan** card answers with the Claude subscription you already pay
+for (Pro, Max, Team or Enterprise) instead of an API key.
+
+Anthropic only allows a plan to be used through its own apps. Its terms
+(code.claude.com/docs/en/legal-and-compliance, "Authentication and credential
+use") say a third-party app may not offer Claude.ai login, route requests
+through plan credentials, or collect, store or pass along Claude.ai tokens.
+They also say this doesn't stop you signing in to the **unmodified Claude Code
+binary** with your own plan. So that's how Bom does it:
+
+- Bom runs the `claude` command you installed, as published, in print mode
+  (`claude -p`). Set `CLAUDE_CODE_BIN` if it isn't on the server's `PATH`.
+- You sign in inside Claude Code, through Anthropic's own flow:
+  `claude auth login` in a terminal on the machine running Bom. Bom asks
+  `claude auth status` whether that's done. That command reports a sign-in
+  method and a yes/no, never a token.
+- Bom never reads Claude Code's credentials, keychain entry or config files,
+  and never calls Anthropic itself.
+- It's your plan, used by you, on your machine. Usage counts against your
+  plan's limits like any other Claude Code use. Anthropic sets those limits
+  for ordinary individual use; for heavy automated work (many scheduled
+  tasks, say), use an API key on the Anthropic card instead.
+
+How a turn runs: each message starts one `claude -p` process. Claude Code's
+own tools are switched off (`--tools ""`). Bom's skills are offered to it as
+an MCP server served by Bom itself, on loopback, behind a secret that exists
+only for that turn (`/api/claude-code/mcp/<secret>`). When Claude calls a
+skill, Bom runs it as it would for any backend (approvals, canvas, the
+browser panel) and hands the result back to the same process, which carries
+on. Earlier messages are sent as a transcript ahead of the newest one, so
+Bom stays the one place the conversation lives.
+
+Claude Code runs in `data/claude-code/`, an empty folder, so no project's
+`CLAUDE.md`, settings or `.mcp.json` is loaded. `ANTHROPIC_API_KEY` is
+removed from its environment, so the plan pays rather than a key the server
+happens to have. Your own `~/.claude` settings still apply, because it's
+your Claude Code.
 
 ## Anthropic key
 

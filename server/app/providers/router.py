@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from ..config import Settings
 from .anthropic import AnthropicProvider
 from .base import ModelProvider
+from .claude_code import ClaudeCodeProvider
 from .ollama import OllamaProvider
 from .openai_compat import OpenAICompatProvider
 from .openrouter import OpenRouterProvider
@@ -31,6 +32,10 @@ LOCAL = "local"
 NETWORK = "network"
 CLOUD = "cloud"
 OPENROUTER = "openrouter"
+# The reader's own Claude plan, answered through the Claude Code they
+# installed and signed in to themselves -- see providers/claude_code.py for why
+# that is the only way Bom uses a subscription.
+CLAUDE_CODE = "claudecode"
 
 # Where the network Ollama's address is kept in `app_settings`.
 NETWORK_URL_SETTING = "ollama.network_url"
@@ -43,7 +48,7 @@ NETWORK_URL_SETTING = "ollama.network_url"
 # The network Ollama comes first of all: it is the user's own hardware on
 # their own network, so falling back to it keeps a conversation off the
 # internet when this machine's Ollama is down.
-FALLBACK_ORDER = (NETWORK, OPENROUTER, CLOUD)
+FALLBACK_ORDER = (NETWORK, OPENROUTER, CLOUD, CLAUDE_CODE)
 
 # Where a reordered fallback list is kept in `app_settings`, as a JSON list of
 # provider ids. Connections not named in it follow the ones that are, in the
@@ -99,6 +104,12 @@ class ProviderRouter:
             base_url=settings.openrouter_url,
             context_tokens=cloud_window,
         )
+        self.claude_code = ClaudeCodeProvider(
+            data_dir=settings.db_path.parent,
+            bind_host=settings.bind_host,
+            bind_port=settings.bind_port,
+            context_tokens=cloud_window,
+        )
         # Connections to OpenAI-compatible services, by connection id -- the
         # id is also their provider id everywhere else (the picker, /api/chat's
         # `provider`, the fallback order). See load_connections.
@@ -117,6 +128,7 @@ class ProviderRouter:
             NETWORK: self.network,
             CLOUD: self.cloud,
             OPENROUTER: self.openrouter,
+            CLAUDE_CODE: self.claude_code,
             **self.connections,
         }
 
@@ -254,5 +266,6 @@ class ProviderRouter:
         await self.local.aclose()
         await self.network.aclose()
         await self.openrouter.aclose()
+        await self.claude_code.aclose()
         for provider in [*self.connections.values(), *self._retired]:
             await provider.aclose()

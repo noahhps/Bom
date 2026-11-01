@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // The API lives in the same origin in production -- FastAPI serves `dist/` and
 // `/api` from one process. In development Vite serves the UI instead, so /api
@@ -10,7 +11,10 @@ import react from "@vitejs/plugin-react";
 const API_ORIGIN = process.env.API_ORIGIN || "http://127.0.0.1:8080";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  // BoardUI's components import each other as `@/components/...` and
+  // `@/utils/...`, the way they are laid out in BoardUI's own repository.
+  resolve: { alias: { "@": resolve(__dirname, "src") } },
   server: {
     proxy: {
       // `ws` for the Code view's terminal, whose socket lives under /api too.

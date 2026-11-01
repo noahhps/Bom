@@ -61,3 +61,17 @@ the `.jsx` files alone.
   means copying these files over the current ones — they are self-consistent
   as a set, and expect a server that still accepts `attachments` and `think`,
   so restore `20260820-161938-backend-files-thinking` with them.
+
+- `20261101-pre-boardui` — the Bloom look (petal accents tinting every
+  surface, Lora Italic labels, Bricolage headings, Tabler icons, hand-drawn
+  controls), taken before the overhaul onto BoardUI (boardui.com). Contains
+  `styles.css`, `quickview.css`, every top-level component, `App.jsx`,
+  `main.jsx`, `lib/theme.js`, `lib/appearance.js`, `index.html`,
+  `package.json`, `vite.config.js`, the manifest and the fonts.
+
+  Restoring it also means undoing the toolchain the overhaul added: copy back
+  `package.json` and `vite.config.js` from the snapshot (React 18, no
+  Tailwind), delete `client/src/index.css`, `client/src/styles/`,
+  `client/src/components/base/`, `client/src/components/foundations/`,
+  `client/src/components/ui/`, `client/src/utils/` and `client/jsconfig.json`,
+  point `main.jsx` back at `styles.css`, and run `npm install`.

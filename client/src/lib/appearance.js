@@ -22,7 +22,7 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 
 // What the browser chrome paints around the page: the status bar on a phone,
 // the title bar where the shell lets it. The shell's own ground in each mode.
-const THEME_COLOR = { light: "#e2e5ea", dark: "#000000" };
+const THEME_COLOR = { light: "#ffffff", dark: "#121212" };
 
 /** The preference this device has saved, or "system". */
 export function storedAppearance() {
@@ -70,6 +70,9 @@ export function applyAppearance(mode) {
     );
   }
   root.setAttribute("data-theme", mode);
+  // BoardUI's tokens flip on a `.dark` class rather than an attribute; both
+  // are kept so Bom's own `[data-theme="dark"]` rules and BoardUI's agree.
+  root.classList.toggle("dark", mode === "dark");
   root.style.colorScheme = mode;
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", THEME_COLOR[mode] || THEME_COLOR.light);

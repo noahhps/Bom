@@ -11,6 +11,14 @@
  * is set up, and how to stop being connected. */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/base/segmented-control/segmented-control";
+import { Switch } from "@/components/base/switch/switch";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+
 import { Browser } from "./Browser";
 import { Design } from "./Design";
 import { Enterprise } from "./Enterprise";
@@ -123,17 +131,7 @@ function General({ pinned, onTogglePin, onSignOut, remoteName }) {
             <b>Keep the sidebar open</b>
             <p>Pinned, it takes its own width beside the conversation. Otherwise it opens when the pointer reaches the edge of the window.</p>
           </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={pinned}
-            aria-pressed={pinned}
-            aria-label="Keep the sidebar open"
-            onClick={onTogglePin}
-          >
-            <i />
-          </button>
+          <Switch isSelected={pinned} onChange={onTogglePin} aria-label="Keep the sidebar open" />
         </div>
         {remoteName ? (
           <div className="settings-row">
@@ -141,9 +139,9 @@ function General({ pinned, onTogglePin, onSignOut, remoteName }) {
               <b>Disconnect from {remoteName}</b>
               <p>Back to your devices. You stay signed in to your relay account, and everything stays on the host.</p>
             </div>
-            <button type="button" className="btn" onClick={onSignOut}>
+            <Button variant="secondary" size="small" onClick={onSignOut}>
               Disconnect
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="settings-row">
@@ -151,9 +149,9 @@ function General({ pinned, onTogglePin, onSignOut, remoteName }) {
               <b>Sign out</b>
               <p>Forgets the token on this device only. Your conversations stay on the server.</p>
             </div>
-            <button type="button" className="btn" onClick={onSignOut}>
+            <Button variant="secondary" size="small" onClick={onSignOut}>
               Sign out
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -167,21 +165,21 @@ function Appearance({ theme, appearance }) {
       <h3 className="settings-sub">Mode</h3>
       {/* For this device only -- like the pinned rail, kept here rather than
           on the server. The accent below is drawn for whichever is in force. */}
-      <div className="appearance" role="radiogroup" aria-label="Appearance">
+      <SegmentedControl
+        aria-label="Appearance"
+        className="self-start"
+        selectedKeys={appearance?.preference ? [appearance.preference] : []}
+        onSelectionChange={(keys) => {
+          const [next] = [...keys];
+          if (next) appearance?.setPreference(next);
+        }}
+      >
         {APPEARANCES.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="radio"
-            aria-checked={appearance?.preference === option.id}
-            data-mode={option.id}
-            onClick={() => appearance?.setPreference(option.id)}
-          >
-            <i aria-hidden="true" />
+          <SegmentedControlItem key={option.id} id={option.id} className="px-4">
             {option.name}
-          </button>
+          </SegmentedControlItem>
         ))}
-      </div>
+      </SegmentedControl>
 
       {/* The accent, app-wide: the bottom of the stack of three. A
           conversation with no accent of its own falls through to its project,
@@ -337,9 +335,7 @@ export function Settings({
           </section>
         </div>
 
-        <button type="button" className="settings-close" aria-label="Close settings" title="Close (Esc)" onClick={onClose}>
-          <Icon name="close" />
-        </button>
+        <CloseButton size="sm" className="settings-close" aria-label="Close settings" title="Close (Esc)" onClick={onClose} />
       </div>
     </div>
   );

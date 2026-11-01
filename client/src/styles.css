@@ -582,9 +582,14 @@ button {
 .icon-btn:disabled { opacity: 0.4; cursor: default; }
 .icon-btn:disabled:hover { background: none; }
 
-svg {
+/* An svg that states its own size (every BoardUI glyph that is not a Remix
+   icon -- the close cross, chevrons, carets) keeps it; Remix icons are sized
+   by the rule in styles/bom-boardui.css. */
+svg:not([width]) {
   width: 18px;
   height: 18px;
+}
+svg {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -656,40 +661,9 @@ svg {
 html[data-shell] .appbar { padding-left: 84px; }
 html[data-shell][data-fullscreen] .appbar { padding-left: 12px; }
 .appbar-fill { flex: 1; align-self: stretch; }
-.appbar-rail {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-card);
-  color: var(--text-dim);
-  transition: color var(--dur-quick) ease, background var(--dur-quick) ease;
-}
-.appbar-rail:hover { background: rgba(var(--ink-rgb), 0.07); color: var(--ink); }
-.appbar-rail[aria-pressed="true"] { color: var(--ink); }
-.appbar-rail svg { width: 18px; height: 18px; }
-.appbar-rail:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--sidebar), 0 0 0 4px var(--accent);
-}
-
-/* Home and Studio, beside the sidebar toggle: the segmented control, sized
-   down to sit in the 44px bar -- 26px options in a 2px track, 32px in all --
-   and centred on the bar like the toggle and the window's buttons.
-   `.segmented` pins itself to the top of its row (right on a page, where it
-   heads the content); here that left it 3px under the bar's top edge and 9px
-   over its bottom. */
-/* Scoped under `.appbar` so it outranks `.segmented`, which comes later in
-   the sheet at the same weight and would otherwise win. */
-.appbar .appbar-spaces { padding: 2px; align-self: center; }
-.appbar .appbar-spaces > button {
-  height: 26px;
-  padding: 0 11px;
-  gap: 6px;
-  font-size: var(--t-xs);
-}
-.appbar .appbar-spaces svg { width: 14px; height: 14px; }
+/* The toggle, the settings control and the Home/Studio switch are BoardUI
+   components now (see AppBar.jsx) and are styled by their own utilities. */
+.appbar .appbar-spaces { align-self: center; }
 
 /* -- the sidebar, a solid surface -------------------------------------------
  *
@@ -3444,71 +3418,8 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   margin-top: 14px;
 }
 .composer-row .spacer { flex: 1; }
-/* Chat, Code, Design: what a new conversation is started as. A segmented
-   control on a hairline track, the chosen kind lifted in the ink. */
-/* The segmented control (see `.segmented`), with its chosen plate as a
-   window that slides to the kind picked: the same ink plate, the same
-   hairline track on the surface. */
-.composer-kind {
-  --kind-grad: linear-gradient(90deg, var(--ink), var(--ink));
-  position: relative;
-  isolation: isolate;
-  display: inline-grid;
-  /* As many columns as kinds on offer (`--n`, set by KindControl). */
-  grid-template-columns: repeat(var(--n, 3), 1fr);
-  gap: 0;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--surface);
-}
-/* The theme's gradient lies across the whole track, faint; the chosen kind
-   is a window over it at full strength, showing only its own third of the
-   gradient, and slides to the next when the choice changes. */
-.composer-kind::before,
-.composer-kind::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  border-radius: var(--r-pill);
-  pointer-events: none;
-}
-.composer-kind::before { content: none; }
-.composer-kind::after {
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / var(--n, 3));
-  border-radius: calc(var(--r-pill) - 2px);
-  transform: translateX(calc(var(--i, 0) * 100%));
-  background: var(--kind-grad);
-  background-size: 300% 100%;
-  background-position: calc(var(--i, 0) * 50%) 0;
-  transition: transform var(--dur-settle) var(--spring), background-position var(--dur-settle) ease;
-}
-.composer-kind button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: calc(var(--r-pill) - 2px);
-  font: 500 var(--t-sm)/1 var(--font);
-  color: var(--text-dim);
-  transition: background var(--dur-quick) ease, color var(--dur-quick) ease;
-}
-.composer-kind button:hover:not(:disabled) { color: var(--ink); }
-.composer-kind button { justify-content: center; }
-.composer-kind button[aria-checked="true"],
-.composer-kind button[aria-checked="true"]:hover:not(:disabled) { color: var(--on-ink); }
-.composer-kind button:disabled { opacity: 0.45; cursor: default; }
-.composer-kind button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.composer-kind svg { width: 15px; height: 15px; flex: none; }
-/* Narrow, the words go and the glyphs stay. */
-@media (max-width: 560px) {
-  .composer-kind button { padding: 0 8px; }
-  .composer-kind span { display: none; }
-}
+/* Chat, Code, Design and the reasoning effort are BoardUI SegmentedControls
+   (see Composer.jsx), styled by BoardUI. */
 .composer-bottom-controls {
   display: flex;
   align-items: center;
@@ -3643,21 +3554,6 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
   outline: none;
 }
 .manage-confirm input:focus { border-color: var(--accent); }
-
-/* The reasoning selector reads as one more chip in the row. */
-.effort { display: flex; align-items: center; gap: 4px; }
-.effort button {
-  padding: 7px 11px;
-  border-radius: var(--r-pill);
-  font: 400 var(--t-xs)/1 var(--font);
-  letter-spacing: var(--track-body);
-  color: rgba(var(--ink-rgb), 0.55);
-}
-.effort button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--ink);
-}
-.effort button:disabled { opacity: 0.45; cursor: default; }
 
 /* Light, dark or the device's own -- a three-way segmented control, drawn the
    way Vercel draws its theme switcher: a hairline track, and the chosen
@@ -8263,24 +8159,9 @@ html:not([data-shell]) .screen[data-glass] {
 .screen[data-glass] .composer-stack:not(:has(.composer-tray)) .composer-box:not(.code-chat *) {
   box-shadow: 0 12px 32px -20px rgba(var(--shadow-rgb), 0.45);
 }
-/* ...but opaque is not the same as white. The starters and pills are soft
-   fills mixed into the solid surface rather than laid over the frost --
-   still solid enough to read, no longer a row of hairline boxes. */
-.screen[data-glass] .starters .starter:not(.code-chat *) {
-  background: color-mix(in srgb, var(--ink) 5%, var(--sheet-surface));
-  border-color: transparent;
-}
-.screen[data-glass] .starters .starter:not(.code-chat *):hover {
-  background: color-mix(in srgb, var(--ink) 9%, var(--sheet-surface));
-}
-.screen[data-glass] :is(.chip, .btn):not([data-on]):not(.code-chat *) {
-  background: color-mix(in srgb, var(--ink) 6%, var(--sheet-surface));
-  border-color: transparent;
-}
-.screen[data-glass] .chip[data-on]:not(.code-chat *) {
-  background: var(--accent-fill);
-  border-color: transparent;
-}
+/* The starters, chips and buttons on the glass used to be soft grey fills.
+   They are BoardUI's secondary buttons now, the same on every screen -- see
+   styles/bom-boardui.css. */
 .screen[data-glass] :is(.code-picker-recent, .code-picker-dirs) li + li { border-top-color: var(--line-solid); }
 
 /* The Code view hides the sheet's glow behind the editor; its project page is

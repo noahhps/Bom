@@ -1,4 +1,10 @@
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/base/segmented-control/segmented-control";
+
 import { Icon } from "./Icon";
+import { Glyph, QuietIconButton } from "./ui";
 
 /* The row across the top of the window: the sidebar's toggle at its left,
  * and the settings gear at its right.
@@ -28,42 +34,41 @@ export function AppBar({
 }) {
   return (
     <header className="appbar" data-tauri-drag-region>
-      <button
-        type="button"
+      <QuietIconButton
+        size="small"
         className="appbar-rail"
-        aria-pressed={sidebarOpen}
-        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-        title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+        pressed={sidebarOpen}
+        label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
         onClick={onToggleSidebar}
+        icon={<Icon name="sidebar" filled={sidebarOpen} />}
+      />
+      {/* BoardUI's segmented control: a tertiary track and a white thumb that
+          slides behind the chosen space. */}
+      <SegmentedControl
+        aria-label="Space"
+        className="appbar-spaces"
+        selectedKeys={[space]}
+        onSelectionChange={(keys) => {
+          const [next] = [...keys];
+          if (next) onSpace?.(next);
+        }}
       >
-        <Icon name="sidebar" filled={sidebarOpen} />
-      </button>
-      <div className="segmented appbar-spaces" role="tablist" aria-label="Space">
         {SPACES.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={space === item.id}
-            data-active={space === item.id ? "" : undefined}
-            onClick={() => onSpace?.(item.id)}
-          >
-            <Icon name={item.icon} />
+          <SegmentedControlItem key={item.id} id={item.id} className="gap-1.5 px-2.5 py-0.5">
+            <Glyph name={item.icon} className="size-4" />
             {item.label}
-          </button>
+          </SegmentedControlItem>
         ))}
-      </div>
+      </SegmentedControl>
       <div className="appbar-fill" data-tauri-drag-region />
-      <button
-        type="button"
+      <QuietIconButton
+        size="small"
         className="appbar-rail appbar-settings"
-        aria-pressed={settingsOpen}
-        aria-label="Settings"
-        title="Settings (⌘,)"
+        pressed={settingsOpen}
+        label="Settings (⌘,)"
         onClick={onSettings}
-      >
-        <Icon name="gear" />
-      </button>
+        icon="gear"
+      />
     </header>
   );
 }

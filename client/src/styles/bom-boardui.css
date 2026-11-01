@@ -1,0 +1,959 @@
+/* Bom, dressed in BoardUI.
+ *
+ * styles.css names its colours, radii, shadows and type once, as custom
+ * properties, and every rule after that reads them. So the overhaul starts
+ * here: each of those names is pointed at the BoardUI token that does the same
+ * job, and the whole sheet follows without its rules changing. Components that
+ * have been rebuilt on BoardUI's own React components (buttons, menus, dialogs,
+ * switches, tabs, inputs) are styled by BoardUI directly; this map is what
+ * makes everything still drawn by styles.css sit beside them as one system.
+ *
+ * The mapping, in BoardUI's words:
+ *   page ground        background/full          (white / neutral-925)
+ *   the shell & rail   background/secondary     (neutral-100 / neutral-900)
+ *   cards, menus       background/primary       (white / neutral-800)
+ *   hairlines          border/button, separator (neutral-200 / neutral-700-800)
+ *   text               text/primary, secondary
+ *   what you act on    the accent ramp, accent-50 ... accent-950
+ *
+ * The accent ramp is the one thing that moves. lib/theme.js writes all eleven
+ * steps onto <html> from whatever petal a chat wears, so a BoardUI primary
+ * button, a focus ring, a selected nav row and Bom's own links all change
+ * colour together. With no accent set it is BoardUI's default blue.
+ *
+ * Specificity: the first block's `:root, :root[data-theme="dark"]` list lets
+ * it override both of the earlier :root blocks in styles.css; the dark block
+ * after it is only for the few tokens whose BoardUI counterpart differs by
+ * mode in a way the `.dark` class does not already handle.
+ */
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/ibm-plex-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/ibm-plex-mono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/ibm-plex-mono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root,
+:root[data-theme="dark"] {
+  /* -- surfaces ------------------------------------------------------------ */
+  --shell: var(--color-background-secondary-default);
+  --sidebar: var(--color-background-secondary-default);
+  --rail: var(--color-background-secondary-default);
+  --ground: var(--color-background-full);
+  --sheet: var(--color-background-full);
+  --sheet-surface: var(--color-background-primary-default);
+  --sheet-rail: var(--color-background-secondary-default);
+  --surface: var(--color-background-primary-default);
+  --menu: var(--color-background-primary-default);
+  --menu-well: var(--color-background-secondary-default);
+  --grid-line: var(--color-background-secondary-default);
+  --grid-dot: transparent;
+
+  /* -- ink and text -------------------------------------------------------- */
+  --ink: var(--color-text-primary);
+  --text: var(--color-text-primary);
+  --ink-light: var(--color-background-full);
+  --on-ink: var(--color-background-full);
+  --ink-hover: color-mix(in srgb, var(--color-text-primary) 85%, var(--color-background-full));
+  /* BoardUI's secondary text is neutral-500; Bom's two greys carry 11-13px
+     labels and are kept at AA, so "dim" sits a step darker than BoardUI's
+     own and "faint" on it. */
+  --text-dim: var(--color-neutral-600);
+  --text-faint: var(--color-text-secondary);
+
+  /* -- hairlines ----------------------------------------------------------- */
+  --line: var(--color-border-button-default);
+  --line-soft: var(--color-separator-border);
+  --line-firm: var(--color-border-button-hover);
+  --line-strong: var(--color-border-button-active);
+  --line-solid: var(--color-border-button-default);
+
+  /* -- the accent ---------------------------------------------------------- */
+  --accent: var(--color-accent-600);
+  --accent-hover: var(--color-accent-700);
+  --accent-fill: var(--color-accent-600);
+  --accent-soft: var(--color-accent-400);
+  --accent-field: var(--color-accent-100);
+  --accent-wash: var(--color-accent-50);
+  --on-accent: var(--color-white);
+  --accent-pure: var(--color-accent-500);
+  --text-decode: var(--color-accent-600);
+
+  /* -- meaning ------------------------------------------------------------- */
+  --green: var(--color-status-lime-text);
+  --green-field: var(--color-status-lime-background);
+  --green-wash: var(--color-background-secondary-default);
+  --ochre: var(--color-status-yellow-text);
+  --ochre-field: var(--color-status-yellow-background);
+  --danger: var(--color-text-error-primary);
+  --danger-fill: var(--color-red-600);
+  --danger-fill-hover: var(--color-red-700);
+  --quiet-mark: var(--color-neutral-300);
+
+  /* -- shape --------------------------------------------------------------- *
+   * BoardUI's ladder: rounded-2lg (10px) for buttons and rows, rounded-xl
+   * (12px) for inputs and the composer, rounded-2xl (16px) for menus and
+   * floating panels, rounded-3xl (24px) for cards and the sidebar. Bom's
+   * cards are often small and dense, so they take the 2xl step; the
+   * sidebar and the big page panels take the 3xl one directly. */
+  --r-pill: var(--radius-2lg);
+  --r-card: var(--radius-2xl);
+  --r-surface: var(--radius-2xl);
+  --r-control: var(--radius-xl);
+  --r-bubble: var(--radius-2xl);
+  --r-float: var(--radius-2xl);
+
+  /* -- elevation ----------------------------------------------------------- */
+  --elevation-float: var(--shadow-dropdown), 0 12px 32px -12px rgb(0 0 0 / 0.12);
+  --glow-accent:
+    0 0 0 1px var(--color-border-button-hover),
+    var(--shadow-xs);
+
+  /* -- type ---------------------------------------------------------------- *
+   * BoardUI is Inter top to bottom, mono only for machine text. Bom's second
+   * voice (Lora Italic) and its display face (Bricolage) fold into Inter, and
+   * its seven-step scale lands on BoardUI's: caption-2 11, caption-1 12,
+   * body-2 13, body 14, headline 16, title-2 20, title-1 24. */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-sans);
+  --font-display: var(--font-sans);
+  --font-thought: var(--font-sans);
+  --font-text: var(--font-sans);
+  --font: var(--font-sans);
+  --t-micro: 0.6875rem;
+  --t-xs: 0.75rem;
+  --t-sm: 0.8125rem;
+  --t-md: 0.875rem;
+  --t-body: 0.9375rem;
+  --t-lg: 1.25rem;
+  --t-xl: 1.5rem;
+  --track-label: 0;
+  --track-display: -0.01em;
+  --track-body: 0;
+
+  /* -- channels for the old rgba() tints ------------------------------------ */
+  --ink-rgb: 10, 10, 10;
+  --shadow-rgb: 0, 0, 0;
+
+  /* -- glass: BoardUI is opaque, so the frosted sheet becomes a plain one. -- */
+  --glass-fill: var(--color-background-primary-default);
+  --glass-pill: var(--color-background-secondary-default);
+  --glass-edge: var(--color-border-button-default);
+
+  --bloom-opacity: 0.18;
+}
+
+:root[data-theme="dark"] {
+  /* BoardUI's dark accents read from the light end of the ramp. */
+  --accent: var(--color-accent-400);
+  --accent-hover: var(--color-accent-300);
+  --accent-soft: var(--color-accent-300);
+  --accent-field: color-mix(in srgb, var(--color-accent-900) 55%, transparent);
+  --accent-wash: color-mix(in srgb, var(--color-accent-950) 50%, transparent);
+  --text-decode: var(--color-accent-400);
+  --text-dim: var(--color-neutral-300);
+  --text-faint: var(--color-neutral-400);
+  --danger-fill: var(--color-red-500);
+  --danger-fill-hover: var(--color-red-400);
+  --quiet-mark: var(--color-neutral-700);
+  --ink-rgb: 250, 250, 250;
+  --bloom-opacity: 0.22;
+}
+
+/* -- the frame ---------------------------------------------------------------
+ * BoardUI's app shell: a white page with the sidebar floating on it as a
+ * rounded, softly elevated card. Bom's rail keeps every behaviour it had
+ * (hover to reveal, pin, resize); this is only how it looks. */
+body {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  font-feature-settings: "cv11", "ss01";
+}
+
+::selection {
+  background: var(--color-accent-100);
+  color: var(--color-text-primary);
+}
+:root[data-theme="dark"] ::selection {
+  background: color-mix(in srgb, var(--color-accent-700) 60%, transparent);
+  color: var(--color-white);
+}
+
+/* Bom's glyph rule paints every <svg> as a stroked outline. Remix icons --
+   BoardUI's set, and now Bom's too (components/Icon.jsx) -- are filled
+   shapes, so they keep that rule's sizing but not its stroke. Inside a
+   BoardUI control a `size-*` utility sizes them, and utilities outrank this
+   layer. */
+svg.remixicon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  stroke: none;
+}
+svg.remixicon * {
+  stroke: none;
+}
+
+/* Keyboard focus, everywhere Bom draws its own control: BoardUI's ring. */
+:where(button, a, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-border-focus-ring);
+  outline-offset: 2px;
+}
+
+/* -- the app frame and sidebar ---------------------------------------------
+ * BoardUI's app shell (application/app-shell): the window is the white page,
+ * and the sidebar floats on it, inset 12px, as a rounded-3xl card in the
+ * secondary grey with the "sidebar elevation" shadow. Navigation rows are
+ * BoardUI's NavItem: 36px, rounded-2lg, a secondary-grey label and icon, a
+ * hover plate, and for the current page the accent gradient with the
+ * "nav selected" ring and white type. Everything that makes Bom's rail work --
+ * hover to reveal, pin, drag to resize, the folded lists -- is untouched. */
+html,
+body,
+#root,
+.app {
+  background: var(--color-background-full);
+}
+.appbar {
+  background: var(--color-background-full);
+}
+
+.navrail-inner,
+.navrail[data-open] .navrail-inner,
+.app[data-rail="pinned"] .navrail-inner,
+html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
+  background: var(--color-background-secondary-default) !important;
+  box-shadow: var(--shadow-sidebar) !important;
+}
+.navrail-inner,
+.navrail[data-open] .navrail-inner {
+  inset: 0 auto 12px 12px;
+  width: calc(var(--rail-w) - 16px);
+  padding: 12px;
+  gap: 24px;
+  border: 1px solid var(--color-border-button-white);
+  border-radius: var(--radius-3xl);
+}
+.app:not([data-rail="pinned"]) .navrail-inner,
+.app:not([data-rail="pinned"]) .navrail[data-open] .navrail-inner {
+  width: calc(var(--rail-open) - 16px);
+  transform: translateX(calc(-100% - 24px));
+}
+.app:not([data-rail="pinned"]) .navrail[data-open] .navrail-inner {
+  transform: translateX(0);
+}
+
+.navrail[data-open] .navrail-dest { gap: 4px; }
+.navrail[data-open] .navrail-dest > button,
+.navrail[data-open] .navrail-group > .navrail-section {
+  min-height: 36px;
+  padding: 8px;
+  border-radius: var(--radius-2lg);
+  color: var(--color-text-secondary);
+}
+.navrail[data-open] .lbl-h {
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  letter-spacing: 0;
+}
+.navrail-dest button > svg,
+.navrail-group > .navrail-section > svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-foreground-icon-secondary);
+}
+.navrail[data-open] .navrail-dest button > svg,
+.navrail[data-open] .navrail-group > .navrail-section > svg {
+  margin-right: 8px;
+}
+.navrail[data-open] .navrail-dest button:not([aria-current="page"]):hover,
+.navrail[data-open] .navrail-group > .navrail-section:not([aria-current="page"]):hover {
+  background: var(--color-background-secondary-hover);
+  color: var(--color-text-primary);
+}
+.navrail-dest button[aria-current="page"],
+.navrail[data-open] .navrail-dest button[aria-current="page"],
+.navrail-group > .navrail-section[aria-current="page"] {
+  background: linear-gradient(180deg, var(--color-accent-500), var(--color-accent-600));
+  box-shadow: var(--shadow-nav-selected);
+  color: var(--color-white);
+}
+.navrail-dest button[aria-current="page"] > svg,
+.navrail-group > .navrail-section[aria-current="page"] > svg,
+.navrail-group > .navrail-section[aria-current="page"] ~ .navrail-fold {
+  color: var(--color-white);
+}
+.navrail[data-open] .navrail-dest button[aria-current="page"] .lbl-h {
+  font-weight: 500;
+}
+.navrail-rule {
+  border: 0;
+  border-top: 1px solid var(--color-separator-border);
+}
+
+/* The conversation list: BoardUI's chat-history rows. */
+.navrail-sessions ul {
+  border-top: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.navrail-sessions li {
+  border-radius: var(--radius-2lg);
+  transition: background-color 150ms ease;
+}
+.navrail-sessions li:hover {
+  background: var(--color-background-secondary-hover);
+}
+.navrail-sessions li[data-active="true"] {
+  background: var(--color-background-primary-default);
+  box-shadow: var(--shadow-xs);
+}
+.navrail-session {
+  padding: 6px 8px;
+  font: 400 var(--text-body-2-regular) / var(--text-body-2-regular--line-height) var(--font-sans);
+  color: var(--color-text-primary);
+}
+.navrail-new {
+  border-radius: var(--radius-2lg);
+  padding: 8px;
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  color: var(--color-accent-600);
+}
+.navrail-new:hover {
+  background: var(--color-background-secondary-hover);
+}
+:root[data-theme="dark"] .navrail-new { color: var(--color-accent-400); }
+.navrail-empty {
+  font: 400 var(--text-caption-1-regular) / var(--text-caption-1-regular--line-height) var(--font-sans);
+  color: var(--color-text-tertiary);
+}
+
+/* -- the composer ---------------------------------------------------------
+ * BoardUI's agent composer: a white rounded-3xl box on a hairline with the
+ * xs shadow, the round grey "add" control at its left and the round primary
+ * send at its right (both drawn in Composer.jsx). The tray under it -- what
+ * kind of conversation, what to make, which agent, which project -- is a
+ * row of BoardUI Selects on the secondary grey, tucked under the box. */
+.composer-box {
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-primary-default);
+  border-radius: var(--radius-3xl);
+  padding: 14px 12px 12px 18px;
+  box-shadow: var(--shadow-xs);
+}
+.composer-box:focus-within {
+  border-color: var(--color-border-button-hover);
+}
+.composer-box::before {
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-accent-500) 10%, transparent),
+    var(--shadow-md);
+}
+.composer-stack:not(:has(.composer-tray)) .composer-box {
+  box-shadow: var(--shadow-xs);
+}
+.composer textarea,
+.composer textarea:hover,
+.composer textarea:focus {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+.composer textarea {
+  font: 400 var(--text-headline-regular) / 1.5 var(--font-sans);
+  color: var(--color-text-primary);
+}
+.composer textarea::placeholder {
+  color: var(--color-text-placeholder);
+}
+.composer-row { margin-top: 12px; gap: 8px; }
+.composer-bottom-controls { gap: 12px; }
+.composer-tray {
+  margin: -18px 20px 0;
+  padding: 26px 12px 10px;
+  gap: 8px 14px;
+  border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+  background: var(--color-background-secondary-default);
+  box-shadow: inset 0 0 0 1px var(--color-border-button-default), var(--shadow-xs);
+}
+.composer-make { gap: 8px; margin-left: 0; }
+.composer-make[data-pinned] [data-rac][aria-haspopup] {
+  border-color: var(--color-accent-300);
+  background: var(--color-accent-50);
+}
+.composer-tray .composer-session {
+  font: 400 var(--text-caption-1-regular) / 1.2 var(--font-sans);
+  color: var(--color-text-tertiary);
+}
+.screen[data-glass] .composer-tray {
+  background: var(--color-background-secondary-default);
+}
+
+/* The ambient glow: BoardUI surfaces are quiet, so the accent's light is a
+   faint wash behind the empty screen rather than a field of colour. */
+html:not([data-shell]) .screen[data-glass]::before {
+  opacity: calc(var(--aura-opacity) * 0.9);
+}
+html:not([data-shell]) .screen[data-glass] {
+  background: var(--color-background-full);
+}
+
+/* -- shared controls ---------------------------------------------------------
+ * The classes forty-odd Bom screens build their controls from, redrawn with
+ * BoardUI's own recipes (components/base/buttons/button.tsx and friends):
+ *
+ *   .btn       Button, variant "secondary": white, hairline, xs shadow, 32px
+ *   .btnp      Button, variant "primary": the accent gradient, white label
+ *   .btn[data-danger]  Button, variant "danger"'s text treatment
+ *   .chip      Chip / a small secondary button
+ *   .starter   the composer's suggestion pills, as small secondary buttons
+ *   .icon-btn  the quiet icon control from BoardUI's app bar
+ *   .switch    Switch, the pill track and gradient-on chip
+ *   .segmented SegmentedControl: tertiary track, white thumb
+ *   inputs     Input: the filled tertiary field with an inset ring on hover
+ *              and focus
+ * Screens rebuilt on the React components themselves need none of this. */
+.btn,
+.btnp,
+.chip,
+.starter {
+  gap: 4px;
+  border-radius: var(--radius-lg);
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  letter-spacing: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform var(--dur-settle) var(--spring);
+}
+.btn {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-primary-default);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xs);
+}
+.btn:hover {
+  background: var(--color-background-primary-hover);
+  border-color: var(--color-border-button-hover);
+}
+.btn:active {
+  background: var(--color-background-primary-active);
+  border-color: var(--color-border-button-active);
+}
+.btn[data-danger] { color: var(--color-text-destructive); }
+.btn[data-danger]:hover { border-color: var(--color-border-error-default); }
+
+.btnp {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  background: var(--gradient-button-primary-default);
+  color: var(--color-text-white);
+  box-shadow: var(--shadow-xs), inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+.btnp:hover { background: var(--gradient-button-primary-hover); }
+.btnp:active { background: var(--gradient-button-primary-active); }
+.btnp:disabled {
+  background: var(--gradient-button-primary-disabled);
+  color: var(--color-button-primary-disabled-foreground);
+  box-shadow: none;
+  opacity: 1;
+}
+.btn:disabled {
+  background: var(--color-background-primary-disabled);
+  color: var(--color-text-tertiary);
+  box-shadow: none;
+  opacity: 1;
+}
+.btn svg,
+.btnp svg,
+.chip svg,
+.starter > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chip {
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-primary-default);
+  font: 500 var(--text-body-2-medium) / var(--text-body-2-medium--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-xs);
+}
+.chip:hover:not(:disabled) {
+  background: var(--color-background-primary-hover);
+  color: var(--color-text-primary);
+}
+.chip[data-on] {
+  background: var(--color-button-ghost-background);
+  border-color: transparent;
+  color: var(--color-button-ghost-foreground);
+  box-shadow: none;
+}
+.chip-icon svg { width: 16px; height: 16px; }
+
+.starter {
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-primary-default);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-xs);
+}
+.starter:hover {
+  background: var(--color-background-primary-hover);
+  border-color: var(--color-border-button-hover);
+  color: var(--color-text-primary);
+  transform: none;
+}
+.starter > svg {
+  opacity: 1;
+  color: var(--color-foreground-icon-secondary);
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-2lg);
+  color: var(--color-foreground-icon-secondary);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.icon-btn:hover {
+  background: var(--color-background-secondary-hover);
+  color: var(--color-foreground-icon-primary);
+}
+.icon-btn[data-on] {
+  background: var(--color-background-secondary-default);
+  color: var(--color-foreground-icon-primary);
+}
+
+.switch {
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--color-background-quaternary-default);
+  box-shadow: var(--inset-shadow-2xs);
+  transition: background-color 150ms ease;
+}
+.switch[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--color-switch-on-chip-start), var(--color-switch-on-chip-end));
+}
+.switch i {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(180deg, var(--color-switch-off-chip-start), var(--color-switch-off-chip-end));
+  box-shadow: var(--shadow-sm);
+}
+
+.segmented {
+  gap: 2px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-2lg);
+  background: var(--color-segmented-control-background);
+}
+.segmented > button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.segmented > button:hover { color: var(--color-text-primary); }
+.segmented > button[data-active],
+.segmented > button[data-active]:hover {
+  background: var(--color-segmented-control-selected-background);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-2xs);
+}
+.segmented svg { width: 16px; height: 16px; }
+
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="date"],
+    input[type="time"],
+    select,
+    textarea
+  ):where(:not([data-rac], [data-bui] *)) {
+  border: 0;
+  border-radius: var(--radius-2lg);
+  background-color: var(--color-background-tertiary-default);
+  box-shadow: inset 0 0 0 2px transparent;
+  color: var(--color-text-primary);
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  transition: box-shadow 150ms ease, background-color 150ms ease;
+}
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    select,
+    textarea
+  ):where(:not([data-rac])):hover {
+  box-shadow: inset 0 0 0 2px var(--color-border-button-hover);
+}
+:where(
+    input:not([type]),
+    input[type="text"],
+    input[type="search"],
+    input[type="url"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    select,
+    textarea
+  ):where(:not([data-rac])):focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-border-button-active);
+}
+:where(input, textarea)::placeholder { color: var(--color-text-tertiary); }
+
+/* -- type roles --------------------------------------------------------------
+ * `.mi` was Bom's italic-serif label; BoardUI labels are Inter caption
+ * medium in the secondary grey. `.h` headings take BoardUI's semibold. */
+.mi {
+  font: 500 var(--text-caption-1-medium) / var(--text-caption-1-medium--line-height) var(--font-sans);
+  letter-spacing: var(--text-caption-1-medium--letter-spacing);
+  color: var(--color-text-secondary);
+}
+.h {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.p { font-size: var(--text-body-regular); line-height: 1.6; }
+
+/* -- page heads and surfaces ------------------------------------------------- */
+.page-head {
+  padding: 28px 32px 20px;
+  border-bottom: 1px solid var(--color-separator-border);
+}
+.page-head[data-tint="accent"],
+.page-head[data-tint="green"] {
+  background: var(--color-background-full);
+}
+.page-head .sw { display: none; }
+.page-head h1 {
+  font: 500 var(--text-title-1-medium) / var(--text-title-1-medium--line-height) var(--font-sans);
+  letter-spacing: 0;
+}
+.page-head p {
+  margin-top: 6px;
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+:root[data-theme="dark"] .page-head { box-shadow: none; }
+.sur {
+  background: var(--color-background-primary-default);
+  border: 1px solid var(--color-border-button-default);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-card);
+}
+.empty {
+  font: 400 var(--text-body-regular) / 1.6 var(--font-sans);
+  color: var(--color-text-tertiary);
+}
+
+/* -- the conversation header --------------------------------------------------
+ * BoardUI's page header: a title-2 medium heading, its pickers as captioned
+ * BoardUI Selects (TopBar.jsx), quiet icon controls at the end. */
+.topbar { height: 60px; gap: 12px; padding: 0 20px 0 32px; }
+.topbar .title {
+  font: 500 var(--text-title-2-medium) / var(--text-title-2-medium--line-height) var(--font-sans);
+  letter-spacing: 0;
+  color: var(--color-text-primary);
+}
+.topbar-project {
+  height: auto;
+  padding: 0;
+  gap: 8px;
+  border: 0;
+  background: none;
+}
+.topbar-project:hover,
+.topbar-project:focus-within { border: 0; }
+.topbar .icon-btn { border: 0; border-radius: var(--radius-2lg); }
+.topbar .icon-btn:hover { background: var(--color-background-secondary-hover); border: 0; }
+.topbar .icon-btn[data-on] {
+  background: var(--color-button-ghost-background);
+  color: var(--color-button-ghost-foreground);
+  border: 0;
+}
+
+/* -- the settings window ------------------------------------------------------
+ * BoardUI's settings modal (application/settings): a rounded-3xl white panel
+ * with the waitlist elevation over a dimmed page, a secondary-grey menu down
+ * its left with a separator, menu rows in the NavItem recipe, and a title-3
+ * heading over each screen. Rows are the settings-rows recipe: a body label,
+ * a body-2 secondary description, the control (a BoardUI Switch or Button)
+ * at the end. */
+.settings-backdrop {
+  background: rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.settings-window {
+  grid-template-columns: 240px minmax(0, 1fr);
+  border: 1px solid var(--color-border-button-white);
+  border-radius: var(--radius-3xl);
+  background: var(--color-background-primary-default);
+  box-shadow: var(--shadow-waitlist);
+}
+.settings-nav {
+  gap: 4px;
+  padding: 10px;
+  border-right: 1px solid var(--color-separator-border);
+  background: var(--color-background-secondary-default);
+}
+.settings-search {
+  border: 0 !important;
+  border-radius: var(--radius-2lg);
+  background: var(--color-background-tertiary-default);
+  box-shadow: inset 0 0 0 2px transparent;
+}
+.settings-search:focus-within { box-shadow: inset 0 0 0 2px var(--color-border-button-active); }
+.settings-search input { background: transparent !important; box-shadow: none !important; }
+.settings-group {
+  padding: 8px 8px 2px;
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.settings-item {
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-2lg);
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.settings-item svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-foreground-icon-secondary);
+}
+.settings-item:hover {
+  background: var(--color-background-secondary-hover);
+  color: var(--color-text-primary);
+}
+.settings-item[aria-current="page"] {
+  background: linear-gradient(180deg, var(--color-accent-500), var(--color-accent-600));
+  box-shadow: var(--shadow-nav-selected);
+  color: var(--color-white);
+}
+.settings-item[aria-current="page"] svg { color: var(--color-white); }
+.settings-screen { padding-top: 24px; }
+.settings-head h2 {
+  font: 500 var(--text-title-3-medium) / var(--text-title-3-medium--line-height) var(--font-sans);
+  letter-spacing: 0;
+}
+.settings-head p {
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.settings-sub {
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  color: var(--color-text-primary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.settings-row { border-bottom-color: var(--color-separator-border); }
+.settings-row b {
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  color: var(--color-text-primary);
+}
+.settings-row p {
+  margin-top: 2px;
+  font: 400 var(--text-body-2-regular) / var(--text-body-2-regular--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.settings-close { top: 18px; right: 18px; }
+
+/* -- menus --------------------------------------------------------------------
+ * Every menu Bom draws itself (the model menu at the foot of the sidebar,
+ * the project editor, the accent popover) takes the recipe BoardUI's own
+ * Dropdown and Select share (components/base/dropdown/menu-styles.ts): a
+ * rounded-2xl white panel on a hairline with the dropdown shadow, 10px of
+ * padding, and rounded-2lg rows that fill on hover. */
+.popover {
+  width: 266px;
+  padding: 10px;
+  background: var(--color-background-primary-default);
+  border: 1px solid var(--color-border-button-default);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-dropdown), 0 12px 32px -16px rgb(0 0 0 / 0.16);
+}
+.popover-models { width: 302px; }
+.popover-head {
+  padding: 4px 8px 6px;
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.popover-item {
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-2lg);
+}
+.popover-item:hover,
+.popover-more:hover {
+  background: var(--color-dropdown-item-hover-background);
+}
+.popover-name {
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+  color: var(--color-text-primary);
+}
+.popover-hint {
+  font: 400 var(--text-caption-1-regular) / var(--text-caption-1-regular--line-height) var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.popover-dot { background: var(--color-neutral-300); }
+.popover-dot[data-ok] {
+  background: var(--color-green-500);
+  box-shadow: 0 0 0 3px var(--color-status-dot-green-halo);
+}
+.popover-tick { color: var(--color-accent-600); }
+.popover-foot {
+  margin: 6px -10px 0;
+  padding: 10px 18px 2px;
+  border-top: 1px solid var(--color-border-button-default);
+  font: 400 var(--text-caption-1-regular) / 1.5 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.popover-filter input {
+  border: 0;
+  border-radius: var(--radius-2lg);
+  background: var(--color-background-tertiary-default);
+  padding: 8px;
+  font: 400 var(--text-body-regular) / var(--text-body-regular--line-height) var(--font-sans);
+}
+.popover-filter input:focus { box-shadow: inset 0 0 0 2px var(--color-border-button-active); }
+.popover-more { border-radius: var(--radius-2lg); color: var(--color-foreground-icon-secondary); }
+
+/* -- the conversation ----------------------------------------------------------
+ * BoardUI's agent chat (application/agent-chat): the user's turn is a white
+ * rounded-2xl card with the card shadow, right-aligned; the answer is plain
+ * body text on the page, with headings in BoardUI's medium weights and code
+ * on the secondary grey. */
+.bubble {
+  background: var(--color-background-primary-default);
+  border: 1px solid var(--color-border-button-default);
+  border-radius: var(--radius-2xl);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-card);
+  font: 400 var(--text-body-regular) / 1.6 var(--font-sans);
+  color: var(--color-text-primary);
+}
+:is(.answer, .code-filepreview-scroll) .body {
+  font: 400 var(--text-body-regular) / 1.7 var(--font-sans);
+  color: var(--color-text-primary);
+}
+:is(.answer, .code-filepreview-scroll) .body :is(h1, h2, h3, h4) {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+:is(.answer, .code-filepreview-scroll) .body h1 { font-size: var(--text-title-2-medium); }
+:is(.answer, .code-filepreview-scroll) .body h2 { font-size: var(--text-title-3-medium); }
+:is(.answer, .code-filepreview-scroll) .body h3 { font-size: var(--text-headline-medium); }
+:is(.answer, .code-filepreview-scroll) .body code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background: var(--color-background-secondary-default);
+  border: 1px solid var(--color-border-button-default);
+  border-radius: var(--radius-md);
+}
+:is(.answer, .code-filepreview-scroll) .body pre {
+  background: var(--color-background-secondary-default);
+  border: 1px solid var(--color-border-button-default);
+  border-radius: var(--radius-2xl);
+}
+:is(.answer, .code-filepreview-scroll) .body pre code { border: 0; }
+:is(.answer, .code-filepreview-scroll) .body table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--color-border-table);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+:is(.answer, .code-filepreview-scroll) .body :is(th, td) {
+  border-bottom: 1px solid var(--color-border-table);
+}
+:is(.answer, .code-filepreview-scroll) .body th {
+  background: var(--color-background-secondary-default);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.continue-btn {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-primary-default);
+  box-shadow: var(--shadow-xs);
+  font: 500 var(--text-body-medium) / var(--text-body-medium--line-height) var(--font-sans);
+}
+
+:root[data-theme="dark"] .starter,
+:root[data-theme="dark"] .chip { color: var(--color-neutral-300); }
+:root[data-theme="dark"] html:not([data-shell]) .screen[data-glass]::before,
+html[data-theme="dark"]:not([data-shell]) .screen[data-glass]::before {
+  opacity: calc(var(--aura-opacity) * 0.55);
+}
+
+/* Bom's second voice was Lora Italic; BoardUI has one voice. The labels that
+   wore it are Inter caption-medium, upright. */
+:is(
+  .gate-field > label,
+  .design-tag,
+  .mcp-tag,
+  .canvas-mode,
+  .agents-preset,
+  .agents-section-head,
+  .agent-contact-when
+) {
+  font-style: normal;
+  font-weight: 500;
+  font-size: var(--text-caption-1-medium);
+  letter-spacing: 0;
+  color: var(--color-text-secondary);
+}
+.reasoning-toggle,
+.reasoning-body {
+  font-style: normal;
+}
+.reasoning-body {
+  color: var(--color-text-secondary);
+  border-left: 2px solid var(--color-separator-border);
+}

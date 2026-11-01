@@ -1,26 +1,18 @@
-/* Accents: one hue in, a whole stylesheet's worth of tints out.
+/* Accents: one hue in, BoardUI's accent ramp out.
  *
- * The shipped palette is a ladder -- a sheet at OKLCH lightness 0.995, a shell
- * at 0.957, four line weights between 0.77 and 0.91, two text greys, and a
- * cobalt accent at 0.49 -- and every rung of it is the *same hue* at a
- * different lightness and a fraction of the accent's chroma. That is what
- * makes it a system rather than sixteen chosen colours, and it is also what
- * makes it swappable: hold the ladder, change the hue, and the app is dressed
- * in something else without a single rule in styles.css knowing about it.
+ * An accent is a petal (lib/petals.js) or a custom hue: the hues the logo is
+ * drawn in are the hues the app can wear. What it produces is the eleven-step
+ * `--color-accent-*` ramp BoardUI re-tints itself through, written onto
+ * <html> by hooks/useTheme.js, plus the ambient glow behind the sheet (the
+ * `--aura-*` tokens, painted by `.app::before` in styles.css).
  *
- * The ratios below were read back off the hand-picked hexes in styles.css.
- * What goes into the ladder is a petal (lib/petals.js): the hues the logo is
- * drawn in are the hues the app can wear, and the static fallback tokens in
- * styles.css are the cornflower petal run through this same ladder.
- *
- * What the generator does *not* do is the theatrical part. Apple Music's
- * colour is mostly one enormous soft field behind everything, and that is a
- * separate layer here -- the `--aura-*` tokens at the bottom, painted by
- * `.app::before` in styles.css. Surfaces stay nearly white and legible; the
- * drama sits behind them.
+ * Before the BoardUI overhaul this module also tinted every surface, line and
+ * grey in the accent's hue. Those are BoardUI's neutrals now, in every chat;
+ * the ladder that drew them is in the `.ui-revert` snapshot taken before the
+ * change.
  */
 
-import { oklch, readable } from "./color";
+import { oklch } from "./color";
 import { PETALS, PETAL_BY_ID, neighbours } from "./petals";
 
 // The accents on the swatch row: the flower's eight petals, in the flower's
@@ -85,204 +77,76 @@ export function seedOf(accent, fallback = null) {
   return fallback;
 }
 
-/* The ladder. Each rung is [lightness, chroma as a fraction of the accent's].
+/* The ramp. BoardUI re-tints its whole system -- the primary button's
+ * gradient, focus rings, the selected nav row, switches, checkboxes, tabs,
+ * ghost buttons -- through eleven `--color-accent-*` variables, and Bom's own
+ * accent tokens (`--accent`, `--accent-field`, ...) are pointed at the same
+ * steps in styles/bom-boardui.css. So an accent is no longer a ladder of
+ * tinted surfaces: the surfaces are BoardUI's neutrals in every chat, and the
+ * hue lands only on what you act on and what is selected, which is how
+ * BoardUI uses colour.
  *
- * Read off styles.css rather than designed here, which is the point: this
- * table is a description of a palette that already worked, not a new opinion
- * about one. The lightnesses are held at every hue -- that is what OKLab buys
- * -- and only the chroma fractions are scaled by how strong an accent is
- * asked for. */
-const LADDER = {
-  ground: [0.995, 0.012],
-  surface: [1.0, 0.0],
-  shell: [0.9573, 0.034],
-  menu: [0.9451, 0.048],
-  "menu-well": [0.9451, 0.048],
-  rail: [0.9728, 0.026],
-  "grid-line": [0.9663, 0.034],
-  line: [0.8866, 0.084],
-  "line-soft": [0.9058, 0.069],
-  "line-firm": [0.8614, 0.107],
-  "line-strong": [0.7698, 0.141],
-  ink: [0.1915, 0.122],
-  "accent-soft": [0.6197, 0.746],
-  field: [0.9312, 0.105],
-  wash: [0.9431, 0.085],
-};
-
-/* The same rungs for dark mode: a deep, tinted night rather than black.
- *
- * This used to be Vercel's dark language -- #000 behind, #0a0a0a and #111 on
- * top, greys that are greys -- which is the one setting the flower looks most
- * like a sticker on. The petals need somewhere to glow, so the ground is
- * lifted off black to about L 0.23 and every surface carries a trace of the
- * accent's hue: a cornflower chat is a blue-violet dusk, a marigold one a warm
- * dark. Text still goes through `readable()`, so the lift costs no contrast. */
-const LADDER_DARK = {
-  ground: [0.235, 0.1],
-  surface: [0.27, 0.1],
-  shell: [0.205, 0.11],
-  menu: [0.27, 0.1],
-  "menu-well": [0.31, 0.11],
-  rail: [0.235, 0.1],
-  "grid-line": [0.29, 0.11],
-  line: [0.37, 0.11],
-  "line-soft": [0.33, 0.1],
-  "line-firm": [0.41, 0.12],
-  "line-strong": [0.48, 0.13],
-  ink: [0.955, 0.015],
-  "accent-soft": [0.74, 0.85],
-  field: [0.33, 0.2],
-  wash: [0.3, 0.15],
+ * Each step is [OKLCH lightness, chroma as a fraction of the seed's], read off
+ * Tailwind v4's blue ramp -- BoardUI's default accent -- so a petal's ramp has
+ * the same rhythm as the one it replaces, at every hue. `oklch()` gamut-maps,
+ * so a fraction above 1 at a mid lightness simply takes all the chroma sRGB
+ * has there. */
+const RAMP = {
+  50: [0.97, 0.07],
+  100: [0.932, 0.15],
+  200: [0.882, 0.28],
+  300: [0.809, 0.49],
+  400: [0.707, 0.77],
+  500: [0.623, 1.0],
+  600: [0.546, 1.05],
+  700: [0.488, 0.95],
+  800: [0.424, 0.8],
+  900: [0.379, 0.67],
+  950: [0.282, 0.5],
 };
 
 /**
  * Every custom property an accent sets, as a plain object ready to be written
- * onto an element's style.
+ * onto an element's style: the eleven-step BoardUI accent ramp, and the
+ * ambient field behind the sheet.
  *
  * Returns null for "off", which the caller reads as "clear what you set and
- * let styles.css stand" -- an empty object would mean the same thing, but a
- * null makes the two cases impossible to confuse at the call site.
+ * let the stylesheet stand" -- BoardUI's default blue.
+ *
+ * `mode` still selects the glow's depth; the ramp itself is the same in light
+ * and dark, as BoardUI's is -- the dark theme simply reads it from the light
+ * end (see the dark block in styles/bom-boardui.css).
  */
 export function palette(accent, fallbackSeed = null, mode = "light") {
   const seed = seedOf(accent, fallbackSeed);
   if (!seed) return null;
-  if (mode === "dark") return darkPalette(seed, accent);
-
-  const { hue } = seed;
-  const strength = clampStrength(accent?.strength);
-  // The surface tints scale with strength; the accent's own chroma does not.
-  // Turning the wash down should leave the links the colour they were, not
-  // fade the one thing on the sheet that has to stay visible.
-  const spread = 0.5 + 1.6 * strength;
-  const chroma = seed.chroma;
-  const tone = (rung) => {
-    const [lightness, fraction] = LADDER[rung];
-    return oklch(lightness, chroma * fraction * spread, hue);
-  };
-
-  // A grey accent keeps grey neighbours: slate should not bloom.
-  const reach = Math.min(1, chroma / 0.1);
-  const [before, after] = neighbours(hue);
-  const ground = tone("ground");
-  // Three colours that carry text, and therefore the three that get checked
-  // rather than chosen. 5.5:1 for the accent because it is also a link and a
-  // 12px label; 4.5 for the greys, which is what the stylesheet's own comments
-  // settled on after two rounds of darkening them by hand.
-  const accentColour = readable(hue, chroma, ground, 5.5, 0.56);
-  const accentHover = readable(hue, chroma, ground, 8, 0.42);
-  // A fill that carries white text. On the light sheet that is the accent
-  // itself -- it already clears 5.5:1 against a near-white ground, so white
-  // on it clears too -- and only dark mode needs the two to differ.
-  const accentFill = accentColour;
-  const dim = readable(hue, chroma * 0.156 * spread, ground, 6, 0.56);
-  const faint = readable(hue, chroma * 0.148 * spread, ground, 4.6, 0.58);
-
-  return {
-    "--shell": tone("shell"),
-    "--menu": tone("menu"),
-    "--menu-well": tone("menu-well"),
-    "--ground": ground,
-    "--rail": tone("rail"),
-    "--surface": tone("surface"),
-    "--ink": tone("ink"),
-    "--grid-line": tone("grid-line"),
-
-    // One accent and three derivatives of it. The stylesheet's old --violet /
-    // --blue / --send were all this same cobalt and have been removed; what a
-    // header, callout, spark or user turn used to reach for by those names now
-    // reads --accent-field / --accent-wash / --accent-soft. Green and ochre are
-    // deliberately not derived here: they mean pass and warning, and a warning
-    // that turns blue because the reader likes blue is a bug.
-    "--accent": accentColour,
-    "--accent-hover": accentHover,
-    "--accent-fill": accentFill,
-    "--accent-soft": tone("accent-soft"),
-    "--accent-field": tone("field"),
-    "--accent-wash": tone("wash"),
-
-    "--line": tone("line"),
-    "--line-soft": tone("line-soft"),
-    "--line-firm": tone("line-firm"),
-    "--line-strong": tone("line-strong"),
-
-    "--text-dim": dim,
-    "--text-faint": faint,
-
-    /* The ambient field: three soft discs of colour behind everything, and
-     * they are petals. The accent's own in the middle, and the petal either
-     * side of it on the flower in the other two -- so a cornflower chat has
-     * lagoon and violet at its edges, the way the logo's blue petal sits
-     * between its teal and its violet. A single-hue blur reads as a cast
-     * over the screen; neighbouring petals read as the flower's light. */
-    "--aura-1": oklch(0.845, chroma * 0.95, hue),
-    "--aura-2": oklch(0.8, before.chroma * reach * 1.05, before.hue),
-    "--aura-3": oklch(0.88, after.chroma * reach * 0.85, after.hue),
-    // Kept under two thirds even at full strength. The fields sit behind the
-    // thread, and past that they stop being light on a sheet and start being
-    // a background the text has to fight.
-    "--aura-opacity": (0.12 + 0.5 * strength).toFixed(3),
-    // A saturated form of the accent for the one place that wants the hue
-    // undiluted -- the swatch a chat wears in the rail.
-    "--accent-pure": oklch(0.62, chroma, hue),
-  };
-}
-
-/* The dark ladder. Same tokens, same checks, a different ground: every colour
- * that carries text is searched for against the dark sheet, upwards, and the
- * glow behind it is the flower's petals seen at night -- the accent and its
- * two neighbours, deep enough to read as light from somewhere off screen
- * rather than as a coloured fog over the conversation. */
-function darkPalette(seed, accent) {
   const { hue, chroma } = seed;
   const strength = clampStrength(accent?.strength);
-  const spread = 0.5 + 1.6 * strength;
-  const tone = (rung) => {
-    const [lightness, fraction] = LADDER_DARK[rung];
-    return oklch(lightness, chroma * fraction * spread, hue);
-  };
+  const dark = mode === "dark";
 
+  const tokens = {};
+  for (const [step, [lightness, fraction]] of Object.entries(RAMP)) {
+    tokens[`--color-accent-${step}`] = oklch(lightness, chroma * fraction, hue);
+  }
+
+  /* The ambient field: three soft discs of colour behind everything, and
+   * they are petals -- the accent's own in the middle and the petal either
+   * side of it on the flower in the other two. `strength` now sets only how
+   * much of it shows: BoardUI's surfaces stay neutral whatever it is. */
   const reach = Math.min(1, chroma / 0.1);
   const [before, after] = neighbours(hue);
-  const ground = tone("ground");
-  // Links and marks: light enough to read on the dark ground at 5.5:1.
-  const accentColour = readable(hue, chroma, ground, 5.5, 0.6);
-  const accentHover = readable(hue, chroma, ground, 8, 0.7);
-  // Buttons and the send control: the darkest step that still carries white
-  // text at 4.5:1.
-  const accentFill = readable(hue, chroma, "#ffffff", 4.5, 0.62);
-  const dim = readable(hue, chroma * 0.03 * spread, ground, 7, 0.62);
-  const faint = readable(hue, chroma * 0.03 * spread, ground, 5, 0.55);
-
-  return {
-    "--shell": tone("shell"),
-    "--menu": tone("menu"),
-    "--menu-well": tone("menu-well"),
-    "--ground": ground,
-    "--rail": tone("rail"),
-    "--surface": tone("surface"),
-    "--ink": tone("ink"),
-    "--grid-line": tone("grid-line"),
-    "--accent": accentColour,
-    "--accent-hover": accentHover,
-    "--accent-fill": accentFill,
-    "--accent-soft": tone("accent-soft"),
-    "--accent-field": tone("field"),
-    "--accent-wash": tone("wash"),
-    "--line": tone("line"),
-    "--line-soft": tone("line-soft"),
-    "--line-firm": tone("line-firm"),
-    "--line-strong": tone("line-strong"),
-    "--text-dim": dim,
-    "--text-faint": faint,
-    "--aura-1": oklch(0.5, chroma * 1.0, hue),
-    "--aura-2": oklch(0.46, before.chroma * reach * 1.05, before.hue),
-    "--aura-3": oklch(0.54, after.chroma * reach * 0.9, after.hue),
-    // Lower than the light sheet's: a glow on a dark ground carries further
-    // than a tint on white, and past this it stops being a glow.
-    "--aura-opacity": (0.12 + 0.36 * strength).toFixed(3),
-    "--accent-pure": oklch(0.66, chroma, hue),
-  };
+  if (dark) {
+    tokens["--aura-1"] = oklch(0.5, chroma, hue);
+    tokens["--aura-2"] = oklch(0.46, before.chroma * reach * 1.05, before.hue);
+    tokens["--aura-3"] = oklch(0.54, after.chroma * reach * 0.9, after.hue);
+    tokens["--aura-opacity"] = (0.08 + 0.24 * strength).toFixed(3);
+  } else {
+    tokens["--aura-1"] = oklch(0.845, chroma * 0.95, hue);
+    tokens["--aura-2"] = oklch(0.8, before.chroma * reach * 1.05, before.hue);
+    tokens["--aura-3"] = oklch(0.88, after.chroma * reach * 0.85, after.hue);
+    tokens["--aura-opacity"] = (0.08 + 0.32 * strength).toFixed(3);
+  }
+  return tokens;
 }
 
 function clampStrength(value) {

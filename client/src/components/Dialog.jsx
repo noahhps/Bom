@@ -25,6 +25,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+
+import { Modal } from "./ui";
+
 const DialogContext = createContext(null);
 
 /** The three shapes. `notify` is the one that takes no answer. */
@@ -85,18 +90,6 @@ export function DialogProvider({ children }) {
     if (request.kind === ASK) inputRef.current?.select();
   }, [request]);
 
-  useEffect(() => {
-    if (!request) return;
-    const onKey = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        settle(request.kind === ASK ? null : false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [request, settle]);
-
   const submit = (event) => {
     event.preventDefault();
     if (!request) return;
@@ -115,57 +108,52 @@ export function DialogProvider({ children }) {
   return (
     <DialogContext.Provider value={api}>
       {children}
-      {request ? (
-        <div
-          className="dlg-scrim"
-          // A click outside is a cancel, but only when it is the scrim itself
-          // and not a click inside the card that bubbled up to it.
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) cancel();
-          }}
-        >
-          <form
-            className="dlg"
-            role="dialog"
-            aria-modal="true"
-            aria-label={request.title || request.message}
-            onSubmit={submit}
-          >
-            {request.title ? <h2 className="dlg-title">{request.title}</h2> : null}
-            <p className="dlg-message">{request.message}</p>
+      {/* BoardUI's modal: a dimmed overlay and a rounded-3xl panel, with its
+          Input for the one-line answer and its Buttons for the choice. React
+          Aria handles Escape, the click outside and the focus trap. */}
+      <Modal
+        isOpen={Boolean(request)}
+        onClose={cancel}
+        title={request?.title || null}
+        showClose={false}
+        role={request?.kind === NOTIFY ? "alertdialog" : "dialog"}
+        className="max-w-[420px]"
+        bodyClassName="pt-5 pb-0"
+      >
+        {request ? (
+          <form onSubmit={submit} className="flex flex-col gap-4" aria-label={request.title || request.message}>
+            <p className="text-body-regular whitespace-pre-wrap text-text-secondary">{request.message}</p>
 
             {request.kind === ASK ? (
-              <input
-                ref={inputRef}
-                type="text"
-                className="dlg-input"
+              <Input
+                aria-label={request.title || request.message}
                 value={draft}
+                onChange={setDraft}
+                ref={inputRef}
                 placeholder={request.placeholder || ""}
-                spellCheck="false"
                 autoComplete="off"
-                onChange={(event) => setDraft(event.target.value)}
               />
             ) : null}
 
-            <div className="dlg-actions">
+            <div className="-mx-6 mt-1 flex items-center justify-end gap-2 border-t border-separator-border px-6 py-4">
               {request.kind === NOTIFY ? null : (
-                <button type="button" className="btn" onClick={cancel}>
+                <Button type="button" variant="secondary" size="small" onClick={cancel}>
                   {request.cancelLabel || "Cancel"}
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 ref={confirmRef}
                 type="submit"
-                className="btnp"
-                data-destructive={request.destructive ? "" : undefined}
+                size="small"
+                variant={request.destructive ? "danger" : "primary"}
               >
                 {request.confirmLabel ||
                   (request.kind === NOTIFY ? "OK" : request.kind === ASK ? "Save" : "Confirm")}
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
-      ) : null}
+        ) : null}
+      </Modal>
     </DialogContext.Provider>
   );
 }

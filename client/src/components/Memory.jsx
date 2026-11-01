@@ -363,7 +363,7 @@ export function Memory({ api, embedded = false }) {
             <button
               type="button"
               className="btn"
-              style={{ color: "var(--accent)", borderColor: "rgba(111,90,168,.4)" }}
+              data-danger=""
               disabled={facts.length === 0}
               onClick={() => {
                 if (!confirmWipe) {

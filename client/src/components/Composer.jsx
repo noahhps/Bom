@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/base/segmented-control/segmented-control";
+import { Switch } from "@/components/base/switch/switch";
+import { cx } from "@/utils/cx";
+
 import { StagedAttachments } from "./Attachments";
-import { Icon } from "./Icon";
+import { Glyph, OptionSelect } from "./ui";
 import { STICK_PX } from "./MessageList";
 import { seedFromContext } from "../lib/autotheme";
 import { swatchOf } from "../lib/theme";
@@ -52,35 +59,36 @@ function ThinkingControl({ control, value, onChange, disabled }) {
 
   if (mode === "effort") {
     return (
-      <div className="effort" role="group" aria-label={control.label}>
+      <SegmentedControl
+        aria-label={control.label}
+        className="effort"
+        isDisabled={disabled}
+        selectedKeys={value ? [value] : []}
+        onSelectionChange={(keys) => {
+          const [next] = [...keys];
+          if (next) onChange(next);
+        }}
+      >
         {(control.options || []).map((level) => (
-          <button
-            key={level}
-            type="button"
-            aria-pressed={value === level}
-            disabled={disabled}
-            onClick={() => onChange(level)}
-          >
+          <SegmentedControlItem key={level} id={level} className="px-2 py-0.5 text-caption-1-medium">
             {level}
-          </button>
+          </SegmentedControlItem>
         ))}
-      </div>
+      </SegmentedControl>
     );
   }
 
   if (mode === "switch") {
     return (
-      <button
-        type="button"
-        className="chip"
-        role="switch"
-        aria-checked={value === true}
-        data-on={value === true ? "true" : undefined}
-        disabled={disabled}
-        onClick={() => onChange(value === true ? false : true)}
+      <Switch
+        size="sm"
+        className="composer-think"
+        isSelected={value === true}
+        isDisabled={disabled}
+        onChange={(on) => onChange(on)}
       >
-        {control.label}
-      </button>
+        <span className="text-body-2-medium text-text-secondary">{control.label}</span>
+      </Switch>
     );
   }
 
@@ -136,30 +144,23 @@ function KindControl({ value, onChange, disabled, kinds = KINDS.map((k) => k.id)
   // In the order asked for: Studio reads Design, then Code.
   const offered = kinds.map((id) => KINDS.find((k) => k.id === id)).filter(Boolean);
   return (
-    <div
-      className="composer-kind"
-      role="radiogroup"
+    <SegmentedControl
       aria-label="Conversation type"
-      style={{
-        "--i": Math.max(0, offered.findIndex((k) => k.id === value)),
-        "--n": offered.length,
+      className="composer-kind"
+      isDisabled={disabled}
+      selectedKeys={[value]}
+      onSelectionChange={(keys) => {
+        const [next] = [...keys];
+        if (next) onChange(next);
       }}
     >
       {offered.map((kind) => (
-        <button
-          key={kind.id}
-          type="button"
-          role="radio"
-          aria-checked={value === kind.id}
-          title={`New ${kind.id === "code" ? "code session" : kind.id === "design" ? "design" : "chat"}`}
-          disabled={disabled}
-          onClick={() => onChange(kind.id)}
-        >
-          <Icon name={kind.icon} />
-          <span>{kind.label}</span>
-        </button>
+        <SegmentedControlItem key={kind.id} id={kind.id} className="gap-1.5 py-0.5 text-body-2-medium">
+          <Glyph name={kind.icon} className="size-4" />
+          {kind.label}
+        </SegmentedControlItem>
       ))}
-    </div>
+    </SegmentedControl>
   );
 }
 
@@ -169,26 +170,34 @@ function KindControl({ value, onChange, disabled, kinds = KINDS.map((k) => k.id)
 function MakeControl({ value, onChange, disabled }) {
   const current = MAKES.find((m) => m.id === value) || MAKES[0];
   return (
-    <label
-      className="composer-make"
-      data-pinned={current.id !== "auto" ? "" : undefined}
-      title="What the model makes with this message. Auto lets it choose."
-    >
-      <span className="composer-agent-label mi">Make</span>
-      <span className="composer-agent-control">
-        <Icon name={current.icon} />
-        <select
-          value={current.id}
-          aria-label="What to make"
-          disabled={disabled}
-          onChange={(event) => onChange?.(event.target.value)}
-        >
-          {MAKES.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-      </span>
-    </label>
+    <TrayField label="Make" pinned={current.id !== "auto"} title="What the model makes with this message. Auto lets it choose.">
+      <OptionSelect
+        label="What to make"
+        value={current.id}
+        isDisabled={disabled}
+        onChange={(id) => onChange?.(id)}
+        options={MAKES.map((m) => ({
+          value: m.id,
+          label: (
+            <span className="flex items-center gap-1.5">
+              <Glyph name={m.icon} className="size-4 text-foreground-icon-secondary" />
+              {m.label}
+            </span>
+          ),
+        }))}
+      />
+    </TrayField>
+  );
+}
+
+/* A labelled control in the tray under the box: BoardUI's caption beside a
+   small Select. */
+function TrayField({ label, title, pinned = false, children }) {
+  return (
+    <div className="composer-make" title={title} data-pinned={pinned ? "" : undefined}>
+      <span className="composer-agent-label text-caption-1-medium text-text-secondary">{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -198,23 +207,31 @@ function MakeControl({ value, onChange, disabled }) {
 function ProjectControl({ projects, value, onChange, disabled }) {
   const current = projects.find((p) => p.id === value) || null;
   return (
-    <label className="composer-make composer-project" title="The project this conversation is filed in">
-      <span className="composer-agent-label mi">Project</span>
-      <span className="composer-agent-control">
-        <Icon name="folder" />
-        <select
-          value={current?.id || ""}
-          aria-label="Project"
-          disabled={disabled}
-          onChange={(event) => onChange?.(event.target.value || null)}
-        >
-          <option value="">None</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </span>
-    </label>
+    <TrayField label="Project" title="The project this conversation is filed in">
+      <OptionSelect
+        label="Project"
+        value={current?.id || ""}
+        isDisabled={disabled}
+        onChange={(id) => onChange?.(id || null)}
+        options={[
+          { value: "", label: <TrayOption icon="folder" text="None" /> },
+          ...projects.map((p) => ({ value: p.id, label: <TrayOption icon="folder" text={p.name} /> })),
+        ]}
+      />
+    </TrayField>
+  );
+}
+
+function TrayOption({ icon, dot, text }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      {dot ? (
+        <i className="size-2 shrink-0 rounded-full" aria-hidden="true" style={{ background: dot }} />
+      ) : (
+        <Glyph name={icon} className="size-4 text-foreground-icon-secondary" />
+      )}
+      <span className="truncate">{text}</span>
+    </span>
   );
 }
 
@@ -248,7 +265,6 @@ export function Composer({
   // An absent descriptor is not the same as "none" -- see LEGACY above.
   const control = thinking || LEGACY;
   const mode = control.mode;
-  const selectedAgent = agents.find((agent) => agent.id === agentId) || null;
   useEffect(() => {
     setEffort(control.default);
     // Keyed on the mode, not the object: a re-fetch of /status hands back a
@@ -694,15 +710,22 @@ export function Composer({
                 event.target.value = "";
               }}
             />
+            {/* BoardUI's composer "add" control: a round, filled grey button. */}
             <button
               type="button"
-              className="chip chip-icon"
+              className={cx(
+                "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full",
+                "bg-ai-chat-composer-add-background text-foreground-icon-primary",
+                "transition-colors duration-150 ease hover:bg-ai-chat-composer-add-hover-background",
+                "outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
               aria-label="Attach files"
               title="Attach files"
               disabled={disabled}
               onClick={() => picker.current.click()}
             >
-              <Icon name="attachment" />
+              <Glyph name="plus" />
             </button>
 
             <div className="spacer" />
@@ -721,15 +744,15 @@ export function Composer({
               {disabled ? (
                 <button
                   type="button"
-                  className="send"
+                  className={"flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-button-primary text-white shadow-xs transition-opacity hover:opacity-90 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-border-focus-ring disabled:cursor-not-allowed disabled:opacity-40"}
                   aria-label="Stop generating"
                   onClick={onStop}
                 >
-                  <Icon name="stop" />
+                  <Glyph name="stop" className="size-4" />
                 </button>
               ) : (
-                <button type="submit" className="send" aria-label="Send">
-                  <Icon name="send" />
+                <button type="submit" className={"flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-button-primary text-white shadow-xs transition-opacity hover:opacity-90 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-border-focus-ring disabled:cursor-not-allowed disabled:opacity-40"} aria-label="Send">
+                  <Glyph name="send" />
                 </button>
               )}
             </div>
@@ -746,28 +769,20 @@ export function Composer({
             {onMake ? <MakeControl value={make} onChange={onMake} disabled={disabled} /> : null}
 
             {agents.length > 0 ? (
-              <label className="composer-agent-picker">
-                <span className="composer-agent-label mi">Agent</span>
-                <span className="composer-agent-control">
-                  <i
-                    className="composer-agent-dot"
-                    aria-hidden="true"
-                    style={{
-                      background: selectedAgent ? agentColor(selectedAgent) : "var(--accent)",
-                    }}
-                  />
-                  <select
-                    value={agentId || ""}
-                    aria-label="Choose an agent for this conversation"
-                    onChange={(event) => onAgent?.(event.target.value || null)}
-                  >
-                    <option value="">None</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>{agent.name}</option>
-                    ))}
-                  </select>
-                </span>
-              </label>
+              <TrayField label="Agent">
+                <OptionSelect
+                  label="Choose an agent for this conversation"
+                  value={agentId || ""}
+                  onChange={(id) => onAgent?.(id || null)}
+                  options={[
+                    { value: "", label: <TrayOption dot="var(--color-accent-500)" text="None" /> },
+                    ...agents.map((agent) => ({
+                      value: agent.id,
+                      label: <TrayOption dot={agentColor(agent)} text={agent.name} />,
+                    })),
+                  ]}
+                />
+              </TrayField>
             ) : null}
 
             {onProject ? (

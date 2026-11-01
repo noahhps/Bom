@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import { OptionSelect } from "./ui";
 
 /**
  * The 64px header from 1a: the conversation's name, what the system is doing,
@@ -66,21 +67,15 @@ export function TopBar({
           Hidden until there is a conversation to file -- a new, unsent chat
           has no id yet, and offering to file it would fail on submit. */}
       {canFile ? (
-        <label className="topbar-project">
+        <div className="topbar-project">
           <span className="mi">Project</span>
-          <select
+          <OptionSelect
+            label="File this conversation"
             value={projectId || ""}
-            aria-label="File this conversation"
-            onChange={(event) => onProject(event.target.value || null)}
-          >
-            <option value="">None</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(id) => onProject(id || null)}
+            options={[{ value: "", label: "None" }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+          />
+        </div>
       ) : null}
 
       {/* The look. On in every design conversation, sent or not -- an
@@ -88,22 +83,19 @@ export function TopBar({
           message. "Ask when needed" is no pick at all, which is what makes the
           model stop and ask before it builds something. */}
       {design ? (
-        <label className="topbar-project topbar-look">
+        <div className="topbar-project topbar-look">
           <span className="mi">Look</span>
-          <select
+          <OptionSelect
+            label="Design standard for this conversation"
             value={look || ""}
-            aria-label="Design standard for this conversation"
-            onChange={(event) => onLook(event.target.value || null)}
-          >
-            <option value="">Ask when needed</option>
-            {looks.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-            <option value="none">No standard</option>
-          </select>
-        </label>
+            onChange={(id) => onLook(id || null)}
+            options={[
+              { value: "", label: "Ask when needed" },
+              ...looks.map((option) => ({ value: option.id, label: option.name })),
+              { value: "none", label: "No standard" },
+            ]}
+          />
+        </div>
       ) : null}
 
       {/* Which agent answers in this conversation. Beside filing, and hidden
@@ -111,27 +103,21 @@ export function TopBar({
           chat has no id to write it against, and it only appears once there is
           at least one agent to choose. */}
       {canFile && agents.length > 0 ? (
-        <label className="topbar-project">
+        <div className="topbar-project">
           <span className="mi">Agent</span>
-          <select
+          <OptionSelect
+            label="Run this conversation as an agent"
             value={agentId || ""}
-            aria-label="Run this conversation as an agent"
-            onChange={(event) => onAgent(event.target.value || null)}
-          >
-            <option value="">Default</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={(id) => onAgent(id || null)}
+            options={[{ value: "", label: "Default" }, ...agents.map((a) => ({ value: a.id, label: a.name }))]}
+          />
+        </div>
       ) : null}
 
       {onBuildInCode ? (
         <button
           type="button"
-          className="topbar-build"
+          className="btn topbar-build"
           title="Make a code project from these designs"
           onClick={onBuildInCode}
         >

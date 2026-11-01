@@ -1,0 +1,9 @@
+/* The stylesheet entry.
+ *
+ * BoardUI first: it declares the cascade layers, Tailwind, and the design
+ * tokens every other rule refers to. Then Bom's own sheet, layered so a
+ * utility class always beats it, and last the token map that re-dresses that
+ * sheet in BoardUI's palette, type and shapes. See styles/bom-boardui.css. */
+@import "./styles/boardui/globals.css";
+@import "./styles.css" layer(bom);
+@import "./styles/bom-boardui.css" layer(bom);

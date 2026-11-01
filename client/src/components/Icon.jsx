@@ -1,165 +1,156 @@
 // The glyphs the shell uses, as one component.
 //
-// Tabler's (tabler.io/icons, MIT): one consistent outline set on a 24px grid,
-// imported per icon so the bundle carries only these. The stroke, its width
-// and its caps come from the `svg` rule in styles.css rather than from
-// Tabler's own attributes, so every glyph is drawn at the shell's weight and
-// takes the colour of the text around it, in either theme.
+// Remix Icon (remixicon.com, Apache-2.0) -- the set BoardUI is drawn with, so
+// a glyph Bom draws and a glyph inside a BoardUI control are the same family
+// at the same weight. Imported per icon so the bundle carries only these.
+// They are filled shapes, not strokes: styles/bom-boardui.css lets them out
+// of the stroke-drawing `svg` rule in styles.css, while keeping its sizing.
 //
-// Callers ask by the shell's names, not Tabler's: the names say what a glyph
+// Callers ask by the shell's names, not Remix's: the names say what a glyph
 // means here -- `canvas`, `wireframe`, `thinking` -- and swapping the artwork
 // behind one is a change to this table alone.
 import {
-  IconAdjustmentsHorizontal,
-  IconApps,
-  IconArrowRight,
-  IconArtboard,
-  IconBolt,
-  IconBrain,
-  IconBuildingSkyscraper,
-  IconCalendar,
-  IconChartBar,
-  IconCheck,
-  IconChevronDown,
-  IconCode,
-  IconCompass,
-  IconCopy,
-  IconExternalLink,
-  IconEye,
-  IconFileText,
-  IconFolder,
-  IconFolderOpen,
-  IconGitBranch,
-  IconHome,
-  IconLayoutNavbar,
-  IconLayoutSidebar,
-  IconList,
-  IconMail,
-  IconMenu2,
-  IconMessageCircle,
-  IconPalette,
-  IconPaperclip,
-  IconPencil,
-  IconPhoto,
-  IconPin,
-  IconPlayerPlay,
-  IconPinned,
-  IconPlus,
-  IconPresentation,
-  IconPuzzle,
-  IconRefresh,
-  IconSearch,
-  IconSettings,
-  IconSparkles,
-  IconTable,
-  IconTerminal2,
-  IconTool,
-  IconTopologyStar3,
-  IconOctagonFilled,
-  IconTrash,
-  IconUserCircle,
-  IconUsers,
-  IconWorld,
-  IconX,
-} from "@tabler/icons-react";
+  RiAccountCircleLine,
+  RiAddLine,
+  RiApps2Line,
+  RiArrowDownSLine,
+  RiArrowUpLine,
+  RiArtboardLine,
+  RiAttachment2,
+  RiBarChartBoxLine,
+  RiBrain2Line,
+  RiBuilding2Line,
+  RiCalendarLine,
+  RiChat3Line,
+  RiCheckLine,
+  RiCloseLine,
+  RiCodeSSlashLine,
+  RiCompass3Line,
+  RiDeleteBinLine,
+  RiEqualizer2Line,
+  RiExternalLinkLine,
+  RiEyeLine,
+  RiFileCopyLine,
+  RiFileTextLine,
+  RiFlashlightLine,
+  RiFolderLine,
+  RiFolderOpenLine,
+  RiGitBranchLine,
+  RiGlobalLine,
+  RiHomeLine,
+  RiImageLine,
+  RiLayoutTopLine,
+  RiListUnordered,
+  RiMailLine,
+  RiMenuLine,
+  RiNodeTree,
+  RiPaletteLine,
+  RiPencilLine,
+  RiPlayLine,
+  RiPuzzle2Line,
+  RiPushpinFill,
+  RiPushpinLine,
+  RiRefreshLine,
+  RiSearchLine,
+  RiSettings3Line,
+  RiSideBarFill,
+  RiSideBarLine,
+  RiSlideshowLine,
+  RiSparklingLine,
+  RiStopFill,
+  RiTableLine,
+  RiTeamLine,
+  RiTerminalBoxLine,
+  RiToolsLine,
+} from "@remixicon/react";
 
-const GLYPHS = {
-  menu: IconMenu2,
+export const GLYPHS = {
+  menu: RiMenuLine,
   // Home, the first of the three modes at the top left.
-  home: IconHome,
-  plus: IconPlus,
-  close: IconX,
-  send: IconArrowRight,
-  // A stop sign: the octagon, filled -- the shape reads as "stop" where a
-  // square reads as a media control.
-  stop: IconOctagonFilled,
-  // Sliders rather than a cog: "the things you can set", and no teeth to turn
-  // to mush at rail size.
-  settings: IconAdjustmentsHorizontal,
-  gear: IconSettings,
-  check: IconCheck,
-  refresh: IconRefresh,
-  branch: IconGitBranch,
-  terminal: IconTerminal2,
+  home: RiHomeLine,
+  plus: RiAddLine,
+  close: RiCloseLine,
+  // Up, as BoardUI's composer sends: the message rises into the thread.
+  send: RiArrowUpLine,
+  stop: RiStopFill,
+  // Sliders rather than a cog: "the things you can set".
+  settings: RiEqualizer2Line,
+  gear: RiSettings3Line,
+  check: RiCheckLine,
+  refresh: RiRefreshLine,
+  branch: RiGitBranchLine,
+  terminal: RiTerminalBoxLine,
   // The project running, in the preview; starting it; and leaving for a
   // real browser.
-  globe: IconWorld,
-  play: IconPlayerPlay,
-  external: IconExternalLink,
-  preview: IconEye,
-  copy: IconCopy,
-  document: IconFileText,
-  sheet: IconTable,
-  image: IconPhoto,
-  slides: IconPresentation,
+  globe: RiGlobalLine,
+  play: RiPlayLine,
+  external: RiExternalLinkLine,
+  preview: RiEyeLine,
+  copy: RiFileCopyLine,
+  document: RiFileTextLine,
+  sheet: RiTableLine,
+  image: RiImageLine,
+  slides: RiSlideshowLine,
   // A screen with its header bar: a wireframe.
-  wireframe: IconLayoutNavbar,
+  wireframe: RiLayoutTopLine,
   // More than one person: a team of agents.
-  agents: IconUsers,
+  agents: RiTeamLine,
   // The glyphs an agent can wear -- the Agents editor offers these by name.
-  search: IconSearch,
-  code: IconCode,
-  pen: IconPencil,
-  list: IconList,
-  chart: IconChartBar,
-  spark: IconSparkles,
-  compass: IconCompass,
-  bolt: IconBolt,
+  search: RiSearchLine,
+  code: RiCodeSSlashLine,
+  pen: RiPencilLine,
+  list: RiListUnordered,
+  chart: RiBarChartBoxLine,
+  spark: RiSparklingLine,
+  compass: RiCompass3Line,
+  bolt: RiFlashlightLine,
   // Enterprise mode, in Settings.
-  enterprise: IconBuildingSkyscraper,
+  enterprise: RiBuilding2Line,
   // The document beside the conversation, and a page made in it.
-  canvas: IconArtboard,
-  sidebar: IconLayoutSidebar,
+  canvas: RiArtboardLine,
+  sidebar: RiSideBarLine,
   // Rotated in CSS to point right when its section is folded shut.
-  chevron: IconChevronDown,
-  pin: IconPin,
-  pinned: IconPinned,
-  attachment: IconPaperclip,
+  chevron: RiArrowDownSLine,
+  pin: RiPushpinLine,
+  pinned: RiPushpinFill,
+  attachment: RiAttachment2,
   // Reasoning, not a lightbulb.
-  thinking: IconBrain,
-  calendar: IconCalendar,
-  chat_bubble: IconMessageCircle,
-  chat_bubble_outline: IconMessageCircle,
-  folder: IconFolder,
-  folder_open: IconFolderOpen,
+  thinking: RiBrain2Line,
+  calendar: RiCalendarLine,
+  chat_bubble: RiChat3Line,
+  chat_bubble_outline: RiChat3Line,
+  folder: RiFolderLine,
+  folder_open: RiFolderOpenLine,
   // A person, not a memory chip: this page is what the assistant remembers
   // about you, not how much silicon it has.
-  memory: IconUserCircle,
-  skills: IconPuzzle,
-  tools: IconTool,
+  memory: RiAccountCircleLine,
+  skills: RiPuzzle2Line,
+  tools: RiToolsLine,
   // Which MCP server a tool came from, for the few whose sites offer no logo
   // (see ServiceIcon) and the small inline tags.
-  mail: IconMail,
-  trash: IconTrash,
-  design: IconPalette,
-  apps: IconApps,
-  device_hub: IconTopologyStar3,
+  mail: RiMailLine,
+  trash: RiDeleteBinLine,
+  design: RiPaletteLine,
+  apps: RiApps2Line,
+  device_hub: RiNodeTree,
 };
 
-// The solid part of a glyph that has one, drawn inside it and only when the
-// caller asks: the sidebar's left column fills in when the sidebar is open,
-// which is the whole state that control reports.
+// The filled form of a glyph that has one, drawn only when the caller asks:
+// the sidebar's left column fills in when the sidebar is open, which is the
+// whole state that control reports.
 const SOLIDS = {
-  sidebar: "M6 4h3v16h-3a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2z",
+  sidebar: RiSideBarFill,
 };
 
-function Glyph({ name, className, children }) {
-  const Drawn = GLYPHS[name];
+function Glyph({ name, className, filled = false }) {
+  const Drawn = (filled && SOLIDS[name]) || GLYPHS[name];
   // An unknown name keeps its square rather than collapsing the row it is in.
   if (!Drawn) return <svg className={className} viewBox="0 0 24 24" aria-hidden="true" />;
-  return (
-    <Drawn className={className} aria-hidden="true" focusable="false">
-      {children}
-    </Drawn>
-  );
+  return <Drawn className={className} aria-hidden="true" focusable="false" />;
 }
 
 export function Icon({ name, badge, filled }) {
-  const glyph = (
-    <Glyph name={name}>
-      {filled && SOLIDS[name] ? <path className="icon-solid" d={SOLIDS[name]} /> : null}
-    </Glyph>
-  );
+  const glyph = <Glyph name={name} filled={filled} />;
 
   if (!badge) return glyph;
 

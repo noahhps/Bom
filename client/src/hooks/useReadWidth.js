@@ -64,6 +64,11 @@ export function useReadWidth(screenRef) {
         setResizing(false);
         save(live.current);
       };
+      // Captured, so crossing the canvas's iframe cannot steal the drag
+      // (see useCanvasWidth).
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {}
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", stop, { once: true });
       window.addEventListener("pointercancel", stop, { once: true });

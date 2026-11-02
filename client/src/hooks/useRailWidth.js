@@ -85,7 +85,12 @@ export function useRailWidth() {
 
       // On window rather than on the handle: the pointer routinely outruns a
       // 7px target, and losing the drag because it did would make the handle
-      // feel broken rather than precise.
+      // feel broken rather than precise. Captured too, so a drag that crosses
+      // an iframe (a design in the canvas) keeps its moves and its release --
+      // see useCanvasWidth.
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {}
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", stop, { once: true });
       window.addEventListener("pointercancel", stop, { once: true });

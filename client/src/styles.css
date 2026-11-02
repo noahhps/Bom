@@ -921,6 +921,11 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 }
 /* A drag that wanders over the thread must not select it. */
 .app[data-resizing] { user-select: none; }
+/* Nor may a frame -- a design in the canvas, a page in the browser panel --
+   take the pointer from it. The handles capture the pointer (useCanvasWidth);
+   this is the second guard, for any webview that routes a captured pointer
+   to a frame regardless. */
+.app[data-resizing] iframe { pointer-events: none; }
 
 .navrail[data-open] .navrail-dest { gap: 2px; }
 

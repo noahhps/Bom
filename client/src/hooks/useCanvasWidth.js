@@ -85,6 +85,16 @@ export function useCanvasWidth() {
       // On window rather than on the handle: the pointer routinely outruns a
       // 7px target, and losing the drag because it did would make the handle
       // feel broken rather than precise.
+      //
+      // Captured as well, because window alone is not enough beside this
+      // panel: a design is drawn in an iframe, and a pointer that outruns the
+      // handle into it sends its moves -- and its release -- to the frame's
+      // own document, so the panel froze mid-drag and could go on following
+      // the pointer after the button was let go. A captured pointer's events
+      // all go to the handle, frame or no frame, and bubble up to window.
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {}
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", stop, { once: true });
       window.addEventListener("pointercancel", stop, { once: true });

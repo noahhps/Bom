@@ -1610,8 +1610,14 @@ html[data-shell]:not([data-fullscreen]) .navrail-head { padding-left: 74px; }
    *
    * The bottom is a state: it means there are more conversations below. A line
    * there would claim an edge that is not one, and would still be claiming it
-   * once you had scrolled to the end. */
+   * once you had scrolled to the end -- so it is drawn only while that is true
+   * (`data-more`, from useMoreBelow in NavRail.jsx). It was drawn always, which
+   * was harmless while the list stopped at its last row; filling the column
+   * down to the foot, it became a bar across the bottom of the rail. */
   border-top: 1px solid var(--line-soft);
+  transition: box-shadow var(--dur-quick) ease;
+}
+.navrail-sessions ul[data-more] {
   box-shadow: inset 0 -6px 7px -7px rgba(var(--shadow-rgb), 0.34);
 }
 .navrail-sessions li {

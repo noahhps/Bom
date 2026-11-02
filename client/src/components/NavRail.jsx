@@ -5,6 +5,7 @@ import { SidebarToggle, SpaceSwitch } from "./AppBar";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ModelMenu } from "./ModelMenu";
+import { useMoreBelow } from "../hooks/useMoreBelow";
 import { seedFromContext } from "../lib/autotheme";
 import { swatchOf } from "../lib/theme";
 
@@ -266,6 +267,9 @@ export function NavRail({
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const node = useRef(null);
+  // Whether the conversation list is cut off at its foot, for the fade that
+  // says there is more below (styles.css, `.navrail-sessions ul`).
+  const [listBox, moreBelow] = useMoreBelow(sessions);
 
   // The menu counts: it is a child of the rail, so letting the rail collapse
   // underneath an open menu would leave the menu floating beside nothing.
@@ -441,6 +445,8 @@ export function NavRail({
              * than as a folder it has to be dug out of. */}
             <ul
               id="navrail-session-list"
+              ref={listBox}
+              data-more={moreBelow ? "" : undefined}
               data-over={dropOver === "unfiled" ? "" : undefined}
               onDragOver={(event) => {
                 if (event.dataTransfer.types.includes("text/session")) {

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { AgentFlower } from "./AgentFlower";
+import { SidebarToggle, SpaceSwitch } from "./AppBar";
 import { useDialog } from "./Dialog";
 import { Icon } from "./Icon";
 import { ModelMenu } from "./ModelMenu";
@@ -230,6 +231,8 @@ function SessionRows({ sessions, projects, activeId, onOpenSession, onDelete, em
 
 export function NavRail({
   space = "home",
+  onSpace,
+  onTogglePin,
   view,
   onView,
   status,
@@ -345,6 +348,18 @@ export function NavRail({
       <div className="navrail-edge" aria-hidden="true" />
 
       <div className="navrail-inner">
+
+        {/* Pinned on a wide window the rail runs up through the title bar, so
+            it takes the bar's own controls with it: one row, the traffic
+            lights, the sidebar's toggle after them and the switch between
+            Home and Studio in the rest. The row drags the window around the
+            buttons, as the bar did. */}
+        {pinned && !narrow ? (
+          <div className="navrail-head" data-tauri-drag-region>
+            <SidebarToggle open onToggle={onTogglePin} />
+            <SpaceSwitch space={space} onSpace={onSpace} className="navrail-spaces" />
+          </div>
+        ) : null}
 
         {/* The logo, small: the flower at 20px, a touch over a page glyph --
             and the name beside it, heading the rail like a label rather

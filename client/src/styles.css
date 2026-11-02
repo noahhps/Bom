@@ -741,6 +741,88 @@ html[data-fullscreen] .app[data-rail="pinned"] .navrail-inner {
 .app:not([data-rail="pinned"]) .navrail[data-open] .navrail-inner {
   background: color-mix(in srgb, var(--sidebar) 84%, transparent) !important;
 }
+/* The desktop app, pinned: the rail lets the desktop through, as the Claude
+ * app's sidebar does. The window under it is a hole to the native material
+ * that `apply_glass` (lib.rs) puts behind the whole window, and the rail lays
+ * a wash of `--sidebar` over that rather than blurring its own ground --
+ * macOS does the blur, of the wallpaper and the windows behind. The sheet and
+ * the app bar still paint their own opaque grounds, so only the rail turns to
+ * glass. Not in fullscreen: there is no desktop behind the window there, so
+ * the rail keeps the frost over the window's own ground. */
+html[data-shell]:not([data-fullscreen]):has(.app[data-rail="pinned"]),
+html[data-shell]:not([data-fullscreen]):has(.app[data-rail="pinned"]) body,
+html[data-shell]:not([data-fullscreen]):has(.app[data-rail="pinned"]) #root,
+html[data-shell]:not([data-fullscreen]) .app[data-rail="pinned"] {
+  background: transparent;
+}
+html[data-shell]:not([data-fullscreen]) .app[data-rail="pinned"] .navrail-inner {
+  background: color-mix(in srgb, var(--sidebar) 58%, transparent) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Pinned on a wide window, the rail runs the full height of the window and
+ * carries the title bar's controls in its head (NavRail's `.navrail-head`):
+ * one row of the traffic lights, the sidebar's toggle and the switch between
+ * Home and Studio. The app bar starts at the rail's edge
+ * instead of across the whole window (`data-in-rail`, set by App.jsx in the
+ * same case), and the rail reaches up into the room that leaves -- the bar's
+ * 44px. Unpinned, nothing changes: the bar keeps the toggle and the switch,
+ * the way the Claude app's title bar does with its sidebar closed. */
+html[data-shell] .appbar[data-in-rail],
+.appbar[data-in-rail] {
+  margin-left: var(--rail-w);
+  padding-left: 12px;
+}
+.appbar[data-in-rail] ~ .app-body .navrail-inner {
+  top: -44px;
+  padding-top: 0;
+}
+.navrail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  /* The traffic lights' room, as the app bar gives it (84px from the window's
+     edge, less the rail's own 10px). macOS hides them in fullscreen. */
+  padding-left: 2px;
+  /* The switch shares the row with the lights at every width the rail can be
+     dragged to (200px and up), so it sizes itself to what the row has left. */
+  container: navrail-head / inline-size;
+}
+html[data-shell]:not([data-fullscreen]) .navrail-head { padding-left: 74px; }
+.navrail-head .navrail-spaces {
+  flex: 1;
+  min-width: 0;
+  /* `.segmented` pins itself to the top of its row; this row centres on the
+     traffic lights. */
+  align-self: center;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 2px;
+}
+.navrail-head .navrail-spaces > button {
+  justify-content: center;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  gap: 5px;
+  font-size: var(--t-xs);
+}
+.navrail-head .navrail-spaces svg { width: 14px; height: 14px; }
+/* Three fits, by the room left after the lights: glyph and word where both
+   go, the word alone at the rail's usual width (252px leaves 149px, and the
+   words need 144), the glyph alone near its narrowest. The breakpoints are
+   the measured widths: the toggle and gap, then two equal tabs as wide as
+   "Studio". Each tab keeps its name for a screen reader and a tooltip. */
+@container navrail-head (max-width: 181px) {
+  .navrail-spaces svg { display: none; }
+}
+@container navrail-head (max-width: 143px) {
+  .navrail-spaces svg { display: block; }
+  .navrail-spaces .seg-label { display: none; }
+  .navrail-spaces > button { padding: 0 6px; }
+}
 .screen {
   /* Opaque overrides, scoped to the sheet so the rail is unaffected. Set as
      tokens rather than as one background, so every surface nested inside --

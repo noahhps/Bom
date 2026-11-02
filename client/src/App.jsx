@@ -1156,6 +1156,7 @@ export default function App() {
             onSettings={() => setSettingsAt((was) => (was ? null : "general"))}
             space={space}
             onSpace={goToSpace}
+            inRail={railPinned && !narrow}
           />
 
           {settingsAt ? (
@@ -1202,6 +1203,8 @@ export default function App() {
             <NavRail
               view={view}
               space={space}
+              onSpace={goToSpace}
+              onTogglePin={togglePin}
               onView={(next) => {
                 // The space's conversations, from a page: back to what the
                 // space had open, or a fresh one if what is loaded belongs to
